@@ -1,0 +1,1251 @@
+Quantitative Analysis of Smart Contracts
+Quantitative Analysis of Smart Contracts
+Krishnendu Chatterjee1, Amir Kafshdar Goharshady1(B), and Yaron Velner2
+1 IST Austria (Institute of Science and Technology Austria), Klosterneuburg, Austria
+{krishnendu.chatterjee,amir.goharshady}@ist.ac.at
+2 Hebrew University of Jerusalem, Jerusalem, Israel
+yaron.welner@mail.huji.ac.il
+Abstract. Smart contracts are computer programs that are executed
+by a network of mutually distrusting agents, without the need of an
+external trusted authority. Smart contracts handle and transfer assets of
+considerable value (in the form of crypto-currency like Bitcoin). Hence,
+it is crucial that their implementation is bug-free. We identify the util-
+ity (or expected payoff) of interacting with such smart contracts as the
+basic and canonical quantitative property for such contracts. We present
+a framework for such quantitative analysis of smart contracts. Such a
+formal framework poses new and novel research challenges in program-
+ming languages, as it requires modeling of game-theoretic aspects to ana-
+lyze incentives for deviation from honest behavior and modeling utilities
+which are not specified as standard temporal properties such as safety
+and termination. While game-theoretic incentives have been analyzed in
+the security community, their analysis has been restricted to the very spe-
+cial case of stateless games. However, to analyze smart contracts, stateful
+analysis is required as it must account for the different program states
+of the protocol. Our main contributions are as follows: we present (i) a
+simplified programming language for smart contracts; (ii) an automatic
+translation of the programs to state-based games; (iii) an abstraction-
+refinement approach to solve such games; and (iv) experimental results
+on real-world-inspired smart contracts.
+1 Introduction
+In this work we present a quantitative stateful game-theoretic framework for
+formal analysis of smart-contracts.
+Smart Contracts. Hundreds of crypto-currencies are in use today, and invest-
+ments in them are increasing steadily [24]. These currencies are not controlled
+by any central authority like governments or banks, instead they are governed
+by the blockchain protocol, which dictates the rules and determines the out-
+comes, e.g., the validity of money transactions and account balances. Blockchain
+was initially used for peer-to-peer Bitcoin payments [43], but recently it is also
+used for running programs (called smart contracts). A smart contract is a pro-
+gram that runs on the blockchain, which enforces its correct execution (i.e., that
+A longer version of this article is available in [19].
+c© The Author(s) 2018
+A. Ahmed (Ed.): ESOP 2018, LNCS 10801, pp. 739–767, 2018.
+https://doi.org/10.1007/978-3-319-89884-1_26
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-319-89884-1_26&domain=pdf
+740 K. Chatterjee et al.
+it is running as originally programmed). This is done by encoding semantics
+in crypto-currency transactions. For example, Bitcoin transaction scripts allow
+users to specify conditions, or contracts, which the transactions must satisfy
+prior to acceptance. Transaction scripts can encode many useful functions, such
+as validating that a payer owns a coin she is spending or enforcing rules for
+multi-party transactions. The Ethereum crypto-currency [16] allows arbitrary
+stateful Turing-complete conditions over the transactions which gives rise to
+smart contracts that can implement a wide range of applications, such as finan-
+cial instruments (e.g., financial derivatives or wills) or autonomous governance
+applications (e.g., voting systems). The protocols are globally specified and their
+implementation is decentralized. Therefore, there is no central authority and they
+are immutable. Hence, the economic consequences of bugs in a smart contract
+cannot be reverted.
+Types of Bugs. There are two types of bugs with monetary consequences:
+1. Coding errors. Similar to standard programs, bugs could arise from coding
+mistakes. At one reported case [33], mistakenly replacing += operation with
+=+ enabled loss of tokens that were backed by $800,000 of investment.
+2. Dishonest interaction incentives. Smart contracts do not fully dictate the
+behavior of participants. They only specify the outcome (e.g., penalty or
+rewards) of the behaviors. Hence, a second source for bugs is the high level
+interaction aspects that could give a participant unfair advantage and incen-
+tive for dishonest behavior. For example, a naive design of rock-paper-scissors
+game [29] allows playing sequentially, rather than concurrently, and gives
+advantage to the second player who can see the opponent’s move.
+DAO Attack: Interaction of Two Types of Bugs. Quite interestingly a coding
+bug can incentivize dishonest behavior as in the famous DAO attack [48]. The
+Decentralized Autonomous Organization (DAO) [38] is an Ethereum smart con-
+tract [51]. The contract consists of investor-directed venture capital fund. On
+June 17, 2016 an attacker exploited a bug in the contract to extract $80 mil-
+lion [48]. Intuitively, the root cause was that the contract allowed users to first get
+hold of their funds, and only then updated their balance records while a semantic
+detail allowed the attacker to withdraw multiple times before the update.
+Necessity of Formal Framework. Since bugs in smart contracts have direct eco-
+nomic consequences and are irreversible, they have the same status as safety-
+critical errors for programs and reactive systems and must be detected before
+deployment. Moreover, smart contracts are deployed rapidly. There are over a
+million smart contracts in Ethereum, holding over 15 billion dollars at the time
+of writing [31]. It is impossible for security researchers to analyze all of them,
+and lack of automated tools for programmers makes them error prone. Hence, a
+formal analysis framework for smart contract bugs is of great importance.
+Utility Analysis. In verification of programs, specifying objectives is non-trivial
+and a key goal is to consider specification-less verification, where basic proper-
+ties are considered canonical. For example, termination is a basic property in
+Quantitative Analysis of Smart Contracts 741
+program analysis; and data-race freedom or serializability are basic properties
+in concurrency. Given these properties, models are verified wrt them without
+considering any other specification. For smart contracts, describing the correct
+specification that prevents dishonest behavior is more challenging due to the
+presence of game-like interactions. We propose to consider the expected user
+utility (or payoff) that is guaranteed even in presence of adversarial behavior of
+other agents as a canonical property. Considering malicious adversaries is stan-
+dard in game theory. For example, the expected utility of a fair lottery is 0. An
+analysis reporting a different utility signifies a bug.
+New Research Challenges. Coding bugs are detected by classic verification, pro-
+gram analysis, and model checking tools [23,39]. However, a formal framework
+for incentivization bugs presents a new research challenge for the programming
+language community. Their analysis must overcome two obstacles: (a) the frame-
+work will have to handle game-theoretic aspects to model interactions and incen-
+tives for dishonest behavior; and (b) it will have to handle properties that cannot
+be deduced from standard temporal properties such as safety or termination, but
+require analysis of monetary gains (i.e., quantitative properties).
+While game-theoretic incentives are widely analyzed by the security commu-
+nity (e.g., see [13]), their analysis is typically restricted to the very special case
+of one-shot games that do not consider different states of the program, and thus
+the consequences of decisions on the next state of the program are ignored. In
+addition their analysis is typically ad-hoc and stems from brainstorming and
+special techniques. This could work when very few protocols existed (e.g., when
+bitcoin first emerged) and deep thought was put into making them elegant and
+analyzable. However, the fast deployment of smart contracts makes it crucial to
+automate the process and make it accessible to programmers.
+Our Contribution. In this work we present a formal framework for quantitative
+analysis of utilities in smart contracts. Our contributions are as follows:
+1. We present a simplified (loop-free) programming language that allows game-
+theoretic interactions. We show that many classical smart contracts can
+be easily described in our language, and conversely, a smart contract pro-
+grammed in our language can be easily translated to Solidity [30], which is
+the most popular Ethereum smart contract language.
+2. The underlying mathematical model for our language is stateful concurrent
+games. We automatically translate programs in our language to such games.
+3. The key challenge to analyze such game models automatically is to tackle the
+state-space explosion. While several abstraction techniques have been consid-
+ered for programs [14,35,45], they do not work for game-theoretic models with
+quantitative objectives. We present an approach based on interval-abstraction
+for reducing the states, establish soundness of our abstraction, and present a
+refinement process. This is our core technical contribution.
+4. We present experimental results on several classic real-world smart contracts.
+We show that our approach can handle contracts that otherwise give rise
+to games with up to 1023 states. While special cases of concurrent games
+742 K. Chatterjee et al.
+(namely, turn-based games) have been studied in verification and reactive
+synthesis, there are no practical methods to solve general concurrent quan-
+titative games. To the best of our knowledge, there are no tools to solve
+quantitative concurrent games other than academic examples of few states,
+and we present the first practical method to solve quantitative concurrent
+games that scales to real-world smart contract analysis.
+In summary, our contributions range from (i) modeling of smart contracts as
+state-based games, to (ii) an abstraction-refinement approach to solve such
+games, to (iii) experimental results on real-world smart contracts.
+2 Background on Ethereum Smart Contracts
+2.1 Programmable Smart Contracts
+Ethereum [16] is a decentralized virtual machine, which runs programs called
+contracts. Contracts are written in a Turing-complete bytecode language, called
+Ethereum Virtual Machine (EVM) bytecode [53]. A contract is invoked by call-
+ing one of its functions, where each function is defined by a sequence of instruc-
+tions. The contract maintains a persistent internal state and can receive (trans-
+fer) currency from (to) users and other contracts. Users send transactions to
+the Ethereum network to invoke functions. Each transaction may contain input
+parameters for the contract and an associated monetary amount, possibly 0,
+which is transferred from the user to the contract.
+Upon receiving a transaction, the contract collects the money sent to it,
+executes a function according to input parameters, and updates its internal state.
+All transactions are recorded on a decentralized ledger, called blockchain. A
+sequence of transactions that begins from the creation of the network uniquely
+determines the state of each contract and balances of users and contracts. The
+blockchain does not rely on a trusted central authority, rather, each transaction
+is processed by a large network of mutually untrusted peers called miners. Users
+constantly broadcast transactions to the network. Miners add transactions to
+the blockchain via a proof-of-work consensus protocol [43].
+Subtleties. In this work, for simplicity, we ignore some details in the underlying
+protocol of Ethereum smart contract. We briefly describe these details below:
+– Transaction fees. In exchange for including her transactions in the blockchain,
+a user pays transaction fees to the miners, proportionally to the execution
+time of her transaction. This fact could slightly affect the monetary analysis
+of the user gain, but could also introduce bugs in a program, as there is a
+bound on execution time that cannot be exceeded. Hence, it is possible that
+some functions could never be called, or even worse, a user could actively
+give input parameters that would prevent other users from invoking a certain
+function.
+Quantitative Analysis of Smart Contracts 743
+– Recursive invocation of contracts. A contract function could invoke a function
+in another contract, which in turn can have a call to the original contract.
+The underling Ethereum semantic in recursive invocation was the root cause
+for the notorious DAO hack [27].
+– Behavior of the miners. Previous works have suggested that smart contracts
+could be implemented to encourage miners to deviate from their honest behav-
+ior [50]. This could in theory introduce bugs into a contract, e.g., a contract
+might give unfair advantage for a user who is a big miner.
+2.2 Tokens and User Utility
+A user’s utility is determined by the Ether she spends and receives, but could
+also be affected by the state of the contract. Most notably, smart contracts
+are used to issue tokens, which can be viewed as a stake in a company or an
+organization, in return to an Ether (or tokens) investment (see an example in
+Fig. 1). These tokens are transferable among users and are traded in exchanges in
+return to Ether, Bitcoin and Fiat money. At the time of writing, smart contracts
+instantiate tokens worth billions of dollars [32]. Hence, gaining or losing tokens
+has clear utility for the user. At a larger scope, user utility could also be affected
+by more abstract storage changes. Some users would be willing to pay to have
+a contract declare them as Kings of Ether [4], while others could gain from
+registering their domain name in a smart contract storage [40]. In the examples
+provided in this work we mainly focus on utility that arises from Ether, tokens
+and the like. However, our approach is general and can model any form of utility
+by introducing auxiliary utility variables and definitions.
+Fig. 1. Token contract example.
+3 Programming Language for Smart Contracts
+In this section we present our programming language for smart contracts
+that supports concurrent interactions between parties. A party denotes an
+agent that decides to interact with the contract. A contract is a tuple C =
+(N, I,M,R,X0, F, T ) where X := N ∪ I ∪ M is a set of variables, R describes
+the range of values that can be stored in each variable, X0 is the initial values
+stored in variables, F is a list of functions and T describes for each function, the
+time segment in which it can be invoked. We now formalize these concepts.
+Variables. There are three distinct and disjoint types of variables in X:
+744 K. Chatterjee et al.
+– N contains “numeric” variables that can store a single integer.
+– I contains “identification” (“id”) variables capable of pointing to a party in
+the contract by her address or storing Null. The notion of ids is quite flexible
+in our approach: The only dependence on ids is that they should be distinct
+and an id should not act on behalf of another id. We simply use different
+integers to denote distinct ids and assume that a “faking of identity” does
+not happen. In Ethereum this is achieved by digital signatures.
+– M is the set of “mapping” variables. Each m ∈ M maps parties to integers.
+Bounds and Initial Values. The tuple R = (R,R) where R,R : N ∪ M → Z
+represent lower and upper bounds for integer values that can be stored in a
+variable. For example, if n ∈ N , then n can only store integers between R(n)
+and R(n). Similarly, if m ∈ M is a mapping and i ∈ I stores an address to
+a party in the contract, then m [i] can save integers between R(m) and R(m).
+The function X0 : X → Z ∪ {Null} assigns an initial value to every variable.
+The assigned value is an integer in case of numeric and mapping variables, i.e.,
+a mapping variable maps everything to its initial value by default. Id variables
+can either be initialized by Null or an id used by one of the parties.
+Functions and Timing. The sequence F =< f1, f2, . . . , fn > is a list of functions
+and T = (T , T ), where T , T : F → N. The function fi can only be invoked in
+time-frame T (fi) =
+[
+T (fi), T (fi)
+]
+. The contract uses a global clock, for example
+the current block number in the blockchain, to keep track of time.
+Note that we consider a single contract, and interaction between multiple
+contracts is a subject of future work.
+3.1 Syntax
+We provide a simple overview of our contract programming language. Our lan-
+guage is syntactically similar to Solidity [30], which is a widely used language
+for writing Ethereum contracts. A translation mechanism for different aspects is
+discussed in [19]. An example contract, modeling a game of rock-paper-scissors,
+is given in Fig. 2. Here, a party, called issuer has issued the contract and taken
+the role of Alice. Any other party can join the contract by registering as Bob
+and then playing rock-paper-scissors. To demonstrate our language, we use a
+bidding mechanism.
+Declaration of Variables. The program begins by declaring variables1, their type,
+name, range and initial value. For example, Bids is a map variable that assigns
+a value between 0 and 100 to every id. This value is initially 0. Line numbers
+(labels) are defined in Sect. 3.2 below and are not part of the syntax.
+Declaration of Functions. After the variables, the functions are defined one-by-
+one. Each function begins with the keyword function followed by its name and
+1 For simplicity, we demonstrate our method with global variables only. However, the
+method is applicable to general variables as long as their ranges are well-defined at
+each point of the program.
+Quantitative Analysis of Smart Contracts 745
+Fig. 2. A rock-paper-scissors contract.
+the time interval in which it can be called by parties. Then comes a list of input
+parameters. Each parameter is of the form variable : party which means
+that the designated party can choose a value for that variable. The chosen value
+is required to be in the range specified for that variable. The keyword caller
+denotes the party that has invoked this function and payable signifies that the
+party should not only decide a value, but must also pay the amount she decides.
+For example, registerBob can be called in any time between 1 and 10 by any of
+the parties. At each such invocation the party that has called this function must
+pay some amount which will be saved in the variable bid. After the decisions
+and payments are done, the contract proceeds with executing the function.
+Types of Functions. There are essentially two types of functions, depending on
+their parameters. One-party functions, such as registerBob and getReward
+require parameters from caller only, while multi-party functions, such as play
+ask several, potentially different, parties for input. In this case all parties provide
+their input decisions and payments concurrently and without being aware of the
+choices made by other parties, also a default value is specified for every decision
+in case a relevant party does not take part.
+Summary. Putting everything together, in the contract specified in Fig. 2, any
+party can claim the role of Bob between time 1 and time 10 by paying a bid
+to the contract, if the role is not already occupied. Then at time 11 one of the
+746 K. Chatterjee et al.
+parties calls play and both parties have until time 15 to decide which choice
+(rock, paper, scissors or none) they want to make. Then the winner can call
+getReward and collect her prize.
+3.2 Semantics
+In this section we present the details of the semantics. In our programming
+language there are several key aspects which are non-standard in programming
+languages, such as the notion of time progress, concurrency, and interactions of
+several parties. Hence we present a detailed description of the semantics. We
+start with the requirements.
+Requirements. In order for a contract to be considered valid, other than following
+the syntax rules, a few more requirements must be met, which are as follows:
+– We assume that no division by zero or similar undefined behavior happens.
+– To have a well-defined message passing, we also assume that no multi-party
+function has an associated time interval intersecting that of another function.
+– Finally, for each non-id variable v, it must hold that R(v) ≤ X0(v) ≤ R(v)
+and similarly, for every function fi, we must have T (fi) < T (fi).
+Overview of Time Progress. Initially, the time is 0. Let Ft be the set of functions
+executable at time t, i.e., Ft = {fi ∈ F |t ∈ T (fi)}, then Ft is either empty
+or contains one or more one-party functions or consists of a single multi-party
+function. We consider the following cases:
+– Ft empty. If Ft is empty, then nothing can happen until the clock ticks.
+– Execution of one-party functions. If Ft contains one or more one-party func-
+tions, then each of the parties can call any subset of these functions at time
+t. If there are several calls at the same time, the contract might run them
+in any order. While a function call is being executed, all parties are able to
+see the full state of the contract, and can issue new calls. When there are
+no more requests for function calls, the clock ticks and the time is increased
+to t + 1. When a call is being executed and is at the beginning part of the
+function, its caller can send messages or payments to the contract. Values of
+these messages and payments will then be saved in designated variables and
+the execution continues. If the caller fails to make a payment or specify a
+value for a decision variable or if her specified values/payments are not in the
+range of their corresponding variables, i.e. they are too small or too big, the
+call gets canceled and the contract reverts any changes to variables due to
+the call and continues as if this call had never happened.
+– Execution of multi-party functions. If Ft contains a single multi-party function
+fi and t < T (fi), then any party can send messages and payments to the
+contract to specify values for variables that are designated to be paid or
+decided by her. These choices are hidden and cannot be observed by other
+participants. She can also change her decisions as many times as she sees fit.
+Quantitative Analysis of Smart Contracts 747
+The clock ticks when there are no more valid requests for setting a value for
+a variable or making a payment. This continues until we reach time T (fi). At
+this time parties can no longer change their choices and the choices become
+visible to everyone. The contract proceeds with execution of the function. If a
+party fails to make a payment/decision or if Null is asked to make a payment
+or a decision, default behavior will be enforced. Default value for payments
+is 0 and default behavior for other variables is defined as part of the syntax.
+For example, in function play of Fig. 2, if a party does not choose, a default
+value of 0 is enforced and given the rest of this function, this will lead to a
+definite loss.
+Given the notion of time progress we proceed to formalize the notion of
+“runs” of the contract. This requires the notion of labels, control-flow graphs,
+valuations, and states, which we describe below.
+Labels. Starting from 0, we give the contract, beginning and end points of every
+function, and every command a label. The labels are given in order of appearance.
+As an example, see the labels in parentheses in Fig. 2.
+Entry and Exit Labels. We denote the first (beginning point) label in a function
+fi by �i and its last (end point) label by �i.
+Control Flow Graphs (CFGs). We define the control flow graph CFGi of the
+function fi in the standard manner, i.e. CFGi = (V,E), where there is a vertex
+corresponding to every labeled entity inside fi. Each edge e ∈ E has a condition
+cond(e) which is a boolean expression that must be true when traversing that
+edge. For more details see [19].
+Valuations. A valuation is a function val, assigning a value to every variable.
+Values for numeric variables must be integers in their range, values for identity
+variables can be party ids or Null and a value assigned to a map variable m must
+be a function val(m) such that for each identity i, we have R(m) ≤ val(m)(i) ≤
+R(m). Given a valuation, we extend it to expressions containing mathematical
+operations in the straight-forward manner.
+States. A state of the contract is a tuple s = (t, b, l, val, c), where t is a time
+stamp, b ∈ N ∪ {0} is the current balance of the contract, i.e., the total amount
+of payment to the contract minus the total amount of payouts, l is a label (that
+is being executed), val assigns values to variables and c ∈ P ∪{⊥}, is the caller of
+the current function. c =⊥ corresponds to the case where the caller is undefined,
+e.g., when no function is being executed. We use S to denote the set of all states
+that can appear in a run of the contract as defined below.
+Runs. A run ρ of the contract is a finite sequence {ρj = (tj , bj , lj , valj , cj)}r
+j=0
+of states, starting from (0, 0, 0,X0,⊥), that follows all rules of the contract and
+ends in a state with time-stamp tr > maxfi
+T (fi). These rules must be followed
+when switching to a new state in a run:
+– The clock can only tick when there are no valid pending requests for running
+a one-party function or deciding or paying in multi-party functions.
+748 K. Chatterjee et al.
+– Transitions that happen when the contract is executing a function must follow
+its control flow graph and update the valuation correctly.
+– No variable can contain an out-of-bounds value. If an overflow or underflow
+happens, the closest possible value will be saved. This rule also ensures that
+the contract will not create new money, given that paying more than the
+current balance of the contract results in an underflow.
+– Each party can call any set of the functions at any time.
+Remark 1. Note that in our semantics each function body completes its execu-
+tion in a single tick of the clock. However, ticks might contain more than one
+function call and execution.
+Run Prefixes. We use H to mean the set of all prefixes of runs and denote the
+last state in η ∈ H by end(η). A run prefix η′ is an extension of η if it can be
+obtained by adding one state to the end of η.
+Probability Distributions. Given a finite set X , a probability distribution on X
+is a function δ : X → [0, 1] such that
+∑
+x∈X δ(x) = 1. Given such a distribution,
+its support, Supp(δ), is the set of all x ∈ X such that δ(x) > 0. We denote the
+set of all probability distributions on X by Δ(X ).
+Typically for programs it suffices to define runs for the semantics. However,
+given that there are several parties in contracts, their semantics depends on the
+possible choices of the parties. Hence we need to define policies for parties, and
+such policies will define probability distribution over runs, which constitute the
+semantics for contracts. To define policies we first define moves.
+Moves. We use M for the set of all moves. The moves that can be taken by
+parties in a contract can be summarized as follows:
+– Calling a function fi, we denote this by call(fi).
+– Making a payment whose amount, y is saved in x, we denote this by pay(x, y).
+– Deciding the value of x to be y, we denote this by decide(x, y).
+– Doing none of the above, we denote this by �.
+Permitted Moves. We define Pi : S → M, so that Pi(s) is the set of permitted
+moves for the party with identity i if the contract is in state s = (t, b, l, val, pj).
+It is formally defined as follows:
+– If fk is a function that can be called at state s, then call(fk) ∈ Pi(s).
+– If l = �q is the first label of a function fq and x is a variable that can be
+decided by i at the beginning of the function fq, then decide(x, y) ∈ Pi(s) for
+all permissible values of y. Similarly if x can be paid by i, pay(x, y) ∈ Pi(s).
+– � ∈ Pi(s).
+Policies and Randomized Policies. A policy πi for party i is a function πi : H →
+A, such that for every η ∈ H, πi(η) ∈ Pi(end(η)). Intuitively, a policy is a way
+of deciding what move to use next, given the current run prefix. A policy profile
+Quantitative Analysis of Smart Contracts 749
+π = (πi) is a sequence assigning one policy to each party i. The policy profile π
+defines a unique run ρπ of the contract which is obtained when parties choose
+their moves according to π. A randomized policy ξi for party i is a function
+ξi : H → Δ(M), such that Supp(ξi(s)) ⊆ Pi(s). A randomized policy assigns a
+probability distribution over all possible moves for party i given the current run
+prefix of the contract, then the party can follow it by choosing a move randomly
+according to the distribution. We use Ξ to denote the set of all randomized policy
+profiles, Ξi for randomized policies of i and Ξ−i to denote the set of randomized
+policy profiles for all parties except i. A randomized policy profile ξ is a sequence
+(ξi) assigning one randomized policy to each party. Each such randomized policy
+profile induces a unique probability measure on the set of runs, which is denoted
+as Probξ [·]. We denote the expectation measure associated to Probξ [·] by E
+ξ [·].
+3.3 Objective Function and Values of Contracts
+As mentioned in the introduction we identify expected payoff as the canonical
+property for contracts. The previous section defines expectation measure given
+randomized policies as the basic semantics. Given the expected payoff, we define
+values of contracts as the worst-case guaranteed payoff for a given party. We
+formalize the notion of objective function (the payoff function).
+Objective Function. An objective o for a party p is in one of the following forms:
+– (p+ −p−), where p+ is the total money received by party p from the contract
+(by “payout” statements) and p− is the total money paid by p to the contract
+(as “payable” parameters).
+– An expression containing mathematical and logical operations (addition, mul-
+tiplication, subtraction, integer division, and, or, not) and variables chosen
+from the set N ∪{m [i] |m ∈ M, i ∈ I}. Here N is the set of numeric variables,
+m[i]’s are the values that can be saved inside maps.2
+– A sum of the previous two cases.
+Informally, p is trying to choose her moves so as to maximize o.
+Run Outcomes. Given a run ρ of the program and an objective o for party p,
+the outcome κ(ρ, o, p) is the value of o computed using the valuation at end(ρ)
+for all variables and accounting for payments in ρ to compute p+ and p−.
+Contract Values. Since we consider worst-case guaranteed payoff, we consider
+that there is an objective o for a single party p which she tries to maximize
+and all other parties are adversaries who aim to minimize o. Formally, given a
+contract C and an objective o for party p, we define the value of contract as:
+V(C, o, p) := sup
+ξp∈Ξp
+inf
+ξ−p∈Ξ−p
+E
+(ξp,ξ−p) [κ(ρ, o, p)] ,
+2 We are also assuming, as in many programming languages, that True = 1 and
+False = 0.
+750 K. Chatterjee et al.
+This corresponds to p trying to maximize the expected value of o and all other
+parties maliciously colluding to minimize it. In other words, it provides the worst-
+case guarantee for party p, irrespective of the behavior of the other parties, which
+in the worst-case is adversarial to party p.
+3.4 Examples
+One contribution of our work is to present the simplified programming language,
+and to show that this simple language can express several classical smart con-
+tracts. To demonstrate the applicability, we present several examples of classical
+smart contracts in this section. In each example, we present a contract and a
+“buggy” implementation of the same contract that has a different value. In Sect. 6
+we show that our automated approach to analyze the contracts can compute con-
+tract values with enough precision to differentiate between the correct and the
+buggy implementation. All of our examples are motivated from well-known bugs
+that have happened in real life in Ethereum.
+Rock-Paper-Scissors. Let our contract be the one specified in Fig. 2 and
+assume that we want to analyze it from the point of view of the issuer p. Also,
+let the objective function be (p+ − p− + 10 · AliceWon) . Intuitively, this means
+that winning the rock-paper-scissors game is considered to have an additional
+value of 10, other than the spending and earnings. The idea behind this is similar
+to the case with chess tournaments, in which players not only win a prize, but
+can also use their wins to achieve better “ratings”, so winning has extra utility.
+A common bug in writing rock-paper-scissors is allowing the parties to move
+sequentially, rather than concurrently [29]. If parties can move sequentially and
+the issuer moves after Bob, then she can ensure a utility of 10, i.e. her worst-case
+expected reward is 10. However, in the correct implementation as in Fig. 2, the
+best strategy for both players is to bid 0 and then Alice can win the game with
+probability 1/3 by choosing each of the three options with equal probability.
+Hence, her worst-case expected reward is 10/3.
+Auction. Consider an open auction, in which during a fixed time interval every-
+one is allowed to bid for the good being sold and everyone can see others’ bids.
+When the bidding period ends a winner emerges and every other participant can
+get their money back. Let the variable HighestBid store the value of the highest
+bid made at the auction. Then for a party p, one can define the objective as:
+p+ − p− + (Winner==p) × HighestBid.
+This is of course assuming that the good being sold is worth precisely as much as
+the highest bid. A correctly written auction should return a value of 0 to every
+participant, because those who lose the auction must get their money back and
+the party that wins pays precisely the highest bid. The contract in Fig. 3 (left)
+is an implementation of such an auction. However, it has a slight problem. The
+function bid allows the winner to reduce her bid. This bug is fixed in the contract
+on the right.
+Quantitative Analysis of Smart Contracts 751
+Fig. 3. A buggy auction contract (left) and its fixed version (right).
+Three-Way Lottery. Consider a three-party lottery contract issued by a party
+p. The other two players can sign up by buying tickets worth 1 unit each. Then
+each of the players is supposed to randomly and uniformly choose a nonce. A
+combination of these nonces produces the winner with equal probability for all
+three parties. If a person does not make a choice or pay the fees, she will cer-
+tainly lose the lottery. The rules are such that if the other two parties choose
+the same nonce, which is supposed to happen with probability 1
+3 , then the issuer
+wins. Otherwise the winner is chosen according to the parity of sum of nonces.
+This gives everyone a winning probability of 1
+3 if all sides play uniformly at ran-
+dom. However, even if one of the sides refuses to play uniformly at random, the
+resulting probabilities of winning stays the same because each side’s probability
+of winning is independent of her own choice assuming that others are playing
+randomly. We assume that the issuer p has objective p+−p−. This is because the
+winner can take other players’ money. In a bug-free contract we will expect the
+value of this objective to be 0, given that winning has a probability of 1
+3 . How-
+ever, the bug here is due to the fact that other parties can collude. For example,
+the same person might register as both players and then opt for different nonces.
+This will ensure that the issuer loses. The bug can be solved by ensuring one’s
+probability of winning is 1
+3 if she honestly plays uniformly at random, no matter
+what other parties do. For more details about this contract see [19].
+Token Sale. Consider a contract that sells tokens modeling some aspect of
+the real world, e.g. shares in a company. At first anyone can buy tokens at a
+fixed price of 1 unit per token. However, there are a limited number of tokens
+752 K. Chatterjee et al.
+available and at most 1000 of them are meant to be sold. The tokens can then
+be transferred between parties, which is the subject of our next example. For
+now, Fig. 4 (left) is an implementation of the selling phase. However, there is
+a big problem here. The problem is that one can buy any number of tokens as
+long as there is at least one token remaining. For example, one might first buy
+999 tokens and then buy another 1000. If we analyze the contract from the point
+of view of a solo party p with objective balance[p], then it must be capped by
+1000 in a bug-free contract, while the process described above leads to a value
+of 1999. The fixed contract is in Fig. 4 (right). This bug is inspired by a very
+similar real-world bug described in [52].
+Token Transfer. Consider the same bug-free token sale as in the previous
+example, we now add a function for transferring tokens. An owner can choose
+a recipient and an amount less than or equal to her balance and transfer that
+many tokens to the recipient. Figure 5 (left) is an implementation of this concept.
+Taking the same approach and objective as above, we expect a similar result.
+However, there is again an important bug in this code. What happens if a party
+transfers tokens to herself? She gets free extra tokens! This has been fixed in the
+contract on the right. This example models a real-world bug as in [42].
+Fig. 4. A buggy token sale (left) and its fixed version (right).
+Translation to Solidity. All aspects of our programming language are already
+present in Solidity, except for the global clock and concurrent interactions. The
+global clock can be modeled by the number of the current block in the blockchain
+and concurrent interactions can be implemented using commitment schemes. For
+more details see [19].
+4 Bounded Analysis and Games
+Since smart contracts can be easily described in our programming language,
+and programs in our programming language can be translated to Solidity, the
+Quantitative Analysis of Smart Contracts 753
+Fig. 5. A buggy transfer function (left) and its fixed version (right).
+main aim to automatically compute values of contracts (i.e., compute guaranteed
+payoff for parties). In this section, we introduce the bounded analysis problem
+for our programming language framework, and present concurrent games which
+is the underlying mathematical framework for the bounded analysis problem.
+4.1 Bounded Analysis
+As is standard in verification, we consider the bounded analysis problem, where
+the number of parties and the number of function calls are bounded. In standard
+program analysis, bugs are often detected with a small number of processes, or a
+small number of context switches between concurrent threads. In the context of
+smart contracts, we analogously assume that the number of parties and function
+calls are bounded.
+Contracts with Bounded Number of Parties and Function Calls. Formally, a con-
+tract with bounded number of parties and function calls is as follows:
+– Let C be a contract and k ∈ N, we define Ck as an equivalent contract that
+can have at most k parties. This is achieved by letting P = {p1,p2, . . . ,pk}
+be the set of all possible ids in the contract. The set P must contain all ids
+that are in the program source, therefore k is at least the number of such ids.
+Note that this does not restrict that ids are controlled by unique users, and
+a real-life user can have several different ids. We only restrict the analysis to
+bounded number of parties interacting with the smart contract.
+– To ensure runs are finite, number of function calls by each party is also
+bounded. Specifically, each party can call each function at most once dur-
+ing each time frame, i.e. between two consecutive ticks of the clock. This
+754 K. Chatterjee et al.
+closely resembles real-life contracts in which one’s ability to call many func-
+tions is limited by the capacity of a block in the blockchain, given that the
+block must save all messages.
+4.2 Concurrent Games
+The programming language framework we consider has interacting agents that
+act simultaneously, and we have the program state. We present the mathematical
+framework of concurrent games, which are games played on finite state spaces
+with concurrent interaction between the players.
+Concurrent Game Structures. A concurrent two-player game structure is a tuple
+G = (S, s0, A, Γ1, Γ2, δ), where S is a finite set of states, s0 ∈ S is the start state,
+A is a finite set of actions, Γ1, Γ2 : S → 2A \ ∅ such that Γi assigns to each state
+s ∈ S, a non-empty set Γi(s) ⊆ A of actions available to player i at s, and finally
+δ : S × A × A → S is a transition function that assigns to every state s ∈ S and
+action pair a1 ∈ Γ1(s), a2 ∈ Γ2(s) a successor state δ(s, a1, a2) ∈ S.
+Plays and Histories. The game starts at state s0. At each state si ∈ S, player
+1 chooses an action ai
+1 ∈ Γ1(si) and player 2 chooses an action ai
+2 ∈ Γ2(si).
+The choices are made simultaneously and independently. The game subsequently
+transitions to the new state si+1 = δ(si, a1, a2) and the same process continues.
+This leads to an infinite sequence of tuples p =
+(
+si, a
+i
+1, a
+i
+2
+)∞
+i=0
+which is called
+a play of the game. We denote the set of all plays by P. Every finite prefix
+p[..r] :=
+(
+(s0, a0
+1, a
+0
+2), (s1, a
+1
+1, a
+1
+2), . . . , (sr, a
+r
+1, a
+r
+2)
+)
+of a play is called a history and
+the set of all histories is denoted by H . If h = p[..r] is a history, we denote the
+last state appearing according to h, i.e. sr+1 = δ(sr, a
+r
+1, a
+r
+2), by last(h). We also
+define p[.. − 1] as the empty history.
+Strategies and Mixed Strategies. A strategy is a recipe that describes for a player
+the action to play given the current game history. Formally, a strategy ϕi for
+player i is a function ϕi : H → A, such that ϕi(h) ∈ Γi(last(h)). A pair
+ϕ = (ϕ1,ϕ2) of strategies for the two players is called a strategy profile. Each such
+ϕ induces a unique play. A mixed strategy σi : H → Δ(A) for player i given the
+history of the game. Intuitively, such a strategy suggests a distribution of actions
+to player i at each step and then she plays one of them randomly according to
+that distribution. Of course it must be the case that Supp(σi(h)) ⊆ Γi(last(h)).
+A pair σ = (σ1, σ2) of mixed strategies for the two players is called a mixed
+strategy profile. Note that mixed strategies generalize strategies with random-
+ization. Every mixed strategy profile σ = (σ1, σ2) induces a unique probability
+measure on the set of plays, which is denoted as Probσ[·], and the associated
+expectation measure is denoted by E
+σ[·].
+State and History Utilities. In a game structure G, a state utility function u for
+player 1 is of the form u : S → R. Intuitively, this means that when the game
+enters state s, player 1 receives a reward of u(s). State utilities can be extended
+to history utilities. We define the utility of a history to be the sum of utilities
+of all the states included in that history. Formally, if h =
+(
+si, a
+i
+1, a
+i
+2
+)r
+i=0
+, then
+Quantitative Analysis of Smart Contracts 755
+u(h) =
+∑r
+i=0 u(si). Given a play p ∈ P, we denote the utility of its prefix of
+length L by uL(p).
+Games. A game is a pair (G, u) where G is a game structure and u is a utility
+function for player 1. We assume that player 1 is trying to maximize u, while
+player 2’s goal is to minimize it.
+Values. The L-step finite-horizon value of a game (G, u) is defined as
+υL(G, u) := sup
+σ1
+inf
+σ2
+E
+(σ1,σ2) [uL(p)] , (1)
+where σi iterates over all possible mixed strategies of player i. This models the
+fact that player 1 is trying to maximize the utility in the first L steps of the run,
+while player 2 is minimizing it. The values of games can be computed using the
+value-iteration algorithm or dynamic programming, which is standard. A more
+detailed overview of the algorithms for games is provided in [19].
+Remark 2. Note that in (1), limiting player 2 to pure strategies does not change
+the value of the game. Hence, we can assume that player 2 is an arbitrarily
+powerful nondeterministic adversary and get the exact same results.
+4.3 Translating Contracts to Games
+The translation from bounded smart contracts to games is straightforward,
+where the states of the concurrent game encodes the states of the contract. Cor-
+respondences between objects in the contract and game are as follows: (a) moves
+in contracts with actions in games; (b) run prefixes in contracts with histories
+in games; (c) runs in contracts with plays in games; and (d) policies (resp., ran-
+domized policies) in contracts with strategies (resp., mixed strategies) in games.
+Note that since all runs of the bounded contract are finite and have a limited
+length, we can apply finite horizon analysis to the resulting game, where L is the
+maximal length of a run in the contract. This gives us the following theorem:
+Theorem 1 (Correspondence). Given a bounded contract Ck for a party p
+with objective o, a concurrent game can be constructed such that value of this
+game, υL(G, u), is equal to the value of the bounded contract, V(Ck, o,p).
+For details of the translation of smart contracts to games and proof of the
+theorem above see [19].
+Remark 3. In standard programming languages, there are no parties to interact
+and hence the underlying mathematical models are graphs. In contrast, for smart
+contracts programming languages, where parties interact in a game-like manner,
+we have to consider games as the mathematical basis of our analysis.
+756 K. Chatterjee et al.
+5 Abstraction for Quantitative Concurrent Games
+Abstraction is a key technique to handle large-scale systems. In the previous
+section we described that smart contracts can be translated to games, but due
+to state-space explosion (since we allow integer variables), the resulting state
+space of the game is huge. Hence, we need techniques for abstraction, as well
+as refinement of abstraction, for concurrent games with quantitative utilities. In
+this section we present such abstraction refinement for quantitative concurrent
+games, which is our main technical contribution in this paper. We show the
+soundness of our approach and its completeness in the limit. Then, we introduce
+a specific method of abstraction, called interval abstraction, which we apply to
+the games obtained from contracts and show that soundness and refinement are
+inherited from the general case. We also provide a heuristic for faster refining of
+interval abstractions for games obtained from contracts.
+5.1 Abstraction for Quantitative Concurrent Games
+Abstraction considers a partition of the state space, and reduces the number of
+states by taking each partition set as a state. In case of transition systems (or
+graphs) the standard technique is to consider existential (or universal) abstrac-
+tion to define transitions between the partition sets. However, for game-theoretic
+interactions such abstraction ideas are not enough. We now describe the key
+intuition for abstraction in concurrent games with quantitative objectives and
+formalize it. We also provide a simple example for illustration.
+Abstraction Idea and Key Intuition. In an abstraction the state space of the
+game (G, u) is partitioned into several abstract states, where an abstract state
+represents a set of states of the original game. Intuitively, an abstract state
+represents a set of similar states of the original game. Given an abstraction our
+goal is to define two games that can provide lower and upper bound on the value
+of the original game. This leads to the concepts of lower and upper abstraction.
+– Lower abstraction. The lower abstraction (G↓, u↓) represents a lower bound on
+the value. Intuitively, the utility is assigned as minimal utility among states
+in the partition, and when an action profile can lead to different abstract
+states, then the adversary, i.e. player 2, chooses the transition.
+– Upper abstraction. The upper abstraction (G↑, u↑) represents an upper bound
+on the value. Intuitively, the utility is assigned as maximal utility among
+states in the partition, and when an action profile can lead to different
+abstract states, then player 1 is chooses between the possible states.
+Informally, the lower abstraction gives more power to the adversary, player 2,
+whereas the upper abstraction is favorable to player 1.
+General Abstraction for Concurrent Games. Given a game (G, u) consisting of a
+game structure G = (S, s0, A, Γ1, Γ2, δ) and a utility function u, and a partition
+Π of S, the lower and upper abstractions, (G↓ = (Sa, sa0, A
+a, Γ ↓
+1 , Γ ↓
+2 , δ↓), u↓) and
+(G↑ = (Sa, sa0, A
+a, Γ ↑
+1 , Γ ↑
+2 , δ↑), u↑), of (G, u) with respect to Π are defined as:
+Quantitative Analysis of Smart Contracts 757
+– Sa = Π ∪ D, where D = Π × A × A is a set of dummy states for giving more
+power to one of the players. Members of Sa are called abstracted states.
+– The start state of G is in the start state of G↑ and G↓, i.e. s0 ∈ sa0 ∈ Π.
+– Aa = A∪Π. Each action in abstracted games either corresponds to an action
+in the original game or to a choice of the next state.
+– If two states s1, s2 ∈ S, are in the same abstracted state sa ∈ Π, then they
+must have the same set of available actions for both players, i.e. Γ1(s1) =
+Γ1(s2) and Γ2(s1) = Γ2(s2). Moreover, sa inherits these action sets. Formally,
+Γ ↓
+1 (sa) = Γ ↑
+1 (sa) = Γ1(s1) = Γ1(s2) and Γ ↓
+2 (sa) = Γ ↑
+2 (sa) = Γ2(s1) = Γ2(s2).
+– For all π ∈ Π and a1 ∈ Γ ↓
+1 (π) and a2 ∈ Γ ↓
+2 (π), we have δ↓(π, a1, a2) =
+(π, a1, a2) ∈ D. Similarly for a1 ∈ Γ ↑
+1 (π) and a2 ∈ Γ ↑
+2 (π), δ↑(π, a1, a2) =
+(π, a1, a2) ∈ D. This means that all transitions from abstract states in Π go
+to the corresponding dummy abstract state in D.
+– If d = (π, a1, a2) ∈ D is a dummy abstract state, then let Xd = {π′ ∈
+Π | ∃ s ∈ π δ(s, a1, a2) ∈ π′} be the set of all partition sets that can be
+reached from π by a1, a2 in G. Then in G↓, Γ ↓
+1 (d) is a singleton, i.e., player 1
+has no choice, and Γ ↓
+2 (d) = Xd, i.e., player 2 can choose which abstract state
+is the next. Conversely, in G↑, Γ ↑
+2 (d) is a singleton and player 2 has no choice,
+while Γ ↑
+1 (d) = Xd and player 1 chooses the next abstract state.
+– In line with the previous point, δ↓(d, a1, a2) = a2 and δ↑(d, a1, a2) = a1 for
+all d ∈ D and available actions a1 and a2.
+– We have u↓(sa) = mins∈sa{u(s)} and u↑(sa) = maxs∈sa{u(s)}. The utility of
+a non-dummy abstracted state in G↓, resp. G↑, is the minimal, resp. maximal,
+utility among the normal states included in it. Also, for each dummy state
+d ∈ D, we have u↓(d) = u↑(d) = 0.
+Given a partition Π of S, either (i) there is no lower or upper abstraction cor-
+responding to it because it puts states with different sets of available actions
+together; or (ii) there is a unique lower and upper abstraction pair. Hence we
+will refer to the unique abstracted pair of games by specifying Π only.
+Remark 4. Dummy states are introduced for conceptual clarity in explaining the
+ideas because in lower abstraction all choices are assigned to player 2 and upper
+abstraction to player 1. However, in practice, there is no need to create them,
+as the choices can be allowed to the respective players in the predecessor state.
+Example. Figure 6 (left) shows a concurrent game with (G, u) with 4 states. The
+utilities are denoted in red. The edges correspond to transitions in δ and each
+edge is labeled with its corresponding action pair. Here A = {a,b}, Γ1(s0) =
+Γ2(s0) = Γ2(s1) = Γ1(s2) = Γ2(s2) = Γ2(s3) = A and Γ1(s1) = Γ1(s3) = {a}.
+Given that action sets for s0 and s2 are equal, we can create abstracted games
+using the partition Π = {π0, π1, π2} where π1 = {s0, s2} and other sets are single-
+tons. The resulting game structure is depicted in Fig. 6 (center). Dummy states
+are shown by circles and whenever a play reaches a dummy state in G↓, player 2
+chooses which red edge should be taken. Conversely, in G↑ player 1 makes this
+choice. Also, u↑(π0) = max{u(s0), u(s2)} = 10, u↓(π0) = min{u(s0), u(s2)} = 0
+758 K. Chatterjee et al.
+Fig. 6. An example concurrent game (left), abstraction process (center) and the cor-
+responding G↓ without dummy states (right).
+and u↑(π1)u↓(π1) = u(s1) = 10, u↑(π2) = u↓(π2) = u(s3) = 0. The final
+abstracted G↓ of the example above, without dummy states, is given in Fig. 6
+(right).
+5.2 Abstraction: Soundness, Refinement, and Completeness in
+Limit
+For an abstraction we need three key properties: (a) soundness, (b) refinement
+of the abstraction, and (c) completeness in the limit. The intuitive description
+is as follows: (a) soundeness requires that the value of the games is between
+the value of the lower and upper abstraction; (b) refinement requires that if
+the partition is refined, then the values of lower and upper abstraction becomes
+closer; and (c) completeness requires that if the partitions are refined enough,
+then the value of the original game can be approximated. We present each of
+these results below.
+Soundness. Soundness means that when we apply abstraction, value of the
+original game must lie between values of the lower and upper abstractions. Intu-
+itively, this means abstractions must provide us with some interval containing
+the value of the game. We expect the value of (G↓, u↓) to be less than or equal
+to the value of the original game because in (G↓, u↓), the utilities are less than in
+(G, u) and player 2 has more power, given that she can choose which transition
+to take. Conversely, we expect (G↑, u↑) to have a higher value than (G, u).
+Formal Requirement for Soundness. An abstraction of a game (G, u) leading to
+abstraction pair (G↑, u↑), (G↓, u↓) is sound if for every L, we have υ2L(G↓, u↓) ≤
+υL(G, u) ≤ υ2L(G↑, u↑). The factor 2 in the inequalities above is due to the
+fact that each transition in the original game is modeled by two transitions in
+abstracted games, one to a dummy state and a second one out of it. We now
+present our soundness result.
+Theorem 2 (Soundness, Proof in [19]). Given a game (G, u) and a partition
+Π of its state space, if G↑ and G↓ exist, then the abstraction is sound, i.e. for
+all L, it is the case that υ2L(G↓, u↓) ≤ υL(G, u) ≤ υ2L(G↑, u↑).
+Quantitative Analysis of Smart Contracts 759
+Refinement. We say that a partition Π2 is a refinement of a partition Π1,
+and write Π2 
+ Π1, if every π ∈ Π1 is a union of several πi’s in Π2, i.e. π =⋃
+i∈I πi and for all i ∈ I, πi ∈ Π2. Intuitively, this means that Π2 is obtained
+by further subdividing the partition sets in Π1. It is easy to check that 
+ is a
+partial order over partitions. We expect that if Π2 
+ Π1, then the abstracted
+games resulting from Π2 give a better approximation of the value of the original
+game in comparison with abstracted games resulting from Π1. This is called the
+refinement property.
+Formal Requirement for the Refinement Property. Two abstractions of a game
+(G, u) using two partitions Π1,Π2, such that Π2 
+ Π1, and leading to abstracted
+games (G↑
+i , u
+↑
+i ), (G
+↓
+i , u
+↓
+i ) corresponding to each Πi satisfy the refinement property
+if for every L, we have υ2L(G
+↓
+1, u
+↓
+1) ≤ υ2L(G
+↓
+2, u
+↓
+2) ≤ υ2L(G
+↑
+2, u
+↑
+2) ≤ υ2L(G
+↑
+1, u
+↑
+1).
+Theorem 3 (Refinement Property, Proof in [19]). Let Π2 
+ Π1 be two
+partitions of the state space of a game (G, u), then the abstractions corresponding
+to Π1,Π2 satisfy the refinement property.
+Completeness in the Limit. We say that an abstraction is complete in the
+limit, if by refining it enough the values of upper and lower abstractions get as
+close together as desired. Equivalently, this means that if we want to approximate
+the value of the original game within some predefined threshold of error, we can
+do so by repeatedly refining the abstraction.
+Formal Requirement for Completeness in the Limit. Given a game (G, u), a fixed
+finite-horizon L and an abstracted game pair corresponding to a partition Π1,
+the abstraction is said to be complete in the limit, if for every ε ≥ 0 there exists
+Π2 
+ Π1, such that if (G↓
+2, u
+↓
+2), (G
+↑
+2, u
+↑
+2) are the abstracted games corresponding
+to Π2, then υL(G
+↑
+2, u
+↑
+2) − υL(G
+↓
+2, u
+↓
+2) ≤ ε.
+Theorem 4 (Completeness in the Limit, Proof in [19]). Every abstraction
+on a game (G, u) using a partition Π is complete in the limit for all values of L.
+5.3 Interval Abstraction
+In this section, we turn our focus to games obtained from contracts and provide
+a specific method of abstraction that can be applied to them.
+Intuitive Overview. Let (G, u) be a concurrent game obtained from a contract as
+in the Sect. 4.3. Then the states of G, other than the unique dummy state, corre-
+spond to states of the contract Ck. Hence, they are of the form s = (t, b, l, val, p),
+where t is the time, b the contract balance, l is a label, p is the party calling
+the current function and val is a valuation. In an abstraction, one cannot put
+states with different times or labels or callers together, because they might have
+different moves and hence different action sets in the corresponding game. The
+main idea in interval abstraction is to break the states according to intervals
+over their balance and valuations. We can then refine the abstraction by making
+the intervals smaller. We now formalize this concept.
+760 K. Chatterjee et al.
+Objects. Given a contract Ck, let O be the set of all objects that can have an
+integral value in a state s of the contract. This consists of the contract balance,
+numeric variables and m[p]’s where m is a map variable and p is a party. More
+precisely, O = {B}∪N ∪{m[p]|m ∈ M,p ∈ P} where B denotes the balance. For
+an o ∈ O, the value assigned to o at state s is denoted by os.
+Interval Partition. Let Ck be a contract and (G, u) its corresponding game. A
+partition Π of the state space of G is called an interval partition if:
+– The dummy state is put in a singleton set πd.
+– Each π ∈ Π except πd has associated values, tπ, lπ,pπ and for each o ∈ O,
+oπ, oπ, such that π = {s ∈ S|s = (tπ, b, lπ, val,pπ) and for all o ∈ O, oπ ≤
+so ≤ oπ}. Basically, each partition set includes states with the same time,
+label and caller in which the value of every object o is in an interval [oπ, oπ].
+We call an abstraction using an interval partition, an interval abstraction.
+Refinement Heuristic. We can start with big intervals and continually break them
+into smaller ones to get refined abstractions and a finer approximation of the
+game value. We use the following heuristic to choose which intervals to break:
+Assume that the current abstracted pair of games are (G↓, u↓) and (G↑, u↑)
+corresponding to an interval partition Π. Let d = (πd, a1, a2) be a dummy state
+in G↑ and define the skewness of d as υ(G↑
+d, u
+↑)−υ(G↓
+d, u
+↓). Intuitively, skewness
+of d is a measure of how different the outcomes of the games G↑ and G↓ are,
+from the point when they have reached d. Take a label l with maximal average
+skewness among its corresponding dummy states and cut all non-unit intervals
+of it in more parts to get a new partition Π′. Continue the same process until
+the approximation is as precise as desired. Intuitively, it tries to refine parts of
+the abstraction that show the most disparity between G↓ and G↑ with the aim
+to bring their values closer. Our experiments show its effectiveness.
+Soundness and Completeness in the Limit. If we restrict our attention to interval
+abstractions, soundness is inherited from general abstractions and completeness
+in the limit holds because Π∗ is an interval partition. Therefore, using interval
+abstractions is both sound and complete in the limit.
+Interval Refinement. An interval partition Π′ is interval refinement of a given
+interval partition Π if Π′ 
+ Π. Refinement property is inherited from general
+abstractions. This intuitively means that Π′ is obtained by breaking the intervals
+in some sets of Π into smaller intervals.
+Conclusion. We devised a sound abstraction-refinement method for approximat-
+ing values of contracts. Our method is also complete in the limit. It begins
+by converting the contract to a game, then applies interval abstraction to the
+resulting game and repeatedly refines the abstraction using a heuristic until the
+desired precision is reached.
+Quantitative Analysis of Smart Contracts 761
+6 Experimental Results
+Implementation and Optimizations. The state-space of the games corre-
+sponding to the smart contracts is huge. Hence the original game corresponding
+to the contract is computationally too expensive to construct. Therefore, we
+do not first construct the game and then apply abstraction, instead we first
+apply the interval abstraction, and construct the lower and upper abstraction
+and compute values in them. We optimized our implementation by removing
+dummy states and exploiting acyclicity using backward-induction. More details
+are provided in [19].
+Experimental Results. We present our experimental results (Table 1) for the
+five examples mentioned in Sect. 3.4. In each of the examples, the original game
+is quite large, and the size of the state space is calculated without creating them.
+In our experimental results we show the abstracted game size, the refinement of
+games to larger sizes, and how the lower and upper bound on the values change.
+We used an Ubuntu machine with 3.2 GHz Intel i7-5600U CPU and 12 GB RAM.
+Interpretation of the Experimental Results. Our results demonstrate the effec-
+tiveness of our approach in automatically approximating values of large games
+and real-world smart contracts. Concretely, the following points are shown:
+– Refinement Property. By repeatedly refining the abstractions, values of lower
+and upper abstractions get closer at the expense of a larger state space.
+– Distinguishing Correct and Buggy Programs. Values of the lower and upper
+abstractions provide an approximation interval containing the contract value.
+These intervals shrink with refinement until the intervals for correct and
+buggy programs become disjoint and distinguishable.
+– Bug Detection. One can anticipate a sensible value for the contract, and an
+approximation interval not containing the value shows a bug. For example,
+in token sale, the objective (number of tokens sold) is at most 1000, while
+results show the buggy program has a value between 1741 and 2000.
+– Quantification of Economic Consequences. Abstracted game values can also
+be seen as a method to quantify and find limits to the economic gain or loss
+of a party. For example, our results show that if the buggy auction contract
+is deployed, a party can potentially gain no more than 1000 units from it.
+7 Comparison with Related Work
+Blockchain Security Analysis. The first security analysis of Bitcoin protocol
+was done by Nakamoto [43] who showed resilience of the blockchain against
+double-spending. A stateful analysis was done by Sapirshtein et al. [47] and by
+Sompolinsky and Zohar [49] in which states of the blockchain were considered.
+It was done using MDPs where only the attacker decides on her actions and the
+victim follows a predefined protocol. Our paper is the first work that is using
+two-player and concurrent games to analyze contracts and the first to use stateful
+analysis on arbitrary smart contracts, rather than a specific protocol.
+762 K. Chatterjee et al.
+Table 1. Experimental results for correct and buggy contracts. l := υ(G↓, u↓) denotes
+the lower value and u := υ(G↑, u↑) is the upper value. Times are in seconds.
+Quantitative Analysis of Smart Contracts 763
+Smart Contract Security. Delmolino et al. [29] held a contract programming
+workshop and showed that even simple contracts can contain incentive misalign-
+ment bugs. Luu et al. [41] introduced a symbolic model checker with which
+they could detect specific erroneous patterns. However the use of model checker
+cannot be extended to game-theoretic analysis. Bhargavan et al. [9] translated
+solidity programs to F ∗ and then used standard verification tools to detect vul-
+nerable code patterns. See [7] for a survey of the known causes for Solidity bugs
+that result in security vulnerabilities.
+Games and Verification. Abstraction for concurrent games has been considered
+wrt qualitative temporal objectives [3,22,28,44]. Several works considered con-
+current games with only pure strategies [28,36,37]. Concurrent games with pure
+strategies are extremely restrictive and effectively similar to turn-based games.
+The min-max theorem (determinacy) does not hold for them even in special
+cases of one-shot games or games with qualitative objectives.
+Quantitative analysis with games is studied in [12,17,21]. However these
+approaches either consider games without concurrent interactions or do not con-
+sider any abstraction-refinement. A quantitative abstraction-refinement frame-
+work has been considered in [18]; however, there is no game-theoretic interac-
+tion. Abstraction-refinement for games has also been considered [20,36]; however,
+these works neither consider games with concurrent interaction, nor quantitative
+objectives. Moreover, [20,36] start with a finite-state model without variables,
+and interval abstraction is not applicable to these game-theoretic frameworks.
+In contrast, our technical contribution is an abstraction-refinement approach for
+quantitative games and its application to analysis of smart contracts.
+Formal Methods in Security. There is a huge body of work on program anal-
+ysis for security; see [1,46] for survey. Formal methods are used to create safe
+programming languages (e.g., [34,46]) and to define new logics that can express
+security properties (e.g., [5,6,15]). They are also used to automatically verify
+security and cryptographic protocols, e.g., [2,8,11] for a survey. However, all of
+these works aimed to formalize qualitative properties such as privacy violation
+and information leakage. To the best of our knowledge, our framework is the first
+attempt to use formal methods as a tool for reasoning about monetary loses and
+identifying them as security errors.
+Bounded Model Checking (BMC). BMC was proposed by Biere et al. in 1999 [10].
+The idea in BMC is to search for a counterexample in executions whose length
+is at most k. If no bug is found then one increases k until either a bug is found,
+the problem becomes intractable, or some pre-known upper bound is reached.
+Interval Abstraction. The first infinite abstract domain was introduced in [25].
+This was later used to prove that infinite abstract domains can lead to effective
+static analysis for a given programming language [26]. However, none of the
+standard techniques is applicable to game analysis.
+764 K. Chatterjee et al.
+8 Conclusion
+In this work we present a programming language for smart contracts, and an
+abstraction-refinement approach for quantitative concurrent games to automat-
+ically analyze (i.e., compute worst-case guaranteed utilities of) such contracts.
+This is the first time a quantitative stateful game-theoretic framework is studied
+for formal analysis of smart contracts. There are several interesting directions
+of future work. First, we present interval-based abstraction techniques for such
+games, and whether different abstraction techniques can lead to more scalability
+or other classes of contracts is an interesting direction of future work. Second,
+since we consider worst-case guarantees, the games we obtain are two-player
+zero-sum games. The extension to study multiplayer games and compute values
+for rational agents is another interesting direction of future work. Finally, in this
+work we do not consider interaction between smart contracts, and an extension
+to encompass such study will be a subject of its own.
+Acknowledgments. The research was partially supported by Vienna Science and
+Technology Fund (WWTF) Project ICT15-003, Austrian Science Fund (FWF) NFN
+Grant No S11407-N23 (RiSE/SHiNE), and ERC Starting grant (279307: Graph
+Games).
+References
+1. Abadi, M.: Software security: a formal perspective. In: Giannakopoulou, D., Méry,
+D. (eds.) FM 2012. LNCS, vol. 7436, pp. 1–5. Springer, Heidelberg (2012). https://
+doi.org/10.1007/978-3-642-32759-9 1
+2. Abadi, M., Rogaway, P.: Reconciling two views of cryptography. In: van Leeuwen,
+J., Watanabe, O., Hagiya, M., Mosses, P.D., Ito, T. (eds.) TCS 2000. LNCS, vol.
+1872, pp. 3–22. Springer, Heidelberg (2000). https://doi.org/10.1007/3-540-44929-
+9 1
+3. Alur, R., Henzinger, T.A., Kupferman, O., Vardi, M.Y.: Alternating refinement
+relations. In: Sangiorgi, D., de Simone, R. (eds.) CONCUR 1998. LNCS, vol. 1466,
+pp. 163–178. Springer, Heidelberg (1998). https://doi.org/10.1007/BFb0055622
+4. Anonymous Author: King of the ether (2017). www.kingoftheether.com
+5. Arden, O., Liu, J., Myers, A.C.: Flow-limited authorization. In: CSF, pp. 569–583
+(2015)
+6. Arden, O., Myers, A.C.: A calculus for flow-limited authorization. In: CSF (2016)
+7. Atzei, N., Bartoletti, M., Cimoli, T.: A survey of attacks on ethereum smart con-
+tracts. IACR Cryptology ePrint Archive, 1007 (2016)
+8. Avalle, M., Pironti, A., Sisto, R.: Formal verification of security protocol imple-
+mentations: a survey. Formal Aspects Comput. 26(1), 99–123 (2014)
+9. Bhargavan, K., et al.: Formal verification of smart contracts: short paper. In: PLAS.
+ACM (2016)
+10. Biere, A., Cimatti, A., Clarke, E., Zhu, Y.: Symbolic model checking without
+BDDs. In: Cleaveland, W.R. (ed.) TACAS 1999. LNCS, vol. 1579, pp. 193–207.
+Springer, Heidelberg (1999). https://doi.org/10.1007/3-540-49059-0 14
+11. Blanchet, B., Chaudhuri, A.: Automated formal analysis of a protocol for secure
+file sharing on untrusted storage. In: SP, pp. 417–431. IEEE (2008)
+https://doi.org/10.1007/978-3-642-32759-9_1
+https://doi.org/10.1007/978-3-642-32759-9_1
+https://doi.org/10.1007/3-540-44929-9_1
+https://doi.org/10.1007/3-540-44929-9_1
+https://doi.org/10.1007/BFb0055622
+www.kingoftheether.com
+https://doi.org/10.1007/3-540-49059-0_14
+Quantitative Analysis of Smart Contracts 765
+12. Bloem, R., Chatterjee, K., Henzinger, T.A., Jobstmann, B.: Better quality in syn-
+thesis through quantitative objectives. In: Bouajjani, A., Maler, O. (eds.) CAV
+2009. LNCS, vol. 5643, pp. 140–156. Springer, Heidelberg (2009). https://doi.org/
+10.1007/978-3-642-02658-4 14
+13. Bonneau, J., Miller, A., Clark, J., Narayanan, A., Kroll, J.A., Felten, E.W.: Sok:
+research perspectives and challenges for bitcoin and cryptocurrencies. In: SP, pp.
+104–121. IEEE (2015)
+14. Burch, J., Clarke, E., McMillan, K., Dill, D., Hwang, L.J.: Symbolic model check-
+ing: 1020 states and beyond. Inf. Comput. 98(2), 142–170 (1992)
+15. Burrows, M., Abadi, M., Needham, R.M.: A logic of authentication. In: Proceed-
+ings of the Royal Society of London A: Mathematical, Physical and Engineering
+Sciences, pp. 233–271. The Royal Society (1989)
+16. Buterin, V., et al.: Ethereum white paper (2013)
+17. Černý, P., Chatterjee, K., Henzinger, T.A., Radhakrishna, A., Singh, R.: Quantita-
+tive synthesis for concurrent programs. In: Gopalakrishnan, G., Qadeer, S. (eds.)
+CAV 2011. LNCS, vol. 6806, pp. 243–259. Springer, Heidelberg (2011). https://
+doi.org/10.1007/978-3-642-22110-1 20
+18. Cerný, P., Henzinger, T.A., Radhakrishna, A.: Quantitative abstraction refine-
+ment. In: POPL (2013)
+19. Chatterjee, K., Goharshady, A.K., Velner, Y.: Quantitative analysis of smart con-
+tracts (2018). arXiv preprint: arXiv:1801.03367
+20. Chatterjee, K., Henzinger, T.A., Jhala, R., Majumdar, R.: Counterexample-guided
+planning. In: UAI, pp. 104–111 (2005)
+21. Chatterjee, K., Ibsen-Jensen, R.: Qualitative analysis of concurrent mean-payoff
+games. Inf. Comput. 242, 2–24 (2015)
+22. Church, A.: Logic, arithmetic, and automata. In: Proceedings of the International
+Congress of Mathematicians, pp. 23–35. Institut Mittag-Leffler (1962)
+23. Clarke, E., Grumberg, O., Peled, D.: Model Checking. MIT Press, Cambridge
+(1999)
+24. CoinMarketCap: Crypto-currency market capitalizations (2017).
+coinmarketcap.com
+25. Cousot, P., Cousot, R.: Static determination of dynamic properties of generalized
+type unions. In: ACM Conference on Language Design for Reliable Software, vol.
+12, pp. 77–94. ACM (1977)
+26. Cousot, P., Cousot, R.: Comparing the Galois connection and widening/narrow-
+ing approaches to abstract interpretation. In: Bruynooghe, M., Wirsing, M. (eds.)
+PLILP 1992. LNCS, vol. 631, pp. 269–295. Springer, Heidelberg (1992). https://
+doi.org/10.1007/3-540-55844-6 142
+27. Daian, P.: Analysis of the DAO exploit (2016).
+hackingdistributed.com/2016/06/18/analysis-of-the-dao-exploit
+28. de Alfaro, L., Godefroid, P., Jagadeesan, R.: Three-valued abstractions of games:
+uncertainty, but with precision. In: LICS. IEEE (2004)
+29. Delmolino, K., Arnett, M., Kosba, A.E., Miller, A., Shi, E.: Step by step towards
+creating a safe smart contract: Lessons and insights from a cryptocurrency lab.
+IACR Cryptology ePrint Archive 2015, 460 (2015)
+30. Ethereum Foundation: Solidity language documentation (2017)
+31. Etherscan: Contract accounts (2017). etherscan.io/accounts/c
+32. Etherscan: Token information (2017). etherscan.io/tokens
+33. ETHNews: Hkg token has a bug and needs to be reissued (2017).
+ethnews.com/ethercamps-hkg-token-has-a-bug-and-needs-to-be-reissued
+https://doi.org/10.1007/978-3-642-02658-4_14
+https://doi.org/10.1007/978-3-642-02658-4_14
+https://doi.org/10.1007/978-3-642-22110-1_20
+https://doi.org/10.1007/978-3-642-22110-1_20
+http://arxiv.org/abs/1801.03367
+https://www.coinmarketcap.com
+https://doi.org/10.1007/3-540-55844-6_142
+https://doi.org/10.1007/3-540-55844-6_142
+https://www.hackingdistributed.com/2016/06/18/analysis-of-the-dao-exploit
+https://www.etherscan.io/accounts/c
+https://www.etherscan.io/tokens
+https://www.ethnews.com/ethercamps-hkg-token-has-a-bug-and-needs-to-be-reissued
+766 K. Chatterjee et al.
+34. Fuchs, A.P., Chaudhuri, A., Foster, J.S.: Scandroid: automated security certifica-
+tion of android. Technical report (2009)
+35. Godefroid, P. (ed.): Partial-Order Methods for the Verification of Concurrent Sys-
+tems: An Approach to the State-Explosion Problem. LNCS, vol. 1032. Springer,
+Heidelberg (1996). https://doi.org/10.1007/3-540-60761-7
+36. Henzinger, T.A., Jhala, R., Majumdar, R.: Counterexample-guided control. In:
+ICALP (2003)
+37. Henzinger, T.A., Majumdar, R., Mang, F., Raskin, J.-F.: Abstract interpretation
+of game properties. In: Palsberg, J. (ed.) SAS 2000. LNCS, vol. 1824, pp. 220–239.
+Springer, Heidelberg (2000). https://doi.org/10.1007/978-3-540-45099-3 12
+38. Jentzsch, C.: Decentralized autonomous organization to automate governance
+(2016). download.slock.it/public/DAO/WhitePaper.pdf
+39. Jhala, R., Majumdar, R.: Software model checking. ACM Comput. Surv. 41(4),
+21:1–21:54 (2009)
+40. Johnson, N.: A beginner’s guide to buying an ENS domain (2017)
+41. Luu, L., Chu, D.H., Olickel, H., Saxena, P., Hobor, A.: Making smart contracts
+smarter. In: CCS, pp. 254–269 (2016)
+42. Luu, L., Velner, Y.: Audit report for digix’s smart contract platform (2017)
+43. Nakamoto, S.: Bitcoin: a peer-to-peer electronic cash system (2008)
+44. Pnueli, A., Rosner, R.: On the synthesis of a reactive module. In: POPL, pp. 179–
+190 (1989)
+45. Queille, J.P., Sifakis, J.: Specification and verification of concurrent systems in
+CESAR. In: Dezani-Ciancaglini, M., Montanari, U. (eds.) International Sympo-
+sium on Programming. LNCS, vol. 137, pp. 337–351. Springer, Heidelberg (1982).
+https://doi.org/10.1007/3-540-11494-7 22
+46. Sabelfeld, A., Myers, A.C.: Language-based information-flow security. IEEE J. Sel.
+Areas Commun. 21(1), 5–19 (2003)
+47. Sapirshtein, A., Sompolinsky, Y., Zohar, A.: Optimal selfish mining strategies in
+bitcoin (2015). arXiv preprint: arXiv:1507.06183
+48. Simonite, T.: $80 million hack shows the dangers of programmable money, June
+2016. www.technologyreview.com
+49. Sompolinsky, Y., Zohar, A.: Bitcoin’s security model revisited. CoRR
+abs/1605.09193 (2016)
+50. Teutsch, J., Jain, S., Saxena, P.: When cryptocurrencies mine their own business?
+In: Grossklags, J., Preneel, B. (eds.) FC 2016. LNCS, vol. 9603, pp. 499–514.
+Springer, Heidelberg (2017). https://doi.org/10.1007/978-3-662-54970-4 29
+51. Toobin, A.: The DAO, Ethereum’s $150 million blockchain investment fund, has
+a logic problem (2016). www.inverse.com/article/16314-the-dao-ethereum-s-150-
+million-blockchain
+52. Tran, V., Velner, Y.: Coindash audit report (2017)
+53. Wood, G.: Ethereum yellow paper (2014)
+https://doi.org/10.1007/3-540-60761-7
+https://doi.org/10.1007/978-3-540-45099-3_12
+https://www.download.slock.it/public/DAO/WhitePaper.pdf
+https://doi.org/10.1007/3-540-11494-7_22
+http://arxiv.org/abs/1507.06183
+www.technologyreview.com
+https://doi.org/10.1007/978-3-662-54970-4_29
+www.inverse.com/article/16314-the-dao-ethereum-s-150-million-blockchain
+www.inverse.com/article/16314-the-dao-ethereum-s-150-million-blockchain
+Quantitative Analysis of Smart Contracts 767
+Open Access This chapter is licensed under the terms of the Creative Commons
+Attribution 4.0 International License (http://creativecommons.org/licenses/by/4.0/),
+which permits use, sharing, adaptation, distribution and reproduction in any medium
+or format, as long as you give appropriate credit to the original author(s) and the
+source, provide a link to the Creative Commons license and indicate if changes were
+made.
+The images or other third party material in this chapter are included in the chapter’s
+Creative Commons license, unless indicated otherwise in a credit line to the material. If
+material is not included in the chapter’s Creative Commons license and your intended
+use is not permitted by statutory regulation or exceeds the permitted use, you will
+need to obtain permission directly from the copyright holder.
+http://creativecommons.org/licenses/by/4.0/
+	Quantitative Analysis of Smart Contracts
+	1 Introduction
+	2 Background on Ethereum Smart Contracts
+	2.1 Programmable Smart Contracts
+	2.2 Tokens and User Utility
+	3 Programming Language for Smart Contracts
+	3.1 Syntax
+	3.2 Semantics
+	3.3 Objective Function and Values of Contracts
+	3.4 Examples
+	4 Bounded Analysis and Games
+	4.1 Bounded Analysis
+	4.2 Concurrent Games
+	4.3 Translating Contracts to Games
+	5 Abstraction for Quantitative Concurrent Games
+	5.1 Abstraction for Quantitative Concurrent Games
+	5.2 Abstraction: Soundness, Refinement, and Completeness in Limit
+	5.3 Interval Abstraction
+	6 Experimental Results
+	7 Comparison with Related Work
+	8 Conclusion
+	References

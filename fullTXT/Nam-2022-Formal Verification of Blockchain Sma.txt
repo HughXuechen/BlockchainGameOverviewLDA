@@ -1,0 +1,926 @@
+Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+Received November 28, 2021, accepted January 4, 2022, date of publication January 14, 2022, date of current version January 21, 2022.
+Digital Object Identifier 10.1109/ACCESS.2022.3143145
+Formal Verification of Blockchain Smart
+Contracts via ATL Model Checking
+WONHONG NAM 1 AND HYUNYOUNG KIL 2
+1Department of Computer Science and Engineering, Konkuk University, Seoul 05029, South Korea
+2Department of Software, Korea Aerospace University, Goyang 10540, South Korea
+Corresponding author: Hyunyoung Kil (hykil@kau.ac.kr)
+This work was supported by the National Research Foundation of Korea (NRF) Grant through the Korea Government (MSIT)
+under Grant 2019R1F1A106282813 and Grant 2021R1F1A105038911.
+ABSTRACT A blockchain is a list of data blocks as a publicly distributed ledger, which are linked together
+using cryptography. By allowing Turing-complete programming languages to implement smart contracts,
+recent blockchains such as Ethereum can reduce needs in trusted intermediators, arbitrations and enforcement
+costs. However, subtle errors in smart contracts have induced an enormous financial loss—for examples,
+the DAO attack, Parity multisignature wallet attacks, and integer underflow/overflow attacks. To identify
+such errors in smart contracts, various researches are performed, which are based on static analysis and
+theorem proving. However, they only support inspection for pre-defined error patterns, or they cannot explore
+the whole searching space exhaustively or be fully automatic. Hence, in this paper, we propose a novel
+formal verification technique to analyze blockchain smart contracts by using ATL model checking. In our
+methodology, we represent the interaction between users and smart contracts into a two-player game and
+verify properties we want to check using MCMAS that is an efficient ATL model checker for multi-agent
+systems. Moreover, we present three case studies to show that our proposal can successfully identify subtle
+flaws in real world smart contracts.
+INDEX TERMS Blockchain, ethereum, smart contracts, formal verification, alternating-time temporal logic
+(ATL), ATL model checking.
+I. INTRODUCTION
+In 2008, Nakamoto proposed Bitcoin [1] as the first
+blockchain system [2], [3], in which users can send a decen-
+tralized cryptocurrency to other users on the peer-to-peer net-
+work without a central authority. A blockchain is a growing
+list of cryptographically secured blocks to maintain shared
+data on decentralized systems, in order to archive transactions
+between untrusted participants. Each block includes a cryp-
+tographic hash of the previous block, a timestamp and trans-
+actions. Since every block contains the hash of the previous
+block, we cannot modify any data in a block without altering
+all the subsequent blocks in the blockchain. To define trans-
+actions between users, Bitcoin supports a Forth-like scripting
+language [4].
+Smart contracts are computer programs that auto-
+matically execute legal events according to the terms
+The associate editor coordinating the review of this manuscript and
+approving it for publication was Francisco J. Garcia-Penalvo .
+of contracts. Although the scripting language of Bitcoin
+can represent a weak version of smart contracts such as an
+escrowed payment transaction, it is somewhat restricted due
+to its small instruction set. As a result, Buterin proposed
+Ethereum [5], [6] in 2013, which supports a Turing-complete
+language without any expressiveness restriction to build
+applications (i.e., smart contracts) that users can interact
+with. Now, we have Turing-complete languages Solidity [7]
+and Vyper [8] to build smart contracts in the Ethereum
+blockchain.
+As employing blockchain systems to be used in various
+applications, Ethereum is the most actively used blockchain
+at this point. Decentralized finance applications written as
+Ethereum smart contracts can support a number of financial
+services without the help of brokerages, exchanges, or banks.
+Also, Ethereum makes it possible to create and exchange
+Non-fungible tokens, and to operate many other cryptocur-
+rencies as ERC-20 (Ethereum Request for Comment 20)
+tokens on top of itself. Although the Ethereum blockchain has
+VOLUME 10, 2022
+This work is licensed under a Creative Commons Attribution-NonCommercial-NoDerivatives 4.0 License.
+For more information, see https://creativecommons.org/licenses/by-nc-nd/4.0/ 8151
+https://orcid.org/0000-0003-1450-347X
+https://orcid.org/0000-0003-2377-4079
+https://orcid.org/0000-0001-9987-5584
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+been successfully applied to a number of interesting applica-
+tions, there have been several events that subtle flaws in smart
+contracts induce a huge amount of financial loss; e.g., the
+DAO attack [9], Parity multisignature wallet attacks [10], and
+integer underflow/overflow attacks [11]. Especially, in 2016,
+a hacker exploited an error in a smart contract of the DAO
+(Digital decentralized Autonomous Organization), and stole
+$50 million of Ether. We call this event ‘‘the DAO attack’’
+that caused Ethereum to be split into Ethereum Classic and
+Ethereum.
+To analyze and verify such defects in smart contracts, there
+are several research approaches [12] that adopt static program
+analysis, theorem proving, and model checking. Static pro-
+gram analysis [13] is to analyze computer programs, which
+is performed without execution of the programs. Theorem
+proving technique [14] is to prove mathematical theorems of
+computer programs through axioms and proof rules. Model
+checking technique [15] is, given a target system and a prop-
+erty, to automatically verify whether the system satisfies the
+given property. These techniques, however, inherently have
+some problems. The static analysis techniques should pre-
+cisely abstract smart contract execution and memory model,
+and they support only checking for pre-defined error patterns.
+For theorem proving, it is a significant problem that the
+technique cannot be performed fully automatically. While
+model checking techniques can be done automatically, gen-
+eral model checking techniques such as CTL (Computational
+Tree Logic) model checking [16] and LTL (Linear-time Tem-
+poral Logic) model checking [17] cannot exactly capture a
+game property between users and smart contracts. Accord-
+ingly, in this paper, we propose to employ ATL (Alternating-
+time Temporal Logic) model checking [18] that can model
+and verify game properties between multi-agent systems.
+In ourmethod, given target smart contracts written in Solidity,
+we first translate them into a game structure that is supported
+by ATL model checking. To do this, we contrive translation
+rules to completely preserve the semantics of Solidity lan-
+guage. After conversion by our rules, we verify the target
+smart contracts by using an efficient formal verification tool,
+MCMAS [19] that is a model checker for multi-agent sys-
+tems. In this process, we regard the interaction between users
+and smart contracts as a two-player game, and we distin-
+guish the whole system including users and smart contracts
+into a protagonist and an antagonist. In addition, we repre-
+sent properties between two-players in an ATL formula, and
+verify whether the whole system satisfies the properties by
+MCMAS. Finally, we present three case studies to show that
+our technique can be successfully applied to verify real world
+smart contracts. In our case studies, we can successfully
+identify the DAO bug and the tx.origin bug, and we also
+prove that corrected versions satisfy safety properties that
+there is no such an error.
+The rest of this paper is organized as follows. We discuss
+related work for our research in Section 2. In Section 3,
+we account for formal verification technique including ATL
+model checking as background. Then, in Section 4, we pro-
+pose our novel method to verify blockchain smart contracts
+written in Solidity. In Section 5, we present three case studies
+to show that our technique can be used to identify subtle errors
+in smart contract programs. Finally, we give conclusions
+in Section 6.
+II. RELATED WORK
+As blockchain platforms have recently emerged as a new ini-
+tiative for a secure distributed data storage, many literatures
+introduce novel research issues on the blockchain system [3].
+Since Nakamoto proposed Bitcoin [1] in 2008, a number of
+blockchain services including Ethereum [5], [6], Facebook’s
+Libra (now, called Diem) [20], and Bitwala [21] have been
+proposed to be applied to various usages. That is, although
+the early blockchains were developed as cryptocurrencies,
+recent blockchain systems have been used in a number of
+financial services including online payment, digital assets and
+remittance [22]. Bitwala [21] initiated a blockchain banking
+solution that allows clients to manage their cryptocurrencies
+and Euro in bank accounts. Digital assets such as ICO (Initial
+Coin Offerings) and STOs (Security Token Offerings) are
+used to tokenize traditional assets such as company, intel-
+lectual property, real estate, art, or individual products [23].
+Mojaloop was designed to provide a reference model for
+payment interoperability, which can allow migrants to send
+remittances [24]. Andoni et al. [25] provided a systematic
+review of challenges and opportunities to employ blockchain
+technology for the energy sector. In addition, there are
+several results to apply blockchains to supply chain manage-
+ments [26], [27]. Moreover, one of the most significant appli-
+cation of blockchain platforms is to expedite smart contracts
+that are computer programs to automatically be executed
+without any trusted third partywhen conditions in the contract
+hold [28], [29].
+Even though smart contracts based on blockchain technol-
+ogy have been used for various applications, subtle defects
+in smart contracts may incur an enormous financial loss.
+Recently, various efforts have been made to find or prevent
+errors in smart contracts. A number of researches [30]–[32]
+employ static analysis that can analyze computer programs
+without actually executing programs. In [30], Feist et al.
+propose Slither that is a static analysis framework to ana-
+lyze rich information about Ethereum smart contracts. Their
+method translates Solidity smart contracts into an interme-
+diate representation, and then exploits dataflow and taint
+tracking to automatically detect vulnerabilities of smart con-
+tracts. So et al. [31] present a static analysis tool VeriSmart
+to ensure arithmetic safety of Ethereum smart contracts.
+They can reduce the burden of manually checking for
+undiscovered or incorrectly-reported issues by using a
+domain-specific algorithm. In [32], Tsankov et al. propose a
+security analyzer for Ethereum smart contracts, which auto-
+matically prove contract behaviors as safe/unsafewith respect
+to a given property. Their tool symbolically analyzes the
+contract’s dependency graph, and then checks compliance
+8152 VOLUME 10, 2022
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+and violation patterns to capture sufficient conditions for
+proving whether a property is true. These techniques based
+on static analysis have an issue that they require precise
+abstraction of the behavior of smart contracts and memory
+model.
+Theorem proving is a formal verification technique that
+encodes a target system and its properties into a math-
+ematical logic and derives a formal proof of satisfaction
+of the properties by axioms and proof rules. The theorem
+proving technique has been employed to verify the cor-
+rectness of blockchain smart contracts [33]–[36]. In [34],
+Amani et al. extend an existing EVM (Ethereum Virtual
+Machine) formalization in Isabelle/HOL by a sound pro-
+gram logic. They encode bytecode sequences into blocks of
+straight-line code and propose a program logic to analyze
+them. O’Connor [33] has proposed a new language called
+Simplicity tomaintain and enhance the desirable properties of
+smart contracts. The language provides formal semantics and
+facilitates reasoning on smart contracts by using a theorem
+prover. In [35], Annenkov et al. propose a method to embed a
+functional language into the Coq proof system by using meta-
+programming. This allows us to perform reasoning on smart
+contracts by using the Coq system. However, these techniques
+employing theorem proving inherently have a problem that
+they cannot be performed fully automatically and thus need
+expert’s guide.
+Another promising approaches [37]–[39] to identify bugs
+in smart contracts are to employ model checking that is
+an automatic formal verification technique. Given a tar-
+get system and a property, it checks whether the system
+satisfies the given property. If not, model checking tools
+provide a counter-example that can explain why the sys-
+tem does not satisfy the property. In [37], Nehai et al.
+have modeled into three layers to represent the behavior
+of Ethereum blockchain, smart contracts and the execution
+framework. Then, they verify temporal logic properties in
+CTL formulae of smart contracts by using a model checker
+NuSMV [40]. On the other hand, Mavridou et al. [38] have
+built the VeriSolid framework for model checking of smart
+contracts. It allows developers to model and verify smart
+contracts as well as to generate Solidity codes as an end-to-
+end design framework. In [39], Osterland and Rose propose
+a tool chain for model checking of Ethereum smart contracts.
+First, they translate a Solidity smart contract into a Promela
+model that is the input of the SPIN model checker [41],
+and then they employ SPIN to check if the model satisfy
+given LTL properties. Although these approaches adopt CTL
+or LTL model checking to analyze smart contracts, these
+CTL/LTLmodel checking cannot handle a game property that
+represents whether a particular player has a winning strategy
+against the other player. Since many interesting properties
+about behavior of smart contracts should be modeled into
+winning strategies of the game between a protagonist and
+an antagonist [42], it is necessary to verify existence of such
+strategies. Hence, in this paper, to analyze blockchain smart
+contracts, we employ ATL model checking that can verify
+whether a player represented as a protagonist has a winning
+strategy no matter how other players perform.
+III. ATL MODEL CHECKING
+In this section, we account for ATL model checking that we
+employ to analyze properties of smart contracts.
+A. ATL MODEL CHECKING PROBLEM
+Alternating-time Temporal Logic (ATL)model checking [18]
+is a formal verification method to analyze if a given system
+satisfies a given property. In this technique, we represent the
+system we want to verify with a game structure, in which
+multiple players are described in separate agents. Besides,
+we represent the desired properties we want to verify in ATL
+formulae. Then, an ATLmodel checker exhaustively searches
+state space to investigate whether the system satisfies the
+given ATL properties.
+In this section, we present a formal notion of Alternating-
+time Temporal Logic and ATL model checking. Since the
+definition of ATL model checking requires the definition
+of ATL, we first explain ATL and then define ATL model
+checking.
+The formal syntax of ATL is as follows.5 is an underlying
+set of atomic propositions and 6 is a finite set of players.
+1) Every atomic proposition p ∈ 5 is an ATL formula.
+2) If ϕ1 and ϕ2 are ATL formulae, then ¬ϕ1, ϕ1 ∨ ϕ2 and
+ϕ1 ∧ ϕ2 are also ATL formulae.
+3) If A ⊆ 6 is a set of players, and ϕ1 and ϕ2 are
+ATL formulae, then 〈〈A〉〉Xϕ1, 〈〈A〉〉Gϕ1, 〈〈A〉〉Fϕ1,
+and 〈〈A〉〉ϕ1Uϕ2 are ATL formulae.
+The symbols ¬, ∨ and ∧ are a negation, a disjunction and
+a conjunction, respectively. 〈〈 〉〉 is a path quantifier, and
+X , G, F and U are temporal operators. As other temporal
+logics such as LTL and CTL, X , G, F , and U are the nexttime
+operator, the global operator, the future operator, and the until
+operator, respectively.
+The semantics of ATL formulae is defined with respect to
+a game structure. Formally, a game structure is a tuple S =
+(k,Q,5, π, d, δ) in which
+• k is the number of players in the game. We identify
+the players with the numbers, 1, . . . , k and write 6 =
+{1, . . . , k} for the set of players.
+• Q is a finite set of states. Also, we have a set Q0 ⊆ Q of
+initial states.
+• 5 is a finite set of atomic propositions.
+• π : Q→ 25 is a labeling function which assigns a state
+q ∈ Q to a set π (q) ⊆ 5 of atomic propositions true at
+the state q.
+• For each player a ∈ {1, . . . , k} and each state q ∈ Q,
+a natural number da(q) ≥ 1 is the number of moves
+available at the state q to the player a. Now, we identify
+moves of the player a at the state q with the numbers,
+1, . . . , da(q). For each state q ∈ Q, a move vector µ at
+q is a k-tuple (m1, . . . ,mk ) such that 1 ≤ ma ≤ da(q)
+VOLUME 10, 2022 8153
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 1. The definition of the satisfaction relation.
+for each player a, where k is the number of players.
+In addition, for each state q ∈ Q, we denote D(q) for
+the set {1, . . . , d1(q)}× · · · × {1, . . . , dk (q)} of all move
+vectors at the state q. We call the function D a move
+function.
+• For each state q ∈ Q and each move vector (m1, . . . ,
+mk ) ∈ D(q), a state δ(q,m1, . . . ,mk ) ∈ Q is the next
+state when each player a ∈ {1, . . . , k} chooses a move
+ma at the state q. We call the function δ a transition
+function.
+Now, we can define the ATL model checking problem
+as follows. Given a game structure S = (k,Q,5, π, d, δ),
+a state q ∈ Q, and an ATL formula ϕ, we denote that S, q |H ϕ
+if the state q of S satisfies theATL propertyϕ.When S is clear,
+we can omit S as q |H ϕ. We define the satisfaction relation
+|H in Figure 1. Given a game structure S = (k,Q,5, π, d, δ)
+and an ATL formula ϕ, we say S |H ϕ if q |H ϕ for
+all the initial states q of S. Finally, given a game structure
+S = (k,Q,5, π, d, δ), and an ATL formula ϕ, the ATLmodel
+checking problem is to check whether S |H ϕ. To understand
+ATL model checking in more detail, refer to [18].
+B. ATL MODEL CHECKING EXAMPLE
+Let us consider an example of the ATL model checking
+problemwhich includes two processes px and py. The process
+px assigns a value to the Boolean variable x and the process
+py assigns a value to the Boolean variable y. When x = false,
+the process px may leave the value of x unchanged or set the
+value to true. When x = true, px leaves the value of x as
+true. Likewise, when y = false, the process py can leave the
+value of y unchanged or set the value to true. When y = true,
+py leaves the value of y as true. Initially, x and y are both
+false. Now, we can represent the synchronous composition
+of the two processes with the following game structure S =
+(k,Q,5, π, d, δ) where
+• k = 2. Player 1 is the process px and player 2 is py.
+• Q = {q0, q1, q2, q3}. The set Q0 of initial states is {q0}.
+FIGURE 2. The state transition system.
+• 5 = {x, y} where both variables are atomic
+propositions.
+• π (q0) = ∅, π(q1) = {x}, π(q2) = {y}, and π(q3) =
+{x, y}.
+• d1(q0) = d1(q2) = 2 and d1(q1) = d1(q3) = 1. That
+is, in the states q0 and q2, the player 1 (process qx)
+has two moves by which player 1 can leave the value
+of x unchanged or set the value to true. On the other
+hand, in q1 and q3, the player 1 has only one move that
+qx leaves the value of x unchanged as true. Likewise,
+d2(q0) = d2(q1) = 2 and d2(q2) = d2(q3) = 1. In the
+states q0 and q1, the player 2 (process qy) has two moves
+by which player 2 can leave the value of y unchanged or
+set the value to true. On the other hand, in q2 and q3, the
+player 2 has only one move that qy leaves the value of y
+unchanged as true.
+• The transition function δ is illustrated in Figure 2.
+In this example, we can consider an ATL formula
+〈〈px〉〉F(x = true) which means that px can enforce the
+variable x eventually true no matter how the other player
+chooses its move. This formulae holds at the initial state
+q0 since px just needs to choose its move as 2; therefore,
+S |H 〈〈px〉〉F(x = true). On the other hand, consider an
+8154 VOLUME 10, 2022
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 3. ATL model checking procedure for solidity contracts.
+ATL formulae 〈〈py〉〉X (x = y) which means that py can
+enforce that in the next state the variable x has the same value
+with y nomatter how px chooses its move. This formulae does
+not hold at the initial state q0 since if py chooses move 1, then
+px can choose its move as 2, and if py chooses move 2, then
+px can choose its move as 1; therefore, S 6|H 〈〈py〉〉X (x = y).
+IV. TRANSLATION FOR ATL MODEL CHECKING
+Our verification procedure for smart contracts is illustrated in
+Figure 3. Since we target Ethereum smart contracts written in
+Solidity, one of our inputs is a Solidity source file. For formal
+verification, we employ a state-of-the-art ATLmodel checker,
+MCMAS [19]. To apply MCMAS to the given Solidity con-
+tract file, we first translate it into a semantically equivalent
+MCMAS input file. In addition, MCMAS requires another
+input that describes ATL properties we want to check. Once
+two inputs are provided, we can performATLmodel checking
+to check whether a game structure representing the given
+smart contracts satisfies the ATL properties. If the result is
+yes, it means that the smart contracts satisfy the properties.
+Otherwise, MCMAS provides a counter-example that is a
+witness to explain why the model does not satisfy a property.
+This counter-example is helpful to revise the original smart
+contract to fix a bug. In this section, we account for our
+translation rule in detail.
+A. THE SOLIDITY LANGUAGE
+Solidity [7] is an object-oriented, high-level language to
+implement smart contracts in Ethereum. Each smart contract
+is a program that can govern the behavior of accounts within
+the Ethereum state. Figure 4 shows a simple example of
+a smart contract in Solidity. The example is a snippet of
+the userWallet smart contract that contains two variable
+declarations forowner andmyBalance and three functions
+(constructor, fallback function without its name, and
+withdrawTotalBalance). We explain our translation
+rule by three categories: program structure, control flow, and
+memory operation.
+B. PROGRAM STRUCTURE
+A Solidity program includes contracts that contain variable
+declarations, mapping declarations, event definitions and
+functions. On the other hand, a game structure in MCMAS
+is composed of a set of agents, each of which represents a
+player in a game. Accordingly, at the top level, a contract in
+Solidity is translated into an agent in the MCMAS language.
+Then, each part of a Solidity contract (i.e., variable dec-
+larations, mapping declarations, event definitions and func-
+tions) is translated as follows. The Solidity variable types
+supported in this paper are Booleans, integers, addresses,
+arrays, enums, and structures, which are not all the types of
+Solidity variables, but enough to analyze real world Solidity
+contracts. Since verification performance of MCMAS inher-
+itantly depends on state space, integers and addresses are
+reduced into bounded integers in the MCMAS language after
+appropriate abstraction. Because arrays and structures are not
+supported in MCMAS, we flatten them into a set of bounded
+integers. In Solidity, variables are classified as state vari-
+ables, local variables, and global variables. Remark that in a
+Solidity program, a state variable is a contract-level variable
+that can be accessed in all functions of the contract, and a
+global variable is a variable with a reserved name in the global
+namespace used to get information about the blockchain and
+the corresponding transaction. Since, in MCMAS, there is no
+distinction among them, we attach a prefix to a local variable
+with the function name in order to prevent from overwrit-
+ing state/local variables with the same name. In addition,
+we create a set of MCMAS variables corresponding to global
+variables that appear in a Solidity source file. For instance,
+tx.origin in Figure 4 is a global variable that refers
+to the address which originally instantiates the transaction.
+In this case, we create a corresponding MCMAS variable
+tx_orgin.
+Like arrays, we unwind a mapping to a set of MCMAS
+variables. As Solidity events only provide the EVM’s logging
+functionality, we ignore them in this paper.
+Another main difference between Solidity and the
+MCMAS language is the execution mechanism. While a
+program in Solidity runs sequentially, line by line as ordi-
+nary programming languages, the MCMAS language repre-
+sents an evolution function of a given game structure which
+describes how local states of agents evolve based on their cur-
+rent local states and on other agents’ actions. The evolution
+function includes a set of lines that consist of a set of assign-
+ments of variables and a guided condition. The assignments
+are enabled in a state if their guided condition is satisfied in
+that state. To simulate the sequential execution of a Solidity
+contract with the MCMAS evolution function description,
+we introduce an auxiliary variable, program counter (pc) to
+record which line of a Solidity program is being executed
+currently. The constructor in Solidity is a special function that
+is executed automatically when the corresponding contract
+is instantiated. The assignments in the constructor, therefore,
+are encoded into a formula in initial states section of the
+MCMAS language. Moreover, since the MCMAS language
+does not support a function call, we also simulate it with
+auxiliary variables to represent a call stack.
+C. CONTROL FLOW
+Since the execution of a Solidity program is sequential,
+we can translate each statement of a Solidity program by
+increasing the program counter by 1. However, there are
+VOLUME 10, 2022 8155
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 4. Example: A snippet of the userWallet smart contract in solidity.
+several exceptional cases of control flow: function call,
+branch, loop, require and assert. For a function call in a
+Solidity program, we can translate it by storing the current
+value of pc to call stack variables and assigning the start line
+number of the callee to pc. In addition, we handle parameter
+passing by assigning the values of actual parameters to formal
+parameters. To do this, for each formal variable, we introduce
+a new local variable in the callee function. When a function
+return, we assign a return value to a variable in the caller and
+restore pc with the return address stored. The if statement is
+reduced into an implication; that is, if the guided condition is
+evaluated to true, we assign the start line number of the then
+block to pc. Otherwise, we assign the start line number of
+the else block to pc. Loop statements (e.g., for, while, and
+do..while) can be translated with the similar way; we add
+appropriate initialization, termination condition, and incre-
+ment into the target MCMAS file, and assign the start line
+number of the loop to pc at the end of the loop. In Solidity,
+when a given condition does not hold, require and assert
+terminate the execution. Hence, we translate them by jumping
+pc to the last line number of the function, provided that the
+condition is false.
+D. MEMORY OPERATIONS
+Memory operations include assignments and arithmetic
+operations. Most of them have the same semantics
+between two languages except some syntactic sugars (e.g.,
+++, --, +=, -= and so on) that are not supported in the
+MCMAS language. In these cases, we first reduce them into
+equivalent primitive operators, and then translate them into
+the MCMAS language. For instance, x += y is reduced
+into x = x + y, and then it is translated to the MCMAS
+language.
+E. EXAMPLE
+Figure 4 and Figure 5 present a translation example for the
+userWallet smart contract; Figure 4 is the Solidity source
+file, and Figure 5 is the MCMAS file translated. Remark
+that a line beginning with - in the MCMAS file is a com-
+ment. As our translationmethod explained above, the contract
+userWallet is translated into an agent with the same
+name in the MCMAS file. To simulate sequential execution
+and function calls, we introduce two new variables, pc and
+returnAddr. Their maximum bounds are induced from
+the number of lines of the Solidity source file, and their
+minimum value (that is 0) represents the initial state which
+means that the corresponding contract is not activated yet.
+Then, a state variable, local variables, and global variables
+appear, which correspond to variables in the Solidity source
+file. TheActions section and theProtocol section are tomodel
+function calls and returns in the MCMAS language. That is,
+the Action section declares which functions this contract can
+invoke and which functions of the contract can return. The
+Protocol section specifies at which line the corresponding
+actions occur.
+Each function in Solidity (except the constructor) is
+translated into lines of the Evolution section in MCMAS.
+Note that statements in the constructor are encoded into the
+InitStates section. The lines corresponding to the fallback
+function just increase pc because the fallback function in this
+example does not include any statement. The if statement in
+the Solidity file is translated into two lines in the MCMAS
+file; i.e., when the guided condition (tx_origin=owner)
+is evaluated to true, pc is incremented by 1. Otherwise,
+pc is jumped to Line 17. The function call at Line 15 in
+the Solidity source file is translated into lines where we
+store the value of pc to returnAddr and restore pc with
+returnAddr + 1 once the action representing that the
+transfer function returns occurs. In addition, we sup-
+pose that there exists an auxiliary agent Environment
+that manages the turn for agents. Accordingly, each line of
+Evolution section of userWallet may be enable only if
+Environment.turn is T_userWallet.
+Our proposed approach supports a subset of Solidity
+syntax. That is, the current version cannot directly deal with
+various syntactic sugars in Solidity language, function type
+variables, dynamic creation of contracts, and inheritance
+8156 VOLUME 10, 2022
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 5. Translation example: MCMAS file translated from the userWallet smart contract.
+including polymorphism. In the case of syntactic sugars,
+we can translate them into MCMAS language by reducing
+them into primitives and then converting the primitives to
+MCMAS. Because, for remaining issues, the formal verifica-
+tion field is actively challenging them by various approach,
+we can adopt these state-of-the art techniques in our future
+work. In spite of the limitation, our current proposal is prac-
+tical enough to verify real world examples in Section V.
+V. CASE STUDY
+In this section, we present three case studies to show that our
+technique can be successfully applied to analyze real world
+smart contracts.
+A. DAO ATTACK
+The DAO [9] is a decentralized autonomous organization
+for investor-directed venture capital fund. It was instantiated
+on the Ethereum in April 2016, but users exploited a reen-
+trancy vulnerability in the DAO code in June 2016. Finally,
+they stole 3.6 million Ether valued at around $50M at the
+time. Figure 6 is a snippet of the DAO attack; Figure 6
+(a) is the DAO contract and Figure 6 (b) is the attacker con-
+tract. When an attacker calls the startAttack function,
+it deposits 10 wei to its account in the DAO fund and then
+attempts towithdraw its total balance (Lines 29–30). Once the
+attacker calls withdrawTotalBalance, DAOfund exe-
+cutes msg.sender.call.value(totalBalance) at
+Line 12 which refers to the fallback function of DAOattack.
+This function call indeed induces to transfer attacker’s total
+balance to its account. However, the attacker maliciously
+invokes withdrawTotalBalance again at Line 35 in
+the fallback function. This process causes fallback function
+calls repeatedly, and the attacker can steal all Ether from the
+DAO fund.
+We translate these two contracts into the MCMAS
+language as our method in Section IV, and add an
+Environment agent which executes the DAOfund agent
+and the DAOattack agent according to their turn. To exam-
+ine the possibility of the above hacking, we check the fol-
+lowing ATL formula that means whether the DAOattack
+can eventually withdraw more Ether than it possesses
+no matter what the other agents (i.e, DAOfund and
+Environment) do.
+〈〈DAOattack〉〉 F (DAOattack.totalAmount
+> DAOattack.currentBalance)
+VOLUME 10, 2022 8157
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 6. The DAO attack source codes in Solidity.
+The verification result is true, and MCMAS produces a
+witness that is the same with the above scenario. Because
+the witness is complicate, we illustrate it concisely in
+Figure 7. The witness presents a sequence of interaction
+between the DAOfund contract and the DAOattack con-
+tract, which begins with startAttack and ends in a
+state where DAOattack.totalAmount is greater than
+DAOattack.currentBalance.
+This reentrancy bug can be avoided with several ways,
+and one of them is to reset the balance of the message
+sender to 0 before calling the fallback function. We switch
+the assignment (Line 15) with the if statement block
+(Lines 12–14), and then check the same ATL property with
+MCMAS. Finally, the result is false; that is, our verification
+result demonstrates that the new version can successfully
+prevent the above attack.
+In the first experiment for the DAO attack, we have adopted
+a simplified version of attacker’s contract that is already
+known. However, suppose that we are developing a new
+contract now. At this point, we do not have any concrete
+attacker contract. Therefore, we cannot proceed verification
+with the above manner. Therefore, in the second experiment,
+we introduce the most permissive model of an attacker where
+the attack can invoke any function whenever it has a turn.
+Moreover, when the DAO fund contract calls the fallback
+function of the attacker, the attacker can invoke any func-
+tion of the DAO fund again without returning immediately.
+A state transition diagram of the most permissive model of an
+attacker is in Figure 8. At the initial state q0, the attacker can
+call depositBalance or withdrawTotalBalance.
+At the state q1, once the function the attacker invokes returns
+or the DAO fund calls attacker’s fallback function, it proceeds
+to q0 where the attacker can invoke depositBalance or
+withdrawTotalBalance again. We encode this model
+into the MCMAS language. Finally, our verification has
+proved that this most permissive model of an attacker also can
+withdrawmore amount of Ether than it has nomatter what the
+vulnerable version of the DAO contract does. In addition, our
+verification has established that the most permissive model of
+an attacker cannot withdrawmore amount than it possesses in
+8158 VOLUME 10, 2022
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 7. A witness scenario of the DAO attack (a simplified version).
+FIGURE 8. The most permissive model of an attacker for the DAO fund.
+the bug-fixed version. This experiment proposes that once a
+programmer has developed a smart contract, she can easily
+verify it with the most permissive model of an attacker.
+In general, a model checking problem is provided as inputs
+a model as well as properties. In our problem setting, if there
+is no source code for other necessary players that interact with
+our target contract, developers have to provide their models,
+for instance, the most permissive model of an attacker in
+this example. If the property or the model developers pro-
+vide is incorrect, model checking results may end in a false
+positive/negative. In this case, however, we can easily detect
+and correct it by checking various properties since some of
+the results for various properties are not coincident with our
+hypothesis.
+B. TX.ORIGIN ATTACK
+In Solidity, global variables are variables that always exist
+in the global namespace and are mainly used to provide
+information about the blockchain or their corresponding
+transaction. Since some global variables have very similar
+meaning, developers should take note of their exact meaning.
+For instance, if we have a chain of function calls, while
+msg.sender points to the caller of the last function in the
+call chain, the value of tx.orgin represents who originally
+initiates the full call chain.
+Thetx.origin attack [43] is induced frommisuse of the
+tx.orgin variable. Figure 4 in Section IV is a fragment of a
+contract containing the tx.orgin bug. Figure 9 is a snippet
+of an attacker contract exploiting the bug. The userWallet
+contract transfers the total amount of the balance to the caller
+if tx.origin is owner in Lines 13–15 of Figure 4. Now,
+an attacker deceives a wallet owner into invoking the fallback
+function of the attacker contract in Figure 9, which is
+enable by some phishing techniques. Once the owner calls
+the fallback function, attacker’s fallback function immedi-
+ately invokes the wallet’s withdrawTotalBalance in
+Line 11. When userWallet checks whether tx.origin
+equals to owner, tx.origin is owner since the owner
+has originally initiated the call chain. Finally, the attacker
+can swindle out of the total balance. This attack is prevented
+by replacing tx.origin with msg.sender. In the above
+scenario, since msg.sender points to the attacker who
+is not the owner of the wallet, the userWallet contract
+refuses to transfer the fund to the attacker.
+For verification of this case study, we translate two con-
+tracts into the MCMAS language, and add an environment
+agent to control their turn. We then check the following
+ATL formula meaning whether once the owner invokes the
+fallback function of the attacker, the attacker can withdraw
+the owner’s fund eventually no matter what the other agents
+perform.
+AG((userWallet.Action = call_fallback)
+→ 〈〈attacker〉〉 F (attacker.balance > 0))
+FIGURE 9. The attacker contract simplified.
+VOLUME 10, 2022 8159
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 10. The purchase contract simplified.
+The verification result is true which means that the attacker
+can steal the owner’s fund. On the other hand, in the ver-
+sion where we replace tx.originwith msg.sender, the
+attacker cannot dispossess since the userWallet contract
+detects that an unauthorized user demands withdrawal.
+C. SAFE REMOTE PURCHASE CONTRACT
+Our third case study is the Safe Remote Purchase contract
+from the Ethereum Solidity document [7]. In general, without
+trust between a seller and a buyer, online trading cannot take
+place. The Purchase contract in Figure 10 resolves this
+problem. First, a seller and a buyer deposit twice of the value
+of the item to the contract as escrow, and the money will be
+locked until the buyer confirms reception of the item. Once
+the buyer confirms reception, the buyer receives the value
+back (i.e., the half of the deposit) and the seller is returned
+three times of the value (i.e., the value of the item plus the
+deposit). The Purchase contract includes its constructor
+and four functions. When a seller wants to deal an item, the
+seller instantiates this contract with the deposit. After that,
+FIGURE 11. The most permissive models.
+if a buyer wants to purchase the item, the buyer invokes the
+function confirmPurchase with the deposit. When the
+8160 VOLUME 10, 2022
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+FIGURE 12. ATL properties for the purchase contract.
+FIGURE 13. A counter-example for property (2) (a simplified version).
+buyer receives the item from the seller, the buyer invokes
+the function confirmReceived that returns the half of
+buyer’s deposit to the buyer. Once confirmReceived is
+invoked, the seller can call the functionrefundSeller that
+returns three times of the value to the seller. In addition, the
+seller may cancel this sale by calling abort at any time prior
+to buyer’s invocation ofconfirmPurchase, which returns
+the deposit to the seller.
+In this case study, since any attack is not reported yet,
+we do not have a concrete attacker contract. Accordingly,
+we introduce the most permissive models of a seller and a
+buyer that are illustrated in Figure 11; Figure 11 (a) is themost
+permissive model of a seller and Figure 11 (b) is the most
+permissive model of a buyer. For verification, we translate
+the Purchase contract and the most permissive models of a
+seller and a buyer into the MCMAS language, and again add
+an environment agent to manage their turn. We then inspect
+ATL properties in Figure 12, where Properties (1), (2), and (3)
+are for the seller, and Properties (4) and (5) are for the buyer.
+As the results, (1) and (3) are true, but (2) is false, as we have
+expected. A simplified counter-example for the property (2)
+is illustrated in Figure 13. The result for Property (1) means
+that once an item is instantiated and the seller has a turn, the
+seller can abort the corresponding sale whatever a buyer does.
+The counter-example for Property (2) in Figure 13 establishes
+that once a buyer has confirmed purchase, the seller cannot
+cancel or complete the sale by herself without the buyer’s
+cooperation. Namely, after the buyer has confirmed purchase,
+although the seller can have a turn and invoke abort or
+refundSeller, the request cannot proceed since state
+is State.Locked. It is possible to proceed only after the
+buyer confirms reception. On the other hand, if the buyer has
+a turn, the buyer can be idle. Note that the buyer’s idling does
+not benefit himself because the buyer cannot get his deposit
+back until he sends an acknowledgement for reception. The
+result for (3) proves that once the buyer confirms receiving
+of the item, the seller can get back the deposit and the
+item’s value. For properties for the buyer, (4) and (5) are both
+true. The result for (4) means that if an item is instantiated
+and the buyer has a turn, the buyer can purchase the item
+and receive the half of the deposit no matter what the seller
+performs. Finally, the result for (5) demonstrates that once the
+item has been locked, the buyer can prevent the seller from
+withdrawing the whole deposit without shipping the item.
+VI. CONCLUSION
+In this paper, we have proposed a novel formal verification
+method that can analyze Ethereum smart contracts in the
+Solidity language. We first translate a given smart contract
+in the language of MCMAS that is a state-of-the-art ATL
+model checker for multi-agent systems. If an attacker contact
+is also given, we also reduce it into the MCMAS language.
+Otherwise, we introduce the most permissive model of an
+attacker and then encode it toMCMAS. In addition, we add an
+environment agent which manages their turn. Finally, we ver-
+ify this multi-agent system with ATL properties a developer
+wants to check. If MCMAS returns true, it establishes that
+the properties are satisfied. Otherwise, MCMAS provides a
+counter-example which is significantly helpful for a devel-
+oper to correct an error in the contract. Moreover, we have
+presented three case studies to show that our verification
+technique can be successfully applied to real world smart
+contracts.
+There are several issues that are interesting for future study.
+First, while we have proposed our translation rule in this
+paper, it is limited to a subset of the Solidity full syntax.
+Consequently, it is worth extending our translation rule in
+order to automatically apply our technique to any smart con-
+tract written in Solidity. Second, we want to study another
+way to adopt state-of-the-art verification techniques such as
+an abstraction-refinement method, SAT-based algorithms for
+finite-state systems, and SMT-based verification techniques
+for infinite-state systems. Finally, we plan ample experiment
+to validate our technique with various Ethereum smart con-
+tracts.
+REFERENCES
+[1] S. Nakamoto. (2008). BitCoin: A Peer-to-Peer Electronic Cash System.
+[Online]. Available: https://bitcoin.org/bitcoin.pdf
+[2] A. M. Antonopoulos,Mastering Bitcoin: Unlocking Digital Cryptocurren-
+cies, 1st ed. Newton, MA, USA: O’Reilly Media, 2015.
+[3] Z. Zheng, S. Xie, H.-N. Dai, X. Chen, and H. Wang, ‘‘Blockchain chal-
+lenges and opportunities: A survey,’’ Int. J. Grid Services, vol. 14, no. 4,
+pp. 352–375, 2018.
+[4] M. Swan, Blockchain: Blueprint for a New Economy, 1st ed. Newton, MA,
+USA: O’Reilly Media, 2014.
+[5] V. Buterin. (2014). Ethereum: A Next-Generation Smart Contract
+and Decentralized Application Platform. [Online]. Available:
+https://ethereum.org/en/whitepaper/
+VOLUME 10, 2022 8161
+W. Nam, H. Kil: Formal Verification of Blockchain Smart Contracts via ATL Model Checking
+[6] G. Wood, ‘‘Ethereum: A secure decentralised generalised transaction
+ledger,’’ Ethereum Project Yellow Paper, vol. 151, pp. 1–32, 2014.
+[7] (2021). Solidity V0.8.4 Documentation. [Online]. Available:
+https://docs.soliditylang.org/
+[8] (2021). Vyper V0.2.12 Documentation. [Online]. Available:
+https://vyper.readthedocs.io/
+[9] Q. Dupont, ‘‘Experiments in algorithmic governance: A history and
+ethnography of ‘The DAO,’ a failed decentralized autonomous organiza-
+tion,’’ in Bitcoin Beyond: Cryptocurrencies, Blockchains Global Gover-
+nance, M. Campbell-Verduyn, Ed. Evanston, IL, USA: Routledge, 2017,
+ch. 8, pp. 157–177.
+[10] G. Destefanis, M. Marchesi, M. Ortu, R. Tonelli, A. Bracciali, and
+R. Hierons, ‘‘Smart contracts vulnerabilities: A call for blockchain soft-
+ware engineering?’’ in Proc. Int. Workshop Blockchain Oriented Softw.
+Eng. (IWBOSE), Mar. 2018, pp. 19–25.
+[11] P. Praitheeshan, L. Pan, J. Yu, J. K. Liu, and R. Doss, ‘‘Security analysis
+methods on ethereum smart contract vulnerabilities: A survey,’’ CoRR,
+vol. abs/1908.08605, pp. 1–21, Aug. 2019.
+[12] J. Liu and Z. Liu, ‘‘A survey on security verification of blockchain smart
+contracts,’’ IEEE Access, vol. 7, pp. 77894–77904, 2019.
+[13] N. Ayewah, D. Hovemeyer, J. D. Morgenthaler, J. Penix, and W. Pugh,
+‘‘Using static analysis to find bugs,’’ IEEE Softw., vol. 25, no. 5, pp. 22–29,
+Sep. 2008.
+[14] D. W. Loveland, Automated Theorem Proving: A Logical Basis (Funda-
+mental Studies in Computer Science), vol. 6. North-Holland, Haarlem:
+Elsevier, 1978.
+[15] E. Clarke, O. Grumberg, and D. Peled,Model Checking. Cambridge, MA,
+USA: MIT Press, 2000.
+[16] E. M. Clarke, E. A. Emerson, and A. P. Sistla, ‘‘Automatic verification of
+finite-state concurrent systems using temporal logic specifications,’’ ACM
+Trans. Program. Lang. Syst., vol. 8, no. 2, pp. 244–263, Apr. 1986.
+[17] A. Pnueli, ‘‘The temporal semantics of concurrent programs,’’ Theor.
+Comput. Sci., vol. 13, pp. 45–60, 1981.
+[18] R. Alur, T. Henzinger, and O. Kupferman, ‘‘Alternating-time temporal
+logic,’’ J. ACM, vol. 49, no. 5, pp. 1–42, 2002.
+[19] A. Lomuscio, H. Qu, and F. Raimondi, ‘‘MCMAS: An open-source model
+checker for the verification of multi-agent systems,’’ Int. J. Softw. Tools
+Technol. Transfer, vol. 19, no. 1, pp. 9–30, 2017.
+[20] (2020). The Libra Blockchain. [Online]. Available: http://https://
+developers.diem.com/main/docs/the-diem-blockchain-paper
+[21] Bitwala White Paper V.1.2.0, Bitwala GmbH, Berlin, Germany, 2017.
+[22] G.W. Peters, E. Panayi, and A. Chapelle, ‘‘Trends in crypto-currencies and
+blockchain technologies: A monetary theory and regulation perspective,’’
+2015, arXiv:1508.04364.
+[23] L. Collet, P. Laurent, S. Ramos, P. Martino, T. Chollet, and
+B. Sauvage. (2019). Are Token Assets the Securities of Tomorrow?.
+[Online]. Available: https://www2.deloitte.com/lu/en/pages/technology/
+articles/are-token-assets-securities-tomorrow.html
+[24] M. Flore, How Blockchain-Based Technology is Disrupting Migrants’
+Remittances: A Preliminary Assessment, document EUR 29492 EN, Office
+Eur. Union, Luxembourg, U.K., 2018, doi: 10.2760/780817.
+[25] M. Andoni, V. Robu, D. Flynn, S. Abram, andD. Geach, ‘‘Blockchain tech-
+nology in the energy sector: A systematic review of challenges and oppor-
+tunities,’’ Renew. Sustain Energy Rev., vol. 100, pp. 143–174, Feb. 2019.
+[26] H. Min, ‘‘Blockchain technology for enhancing supply chain resilience,’’
+Bus. Horizons, vol. 62, no. 1, pp. 35–45, 2019.
+[27] S. Saberi, M. Kouhizadeh, J. Sarkis, and L. Shen, ‘‘Blockchain technology
+and its relationships to sustainable supply chain management,’’ Int. J. Prod.
+Res., vol. 57, no. 7, pp. 2117–2135, Apr. 2019.
+[28] A. E. Kosba, A. Miller, E. Shi, Z. Wen, and C. Papamanthou, ‘‘Hawk:
+The blockchain model of cryptography and privacy-preserving smart con-
+tracts,’’ in Proc. IEEE Symp. Secur. Privacy, Feb. 2016, pp. 839–858.
+[29] S.Wang, L. Ouyang, Y. Yuan, X. Ni, X. Han, and F.-Y.Wang, ‘‘Blockchain-
+enabled smart contracts: Architecture, applications, and future trends,’’
+IEEE Trans. Syst., Man, Cybern. Syst., vol. 49, no. 11, pp. 2266–2277,
+Nov. 2019.
+[30] J. Feist, G. Grieco, and A. Groce, ‘‘Slither: A static analysis framework for
+smart contracts,’’ in Proc. 2nd Int. Workshop Emerg. Trends Softw. Eng.
+Blockchain, 2019, pp. 8–15.
+[31] S. So,M. Lee, J. Park, H. Lee, and H. Oh, ‘‘VERISMART: A highly precise
+safety verifier for Ethereum smart contracts,’’ in Proc. IEEE Symp. Secur.
+Privacy, Feb. 2020, pp. 1678–1694.
+[32] P. Tsankov, A. M. Dan, D. Drachsler-Cohen, A. Gervais, F. Bünzli, and
+M. T. Vechev, ‘‘Securify: Practical security analysis of smart contracts,’’ in
+Proc. Conf. Comput. Commun. Secur., Oct. 2018, pp. 67–82.
+[33] R. O’Connor, ‘‘Simplicity: A new language for blockchains,’’ in Proc.
+Workshop Program. Lang. Anal. Secur., Oct. 2017, pp. 107–120.
+[34] S. Amani, M. Bégel, M. Bortin, and M. Staples, ‘‘Towards verifying
+ethereum smart contract bytecode in Isabelle/HOL,’’ in Proc. 7th Int. Conf.
+Certified Programs Proofs, 2018, pp. 66–77.
+[35] D. Annenkov, J. B. Nielsen, and B. Spitters, ‘‘ConCert: A smart contract
+certification framework in Coq,’’ in Proc. 9th Int. Conf. Certified Programs
+Proofs, 2020, pp. 215–228.
+[36] T. Sun and W. Yu, ‘‘A formal verification framework for security issues of
+blockchain smart contracts,’’ Electronics, vol. 9, no. 2, p. 255, 2020.
+[37] Z. Nehai, P. Piriou, and F. F. Daumas, ‘‘Model-checking of smart con-
+tracts,’’ in Proc. Int. Conf. Internet Things, Oct. 2018, pp. 980–987.
+[38] A. Mavridou, A. Laszka, E. Stachtiari, and A. Dubey, ‘‘VeriSolid: Correct-
+by-design smart contracts for Ethereum,’’ inProc. 23rd Int. Conf. Financial
+Cryptogr. Data Secur., 2019, pp. 446–465.
+[39] T. Osterland and T. Rose, ‘‘Model checking smart contracts for Ethereum,’’
+Pervas. Mobile Comput., vol. 63, Oct. 2020, Art. no. 101129.
+[40] A. Cimatti, E. Clarke, E. Giunchiglia, F. Giunchiglia, M. Pistore,
+M. Roveri, R. Sebastiani, and A. Tacchella, ‘‘NuSMV version 2: An
+opensource tool for symbolic model checking,’’ in Proc. 14th Int. Conf.
+Comput.-Aided Verification, 2002, pp. 359–364.
+[41] G. J. Holzmann, ‘‘The model checker SPIN,’’ IEEE Trans. Softw. Eng.,
+vol. 23, no. 5, pp. 279–295, May 1997.
+[42] P. Madhusudan, W. Nam, and R. Alur, ‘‘Symbolic computational tech-
+niques for solving games,’’ Electron. Notes Theor. Comput. Sci., vol. 89,
+no. 4, pp. 578–592, 2003.
+[43] S. Kalra, S. Goel, M. Dhawan, and S. Sharma, ‘‘ZEUS: Analyzing safety of
+smart contracts,’’ inProc. Netw. Distrib. Syst. Secur. Symp., 2018, pp. 1–12.
+WONHONG NAM received the B.S. and
+M.Sc. degrees from Korea University, Seoul,
+South Korea, in 1998 and 2001, respectively,
+and the Ph.D. degree from the University of
+Pennsylvania, Philadelphia, PA, USA, in 2007.
+From 2007 to 2009, he was a Postdoctoral
+Researcher with the College of Information Sci-
+ences and Technology, Pennsylvania State Univer-
+sity, University Park, PA, USA. He is currently
+a Professor with the Department of Computer
+Science and Engineering, Konkuk University, Seoul. His research interests
+include formal methods, formal verification, model checking, automated
+planning, and web services composition.
+HYUNYOUNG KIL received the B.S. and
+M.Sc. degrees from Korea University, Seoul,
+South Korea, in 1998 and 2001, respectively, the
+M.S.E. degree from the University of Pennsylva-
+nia, Philadelphia, PA, USA, in 2003, and the Ph.D.
+degree from The Pennsylvania State University,
+State College, PA, USA, in 2010.
+She is currently an Assistant Professor with
+the Department of Software, Korea Aerospace
+University, Goyang, South Korea. Her research
+interests include computational theory, automated planning, web services
+composition, SOA, and web sciences.
+8162 VOLUME 10, 2022
+http://dx.doi.org/10.2760/780817

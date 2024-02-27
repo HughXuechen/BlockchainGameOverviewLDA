@@ -1,0 +1,2304 @@
+Towards Quantum One-Time Memories from Stateless Hardware
+Towards Quantum One-Time Memories from Stateless
+Hardware
+Anne Broadbent1, Sevag Gharibian2, and Hong-Sheng Zhou3
+1Department of Mathematics and Statistics, University of Ottawa, Ontario, Canada
+2Department of Computer Science, Paderborn University, Germany, and Virginia Commonwealth University, USA
+3Department of Computer Science, Virginia Commonwealth University, Virginia, USA
+A central tenet of theoretical cryptography is the study of the minimal assumptions re-
+quired to implement a given cryptographic primitive. One such primitive is the one-time
+memory (OTM), introduced by Goldwasser, Kalai, and Rothblum [CRYPTO 2008], which
+is a classical functionality modeled after a non-interactive 1-out-of-2 oblivious transfer, and
+which is complete for one-time classical and quantum programs. It is known that secure
+OTMs do not exist in the standard model in both the classical and quantum settings. Here,
+we propose a scheme for using quantum information, together with the assumption of state-
+less (i.e., reusable) hardware tokens, to build statistically secure OTMs. Via the semidefinite
+programming-based quantum games framework of Gutoski and Watrous [STOC 2007], we
+prove security for a malicious receiver making at most 0.114n adaptive queries to the to-
+ken (for n the key size), in the quantum universal composability framework, but leave open
+the question of security against a polynomial amount of queries. Compared to alternative
+schemes derived from the literature on quantum money, our scheme is technologically simple
+since it is of the “prepare-and-measure” type. We also give two impossibility results showing
+certain assumptions in our scheme cannot be relaxed.
+1 Introduction
+Theoretical cryptography centers around building cryptographic primitives secure against adversarial
+attacks. In order to allow a broader set of such primitives to be implemented, one often considers
+restricting the power of the adversary. For example, one can limit the computing power of adversaries to
+be polynomial bounded [Yao82; BM82], restrict the storage of adversaries to be bounded or noisy [Mau92;
+CM97; Dam+05], or make trusted setups available to honest players [Kil88; BFM88; Can01; Can+02;
+IPS08; PR08; LPV09; MPR09; MPR10; MR11; KMQ11; Kra+14], to name a few. One well-known
+trusted setup is tamper-proof hardware [Kat07; GKR08], which is assumed to provide a specific input-
+output functionality, and which can only be accessed in a “black box” fashion. The hardware can
+maintain a state (i.e., is stateful) and possibly carry out complex functionality, but presumably may
+be difficult or expensive to implement or manufacture. This leads to an interesting research direction:
+Building cryptography primitives using the simplest (and hence easiest and cheapest to manufacture)
+hardware.
+In this respect, two distinct simplified notions of hardware have captured considerable interest. The
+first is the notion of a one-time memory (OTM) [GKR08], which is arguably the simplest possible notion
+of stateful hardware. An OTM, modeled after a non-interactive 1-out-of-2 oblivious transfer, behaves
+as follows: first, a player (called the sender) embeds two values s0 and s1 into the OTM, and then
+gives the OTM to another player (called the receiver). The receiver can now read his choice of precisely
+one of s0 or s1; after this “use” of the OTM, however, the unread bit is lost forever. Interestingly,
+OTMs are complete for implementing one-time use programs (OTPs): given access to OTMs, one can
+Anne Broadbent: abroadbe@uottawa.ca
+Sevag Gharibian: sevag.gharibian@upb.de
+Hong-Sheng Zhou: hszhou@vcu.edu
+Accepted in Quantum 2021-02-09, click title to verify. Published under CC-BY 4.0. 1
+ar
+X
+iv
+:1
+81
+0.
+05
+22
+6v
+3 
+ [
+qu
+an
+t-
+ph
+] 
+ 1
+ A
+pr
+ 2
+02
+1
+https://quantum-journal.org/?s=Towards%20Quantum%20One-Time%20Memories%20from%20Stateless%20Hardware&reason=title-click
+https://quantum-journal.org/?s=Towards%20Quantum%20One-Time%20Memories%20from%20Stateless%20Hardware&reason=title-click
+mailto:abroadbe@uottawa.ca
+mailto:sevag.gharibian@upb.de
+mailto:hszhou@vcu.edu
+implement statistically secure OTPs for any efficiently computable program in the universal composabil-
+ity (UC) framework [Goy+10]. (OTPs, in turn, have applications in software protection and one-time
+proofs [GKR08].) In the quantum UC model, OTMs enable quantum one-time programs [BGS13]. (This
+situation is analogous to the case of oblivious transfer being complete for two-party secure function eval-
+uation [Kil88; IPS08].) Unfortunately, OTMs are inherently stateful, and thus represent a very strong
+cryptographic assumption — any physical implementation of such a device must somehow maintain
+internal knowledge between activations, i.e., it must completely “self-destruct” after a single use.
+This brings us to a second important simplified notion of hardware known as a stateless token [CGS08],
+which keeps no record of previous interactions. On the positive side, such hardware is presumably easier
+to implement. On the negative side, an adversary can run an experiment with stateless hardware as many
+times as desired, and each time the hardware is essentially “reset”. (Despite this, stateless hardware has
+been useful in achieving computationally secure multi-party computation [CGS08; Goy+10; Cho+14],
+and statistically secure commitments [DS13].) It thus seems impossible for stateless tokens to be helpful
+in implementing any sort of “self-destruct” mechanism. Indeed, classically stateful tokens are trivially
+more powerful than stateless ones, as observed in, e.g., [Goy+10]. This raises the question:
+Can quantum information, together with a classical stateless token, be used to simulate “self
+destruction” of a hardware token?
+In particular, a natural question along these lines is whether quantum information can help implement
+an OTM. Unfortunately, it is known that quantum information alone cannot implement an OTM (or,
+more generally, any one-time program) [BGS13]; see also Section 4 below. We thus ask the question:
+What are the minimal cryptographic assumptions required in a quantum world to implement an OTM?
+Contributions and summary of techniques. We propose what is, to our knowledge, the first
+prepare-and-measure quantum protocol that constructs OTMs from stateless hardware tokens. For this
+protocol, we are able to rigorously prove information theoretic security against an adversary making
+a linear (in n, the security parameter) number of adaptive queries to the token. While we conjecture
+that security holds also for polynomially many queries, note that already in this setting of linearly
+many adaptive queries, our protocol achieves something impossible classically (i.e., classically, obtaining
+security against a linear number of queries is impossible). We also show stand-alone security against a
+malicious sender.
+Historical Note. We proposed the concept that quantum information could provide a “stateless to
+stateful” transformation in a preliminary version of this work [BGZ15]; however, that work claimed
+security against a polynomial number of token queries, obtained via a reduction from the interactive to the
+non-interactive setting. We thank an anonymous referee for catching a subtle, but important bug which
+appears to rule out the proof approach of [BGZ15]. The current paper hence employs a different proof
+approach, which models interaction with the token as a “quantum game” via semidefinite programming
+(further details below). Since our original paper was posted, recent work [Chu+19] has shown an alternate
+quantum “stateful to stateless” transformation via quantum money constructions [BDS18]. Specifically,
+in [Chu+19], security against a polynomial number of queries is achieved, albeit with respect to a new
+definition of “OTMs relative to an oracle” (while the security results of the present paper are with
+respect to the well-established simulation-based definition of [Goy+10; Kat07]). Furthermore, [Chu+19]
+directly applies known quantum money constructions, which require difficult-to-prepare highly entangled
+states. Our focus here, in contrast, is to take a “first-principles” approach and build a technologically
+simple-to-implement scheme which requires no entanglement, but rather the preparation of just one of
+four single qubit states, |0〉, |1〉, |+〉, |−〉. Indeed, the two works are arguably complementary in that the
+former focuses primarily on applications of “stateful” single-use tokens, while our focus is on the most
+technologically simple way to implement such “stateful” tokens.
+Construction. Our construction is inspired by Wiesner’s conjugate coding [Wie83]: the quantum
+portion of the protocols consists in n quantum states chosen uniformly at random from {|0〉, |1〉, |+〉, |−〉}
+(note this encoding is independent of the classical bits of the OTM functionality). We then couple this
+n-qubit quantum state, |ψ〉 (the quantum key) with a classical stateless hardware token, which takes as
+inputs a choice bit b, together with an n-bit string y. If b = 0, the hardware token verifies that the bits
+of y that correspond to rectilinear (|0〉 or |1〉, i.e., Z basis) encoded qubits of |ψ〉 are consistent with
+the measurement of |ψ〉 in the computational basis, in which case the bit s0 is returned. If b = 1, the
+2
+hardware token verifies that the bits of y that correspond to diagonal (|+〉 or |−〉, i.e., X basis) encoded
+qubits of |ψ〉 are consistent with the measurement of |ψ〉 in the diagonal basis, in which case the bit s1
+is returned.1 The honest use of the OTM is thus intuitive: for choice bit b = 0, the user measures each
+qubit of the quantum key in the rectilinear basis to obtain an n-bit string y, and inputs (b, y) into the
+hardware token. If b = 1, the same process is applied, but with measurements in the diagonal basis.
+Assumption. Crucially, we assume the hardware token accepts classical input only (alternatively and
+equivalently, the token immediately measures its quantum input in the standard basis), i.e., it cannot
+be queried in superposition. Although this may seem a strong assumption, in Section 4.1 we show that
+any token which can be queried in superposition in a reversible way, cannot be used to construct a
+secure OTM (with respect to our setting in which the adversary is allowed to apply arbitrary quantum
+operations). Similar classical-input hardware has previously been considered in, e.g., [Unr13; BGS13].
+Security and intuition. Stand-alone security against a malicious sender is relatively straightforward
+to establish, since the protocol consists in a single message from the sender to the receiver, and since
+stand-alone security only requires simulation of the local view of the adversary.
+The intuition underlying security against a malicious receiver is clear: in order for a receiver to extract
+a bit sb as encoded in the OTM, she must perform a complete measurement of the qubits of |ψ〉 in order
+to obtain a classical key for sb (since, otherwise, she would likely fail the test as imposed by the hardware
+token). But such a measurement would invalidate the receiver’s chance of extracting the bit s1−b! This is
+exactly the “self-destruct”-like property we require in order to implement an OTM. This intuitive notion
+of security was present in Wiesner’s proposal for quantum money [Wie83], and is often given a physical
+explanation in terms of the no-cloning theorem [WZ82] or Heisenberg uncertainty relation [Hei27].
+Formally, we work in the statistical (i.e., information-theoretic) setting of the quantum Universal
+Composability (UC) framework [Unr10], which allows us to make strong security statements that address
+the composability of our protocol within others. As a proof technique, we describe a simulator, such that
+for any “quantum environment” wishing to interact with the OTM, the environment statistically cannot
+tell whether it is interacting with the ideal OTM functionality or the real OTM instance provided by
+our scheme. The security of this simulator requires a statement of the following form: Given access to a
+(randomly chosen) “quantum key” |ψk〉 and corresponding stateless token Vk, it is highly unlikely for an
+adversary to successfully extract keys for both the secret bits s0 and s1 held by Vk. We are able to show
+this statement for any adversary which makes a linear number of queries, by which we mean an adversary
+making m queries succeeds with probability at most O(22m−0.228n) (for n the number of quantum key
+bits in |ψk〉). In other words, if the adversary makes at most m = cn queries with c < 0.114, then its
+probability of cheating successfully is exponentially small in n. We conjecture, however, that a similar
+statement holds for any m ∈ poly(n), i.e., that the protocol is secure against polynomially many queries.
+To show security against linearly many queries, we exploit the semidefinite programming-based quan-
+tum games framework of Gutoski and Watrous (GW) [GW07] to model interaction with the token.
+Intuitively, GW is useful for our setting, since it is general enough to model multiple rounds of adaptive
+queries to the token, even when the receiver holds quantum “side information” in the form of |ψ〉. We
+describe this technique in Sections 2.1 and 3.4, and provide full details in Appendix C. Summarizing, we
+show the following.
+Main Theorem (informal). There exists a protocol Π, which together with a classical stateless token
+and the ability to randomly prepare single qubits in one of four pure states, implements the OTM
+functionality with statistical security in the UC framework against a corrupted receiver making at most cn
+queries for any c < 0.114.
+As stated above, we conjecture that our protocol is actually secure against polynomially many adaptive
+queries. However, we are unable to show this claim using our present proof techniques, and hence leave
+this question open. Related to this, we make the following comments: (1) As far as we are aware, the
+Main Theorem above is the only known formal proof of any type of security for conjugate coding in
+the interactive setting with Ω(1) queries. Moreover, as stated earlier, classical security against Ω(1)
+queries is trivially impossible. (2) Our proof introduces the GW semidefinite programming framework
+from quantum interactive proofs to the study of conjugate coding-based schemes. This framework allows
+1We note that a simple modification using a classical one-time pad could be used to make both the quantum state and
+hardware token independent of s0 and s1: the token would output one of two uniformly random bits r0 and r1, which could
+each be used to decrypt a single bit, s0 or s1.
+3
+handling multiple challenges in a unified fashion: arbitrary quantum operations by the user, classical
+queries to the token, and the highly non-trivial assumption of quantum side information for the user (the
+“quantum key” state sent to the user.)
+Towards security against polynomially many queries. Regarding the prospects of proving security against
+polynomially many adaptive queries, we generally believe it requires a significant new insight into how to
+design a “good” feasible solution to the primal semidefinite program (SDP) obtained via GW. However,
+in addition to our proof for linear security (Theorem C.5), in Appendix D we attempt to give evidence
+towards our conjecture for polynomial security. Namely, Appendix D.1 first simplifies the SDPs obtained
+from GW, and derives the corresponding dual SDPs. We remark these derivations apply for any instan-
+tiation of the GW framework, i.e. they are not specific to our setting, and hence may prove useful
+elsewhere. In Appendix D.2, we then give a feasible solution Y (Equation (128)) to the dual SDP. While
+Y is simple to state, it is somewhat involved to analyze. A heuristic analysis suggests Y ’s dual objective
+function value has roughly the behavior needed to show security, i.e. the value scales as m/
+√
+2n, for m
+queries and n key bits. If Y were to be the optimal solution to the dual SDP, this would strongly suggest
+the optimal cheating probability is essentially m/
+√
+2n. However, we explicitly show Y is not optimal,
+and so m/
+√
+2n is only a lower bound on the optimal cheating probability2. Nevertheless, we conjecture
+that while Y is not optimal, it is approximately optimal (see Conjecture D.2 for a precise statement);
+this would imply the desired polynomial security claim. Unfortunately, the only techniques we are aware
+of to show such approximate optimality involve deriving a better primal SDP solution, which appears
+challenging.
+Further Related work. Our work contributes to the growing list of functionalities achievable with
+quantum information, yet unachievable classically. This includes: unconditionally secure key expansion
+[BB84], physically uncloneable money [Wie83; MVW13; Pas+12], a reduction from oblivious transfer
+to bit commitment [Ben+92; Dam+09] and to other primitives such as “cut-and choose” functional-
+ity [Feh+13], and revocable time-release quantum encryption [Unr14]. Importantly, these protocols all
+make use of the technique of conjugate coding [Wie83], which is also an important technique used in
+protocols for OT in the bounded quantum storage and noisy quantum storage models [Dam+05; WST08]
+(see [BS16] for a survey).
+A number of proof techniques have been developed in the context of conjugate coding, including
+entropic uncertainty relations [WW10]. In the context of QKD, another technique is the use of de
+Finetti reductions [Ren08] (which exploit the symmetry of the scheme in order to simplify the analysis).
+Recently, semidefinite programming (SDP) approaches have been applied to analyze security of conjugate
+coding [MVW13] for quantum money, in the setting of one round of interaction with a “stateful” bank.
+SDPs are also the technical tool we adopt for our proof (Section 3.4 and Appendix C), though here
+we require the more advanced quantum games SDP framework of Gutoski and Watrous [GW07] to
+deal with multiple adaptive interactions with stateless tokens. Reference [Pas+12] has also made use of
+Gavinsky’s [Gav12] quantum retrieval games framework.
+Continuing with proof techniques, somewhat similar to [Pas+12], Aaronson and Christiano [AC12]
+have studied quantum money schemes in which one interacts with a verifier. They introduce an “inner
+product adversary method” to lower bound the number of queries required to break their scheme.
+We remark that [Pas+12] and [MVW13] have studied schemes based on conjugate coding similar
+to ours, but in the context of quantum money. In contrast to our setting, the schemes of [Pas+12]
+and [MVW13] (for example) involve dynamically chosen random challenges from a verifier to the holder
+of a “quantum banknote”, whereas in our work here the “challenges” are fixed (i.e., measure all qubits
+in the Z or X basis to obtain secret bit s0 or s1, respectively), and the verifier is replaced by a stateless
+token. Thus, [MVW13], for example, may be viewed as using a “stateful” verifier, whereas our focus
+here is on a “stateless” verifier (i.e., a token).
+Also, we note that prior work has achieved oblivious transfer using quantum information, together
+with some assumption (e.g., bit commitment [Ben+92] or bounded quantum storage [Dam+05]). These
+protocols typically use an interaction phase similar to the “commit-and-open” protocol of [Ben+92];
+because we are working in the non-interactive setting, these techniques appear to be inapplicable.
+2Indeed, an attack in the Breidbart basis breaks our scheme with probability 2−0.228n, as observed by David Mestel; see
+Section D.2.
+4
+Finally, Liu [Liu14a; Liu14b; Liu15] has given stand-alone secure OTMs using quantum information
+in the isolated-qubit model. Liu’s approach is nice in that it avoids the use of trusted setups. In return,
+however, Liu must use the isolated-qubit model, which restricts the adversary to perform only single-
+qubit operations (no entangling gates are permitted); this restriction is, in some sense, necessary if one
+wants to avoid trusted setups, as a secure OTM in the plain quantum model cannot exist (see Section 4).
+In contrast, in the current work we allow unbounded and unrestricted quantum adversaries, but as a
+result require a trusted setup. In addition, we remark the security notion of OTMs of [Liu14a; Liu14b;
+Liu15] is weaker than the simulation-based notion studied in this paper, and it remains an interesting
+open question whether the type of OTM in [Liu14a; Liu14b; Liu15] is secure under composition (in the
+current work, the UC framework gives us security under composition for free).
+Significance. Our results show a strong separation between the classical and quantum settings, since
+classically, stateless tokens cannot be used to securely implement OTMs. To the best of our knowledge,
+our work is the first to combine conjugate coding with stateless hardware tokens. Moreover, while our
+protocol shares similarities with prior work in the setting of quantum money, building OTMs appears to
+be a new focus here 3.
+Our protocol has a simple implementation, fitting into the single-qubit prepare-and-measure paradigm,
+which is widely used as the “benchmark” for a “physically feasible” quantum protocol (in this model, one
+needs only the ability to prepares single-qubit states |0〉, |1〉, |+〉, |−〉, and to perform single-qubit projec-
+tive measurements. In particular, no entangled states are required, and in principle no quantum memory
+is required, since qubits can be measured one-by-one as they arrive). In addition, from a theoretical
+cryptographic perspective, our protocol is attractive in that its implementation requires an assumption
+of a stateless hardware token, which is conceivably easier and cheaper to manufacture (e.g. analogous to
+an RFID tag) than a stateful token.
+In terms of security guarantees, we allow arbitrary operations on behalf of a malicious quantum
+receiver in our protocol (i.e., all operations allowed by quantum mechanics), with the adversary restricted
+in that the stateless token is assumed only usable as a black box. The security we obtain is statistical,
+with the only computational assumption being on the number of queries made to the token (recall we
+show security for a linear number of queries, and conjecture security for polynomially many queries).
+Finally, our security analysis is in the quantum UC framework against a corrupted receiver; this means
+our protocol can be easily composed with many others; for example, combining our results with [BGS13]’s
+protocol immediately yields UC-secure quantum OTPs against a dishonest receiver.
+We close by remarking that our scheme is “tight” with respect to two impossibility results, both of
+which assume the adversary has black-box access to both the token and its inverse operation4. First,
+the assumption that the token be queried only in the computational basis cannot be relaxed: Section 4.1
+shows that if the token can be queried in superposition, then an adversary in our setting can easily
+break any OTM scheme. Second, our scheme has the property that corresponding to each secret bit si
+held by the token, there are exponentially many valid keys one can input to the token to extract si. In
+Section 4.2, we show that for any “measure-and-access” OTM (i.e., an OTM in which one measures a
+given quantum key and uses the classical measurement result to access a token to extract data, of which
+our protocol is an example5), a polynomial number of keys implies the ability to break the scheme with
+inverse polynomial probability (more generally, ∆ keys allows probability at least 1/∆2 of breaking the
+scheme).
+Open Questions. While our work shows the fundamental advantage that quantum information yields
+in a stateful to stateless reduction, it does leave a number of open questions:
+1. Security against polynomially many queries. Can our security proof be strengthened to show
+information theoretic security against a polynomial number of queries to the token? We conjecture
+3We remark, however, that a reminiscent concept of single usage of quantum “tickets” in the context of quantum money
+is very briefly mentioned in Appendix S.4.1 of [Pas+12].
+4This is common in the oracle model of quantum computation, where a function f : {0, 1}n 7→ {0, 1} is implemented via
+the (self-inverse) unitary mapping Uf |x〉|y〉 = |x〉|y ⊕ f(x)〉.
+5The term “measure-and-access” here is not to be confused with “prepare-and-measure”. We define the former in
+Section 4.2 to mean a protocol in which one measures a given quantum resource state to extract a classical key, which is
+then used for a desired purpose. “Prepare and measure”, in contrast, is referring to the fact that our scheme is easy to
+implement; the preparer of the token just needs to prepare single-qubit states, and an honest user simply measures them.
+5
+this to be the case, but finding a formal proof has been elusive. (See discussion under “Towards
+security against polynomially many adaptive queries” above for details.)
+2. Composable security against a malicious sender. While we show composable security against a
+malicious receiver, our protocol can achieve standalone security against a malicious sender. Could
+an adaptation of our protocol ensure composable security against a malicious sender as well?6
+3. Non-reversible token. Our impossibility result for quantum one-time memories with quantum
+queries (Section 4) assumes the adversary has access to reversible tokens; can a similar impossibility
+result be shown for non-reversible tokens? In Section 4, we briefly discuss why it may be difficult
+to extend the techniques of our impossibility results straightforwardly when the adversary does not
+have access to the inverse of the token.
+4. Imperfect devices. While our prepare-and-measure scheme is technologically simple, it is still virtu-
+ally unrealizable with current technology, due to the requirement of perfect quantum measurements.
+We leave open the question of tolerance to a small amount of noise.
+Organization. We begin in Section 2 with preliminaries, including the ideal functionalities for an OTM
+and stateless token, background on quantum channels, semidefinite programming, and the Gutoski-
+Watrous framework for quantum games. In Section 3, we give our construction for an OTM based on a
+stateless hardware token; the proof ideas for security are also provided. In Section 4, we discuss “tightness”
+of our construction by showing two impossibility results for “relaxations” of our scheme. In the Appendix,
+we include the description of classical UC and quantum UC (Appendix A); Appendix B establishes
+notation required in the definition of stand-alone security against a malicious sender. Appendix C gives
+our formal security proof against a linear number of queries to the token; these results are used to finish
+the security proof in Section 3. Appendix D gives a simplification of the GW SDP, derives its dual,
+and gives a dual feasible solution which we conjecture to be approximately optimal (formally stated in
+Conjecture D.2). Finally, the security proof for a lemma in Section 4 can be found in Appendix E.
+2 Preliminaries
+Notation. Two binary distributions X and Y are indistinguishable, denoted X ≈ Y, if
+|Pr(Xn = 1)− Pr(Yn = 1)| ≤ negl(n). (1)
+We define single-qubit |0〉+ = |0〉 and |1〉+ = |1〉, so that {|0〉+, |1〉+} form the rectilinear basis. We
+define |0〉× = 1√
+2 (|0〉 + |1〉) and |1〉× = 1√
+2 (|0〉 − |1〉), so that {|0〉×, |1〉×} form the diagonal basis. For
+strings x = x1, x2, . . . xn ∈ {0, 1}n and θ = θ1, θ2, . . . , θn ∈ {+,×}n, define |x〉θ =
+⊗n
+i=1 |xi〉θi
+. The
+Hadamard gate in quantum information is H = (1 1; 1 − 1)/
+√
+2. It maps H|0〉+ = |0〉×, H|1〉+ = |1〉×,
+H|0〉× = |0〉+, and H|1〉× = |1〉+. For X a finite dimensional complex Hilbert space, L(X ), Herm(X ),
+Pos(X ), and D(X ) denote the sets of linear, Hermitian, positive semidefinite, and density operators
+acting on X , respectively. The notation A � B means A−B is positive semidefinite.
+Quantum universal composition (UC) framework. We consider simulation-based security in this
+paper. In particular, we prove the security of our construction against a malicious receiver in the quantum
+universal composition (UC) framework [Unr10]. Please see Appendix A for a brief description of the
+classical UC [Can01] and the quantum UC [Unr10]. In the next two paragraphs, we introduce two
+relevant ideal functionalities of one-time memory and of stateless hardware token.
+One-time memory (OTM). The one-time memory (OTM) functionality FOTM involves two parties, the
+sender and the receiver, and consists of two phases, “Create” and “Execute”. Please see Functionality 1
+below for details; for the sake of simplicity, we have omitted the session/party identifiers as they should
+be implicitly clear from the context. We sometimes refer to this functionality FOTM as an OTM token.
+Stateless hardware. The original work of Katz [Kat07] introduces the ideal functionality Fwrap to
+model stateful tokens in the UC-framework. In the ideal model, a party that wants to create a token,
+6We note that this would require a different protocol, since in our current construction, a cheating sender could program
+the token to abort based on the user’s input.
+6
+Functionality 1 Ideal functionality FOTM.
+1. Create: Upon input (s0, s1) from the sender, with s0, s1 ∈ {0, 1}, send create to the receiver and
+store (s0, s1).
+2. Execute: Upon input b ∈ {0, 1} from the receiver, send sb to receiver. Delete any trace of this
+instance.
+sends a Turing machine to Fwrap. Fwrap will then run the machine (keeping the state), when the designated
+party will ask for it. The same functionality can be adapted to model stateless tokens. It is sufficient
+that the functionality does not keep the state between two executions. A simplified version of the Fwrap
+functionality as shown in [CGS08] (that is very similar to the Fwrap of [Kat07]) is described below. Note
+that, again for the sake of simplicity, we have omitted the session/party identifiers as they should be
+implicitly clear from the context.
+Functionality 2 Ideal functionality Fwrap.
+The functionality is parameterized by a polynomial p(·), and an implicit security parameter n.
+1. Create: Upon input (create,M) from the sender, where M is a Turing machine, send create to the
+receiver and store M .
+2. Execute: Upon input (run,msg) from the receiver, execute M(msg) for at most p(n) steps, and
+let out be the response. Let out := ⊥ if M does not halt in p(n) steps. Send out to the receiver.
+Although the environment and adversary are unbounded, we specify that stateless hardware can be
+queried only a polynomial number of times. This is necessary; otherwise the hardware token model
+is vacuous (with unbounded queries, the entire input-output behavior of stateless hardware can be
+extracted).
+Quantum channels. We now review quantum channels. A basic background in quantum information
+is assumed, see e.g. [NC00] for a standard reference. A linear map Φ : L(X ) 7→ L(Y) is a quantum
+channel if Φ is trace-preserving and completely positive (TPCP). Such maps take density operators to
+density operators. A useful representation of linear maps (or “superoperators”) Φ : L(X ) 7→ L(Y) is
+the Choi-Jamio lkowski representation, J(Φ) ∈ L(Y ⊗ X ). The latter is defined (with respect to some
+choice of orthonormal basis {|i〉} for X ) as J(Φ) =
+∑
+i,j Φ(|i〉〈j|)⊗|i〉〈j|. The following properties of J(Φ)
+hold [Cho75; Jam72]: (1) Φ is completely positive if and only if J(Φ) � 0, and (2) Φ is trace-preserving
+if and only if TrY(J(Φ)) = IX . In a nutshell, the Gutoski-Watrous (GW) framework generalizes this
+definition to interacting strategies [GW07].
+Semidefinite programs. We give a brief overview of semidefinite programs (SDPs) from the perspec-
+tive of quantum information, as done e.g., in the notes of Watrous [Wat11] or [MVW13]. For further
+details, a standard text on convex optimization is Boyd and Vandenberghe [BV04].
+Given any 3-tuple (A,B,Φ) for operators A ∈ Herm(X ) and B ∈ Herm(Y), and Hermiticity-preseving
+linear map Φ : L(X ) 7→ L(Y), one can state a primal and dual semidefinite program:
+Primal problem (P)
+sup Tr(AX)
+s.t. Φ(X) = B,
+X ∈ Pos(X ),
+Dual problem (D)
+inf Tr(BY )
+s.t. Φ∗(Y ) � A
+Y ∈ Herm(Y),
+where Φ∗ denotes the adjoint of Φ, which is the unique map satisfying Tr(A†Φ(B)) = Tr((Φ∗(A))†B)
+for all A ∈ L(Y) and B ∈ L(X ). Not all SDPs have feasible solutions (i.e. a solution satisfying all
+constraints); in this case, we label the optimal values as −∞ for P and ∞ for D, respectively. Note also
+that the SDP we derive in Equation (66) will for simplicity not be written in precisely the form above,
+but can without loss of generality be made so.
+7
+ρ0
+Φ1
+Ψ1
+Φ2
+Ψ2
+Φm
+Ψm
+X1
+W0 W1
+Y1 X2
+Z1
+Ym
+Zm
+Wm
+Figure 1: A general interaction between two quantum parties.
+2.1 The Gutoski-Watrous framework for quantum games
+We now recall the Gutoski-Watrous (GW) framework for quantum games [GW07], which can be used to
+model quantum interactions between spatially separated parties. The setup most relevant to our protocol
+here is depicted in Figure 1. Here, we imagine one party, A, prepares an initial state ρ0 ∈ D(X1 ⊗W0).
+Register X1 is then sent to the second party (W0 is kept as private memory), B, who applies some
+quantum channel Φi : L(X1) 7→ L(Y1 ⊗Z1). B keeps register Z1 as private memory, and sends Y1 back
+to A, who applies channel Ψ1 : L(W0 ⊗ Y1) 7→ L(X2 ⊗W1), and sends X2 to B. The protocol continues
+for m messages back and forth, until the final operation Ψm : L(Wm ⊗ Ym) 7→ C, in which A performs
+a two-outcome measurement (specifically, a POVM Λ = {Λ0,Λ1}, meaning Λ0,Λ1 � 0, Λ0 + Λ1 = I)
+in order to decide whether to reject (Λ0) or accept (Λ1). As done in [GW07], we may assume without
+loss of generality7 that all channels are given by linear isometries8 Ak, i.e. Φk(X) = AkXA
+†
+k. Reference
+[GW07] refers to (Φ1, . . . ,Φm) as a strategy and (ρ0,Ψ1, . . . ,Ψm) as a co-strategy. In our setting, the
+former is “non-measuring”, meaning it makes no final measurement after Φm is applied, whereas the
+latter is “measuring”, since we will apply a final measurement on space Wm (not depicted in Figure 1).
+Intuitively, since our protocol (Section 3.1) will begin with the token sending the user a quantum key
+|x〉θ, we will later model the token as a measuring co-strategy, and the user of the token as a strategy.
+The advantage to doing so is that the GW framework allows one to (recursively) characterize any such
+strategy (resp., co-strategy) via a set of linear (in)equalities and positive semi-definite constraints. (In
+this sense, the GW framework generalizes the Choi-Jamio lkowski representation for channels to a “Choi-
+Jamio lkowski” representation for strategies/co-strategies.) To state these constraints, we first write down
+the Choi-Jamio lkowski (CJ) representation of a strategy (resp., measuring co-strategy) from [GW07].
+CJ representation of (non-measuring) strategy. The CJ representation of a strategy (A1, . . . , Am)
+is given by matrix [GW07]
+TrZm(vec(A) vec(A)†), (2)
+where A ∈ L(X1 ⊗ · · · ⊗ Xm,Y1 ⊗ · · · ⊗ Ym ⊗Zm) is defined as the product of the isometries Ai,
+A := (IY1⊗···⊗Ym−1 ⊗Am) · · · (A1 ⊗ IX2⊗···⊗Xm), (3)
+and the vec : L(S, T ) 7→ T ⊗ S mapping is the linear extension of the map |i〉〈j| 7→ |i〉|j〉 defined on all
+standard basis states |i〉, |j〉.
+CJ representation of (measuring) co-strategy. Let Λ := {Λ0,Λ1} denote a POVM with reject
+and accept measurement operators Λ0 and Λ1, respectively. A measuring strategy which ends with a
+measurement with respect to POVM Λ replaces, for Λa ∈ Λ, Equation (2) with [GW07]
+Qa := TrZm
+((Λa ⊗ IY1⊗···⊗Ym
+) vec(A) vec(A)†) (4)
+= TrZm
+(vec((
+√
+Λa ⊗ IY1⊗···⊗Ym
+)A) vec((
+√
+Λa ⊗ IY1⊗···⊗Ym
+)A)†) (5)
+=: TrZm
+(vec(Ba) vec(Ba)†). (6)
+To convert this to a co-strategy, one takes the transpose of the operators defined above (with respect to
+the standard basis). (Note: In our use of the GW framework in Section C.1, all operators we derive will
+be symmetric with respect to the standard basis, and hence taking this transpose will be unnecessary.)
+7This is due to the Stinespring dilation theorem.
+8A linear isometry A ∈ L(S, T ) satisfies A†A = IS , generalizing the notion of unitary maps to non-square matrices.
+8
+Optimization characterization over strategies and co-strategies. With CJ representations for
+strategies and co-strategies in hand, one can formulate [GW07] the optimal probability with which a
+strategy can force a corresponding co-strategy to output a desired result as follows. Fix any Qa from
+a measuring co-strategy {Q0, Q1}, as in Equation (6). Then, Corollary 7 and Theorem 9 of [GW07]
+show that the maximum probability with which a (non-measuring) strategy can force the co-strategy to
+output result a is given by
+min: p (7)
+subject to: Qa � pRm (8)
+Rk = Pk ⊗ IYk
+for 1 ≤ k ≤ m (9)
+TrXk
+(Pk) = Rk−1 for 1 ≤ k ≤ m (10)
+R0 = 1 (11)
+Rk ∈ Pos(Y1,...,k ⊗X1,...,k) for 1 ≤ k ≤ m (12)
+Pk ∈ Pos(Y1,...,k−1 ⊗X1,...,k) for 1 ≤ k ≤ m (13)
+p ∈ [0, 1] (14)
+Intuition. The minimum p denotes the optimal “success” probability, meaning the optimal probability
+of forcing the co-strategy to output a (Theorem 9 of [GW07]). The variables above, in addition to p,
+are {Ri} and {Pi}, where the optimization is happening over all m-round co-strategies Rm satisfying
+Equation (8). How do we enforce that Rm encodes such an m-round co-strategy? This is given by the
+(recursive) Equations (9)-(13). Specifically, Corollary 7 of [GW07] states that Rm is a valid m-round
+co-strategy if and only if all of the following hold: (1) Rm � 0, (2) Rm = Pm ⊗ IYm
+for Pm � 0 and Ym
+the last incoming message register to the co-strategy, (3) TrXm
+(Pm) is a valid m − 1 round co-strategy
+(this is the recursive part of the definition). An intuitive sense as to why conditions (2) and (3) should
+hold is as follows: For any m-round co-strategy Rm, let Rm−1 denote Rm restricted to the first m − 1
+rounds. Then, to operationally obtain Rm−1 from Rm, the co-strategy first ignores the last incoming
+message in register Ym. This is formalized via a partial trace over Ym, which (once pushed through the
+CJ formalism9) translates into the ⊗IYk
+term in Equation (9). Since the co-strategy is now ignoring
+the last incoming message Ym, any measurement it makes after m− 1 rounds is independent of the last
+outgoing message Xm. Thus, we can trace out Xm as well, obtaining a co-strategy Rm−1 on just the first
+m− 1 rounds; this is captured by Equation (10).
+3 Feasibility of Quantum OTMs using Stateless Hardware
+In this section, we present a quantum construction for one-time memories by using stateless hardware
+(Section 3.1). We also state our main theorem (Theorem 3.1). In Section 3.3, we describe the Simulator
+and prove Theorem 3.1 using the technical results of Appendix C. The intuition and techniques behind
+the proofs in Appendix C are sketched in Section 3.4.
+3.1 Construction
+We now present the OTM protocol Π in the Fwrap hybrid model, between a sender Ps and a receiver Pr.
+Here the security parameter is n.
+Upon receiving input (s0, s1) from the environment where s0, s1 ∈ {0, 1}, sender Ps acts as follows:
+• The sender chooses uniformly random x ∈R {0, 1}n and θ ∈R {+,×}n, and prepares |x〉θ. Based
+on tuple (s0, s1, x, θ), the sender then prepares the program M as in Program 1.
+• The sender sends |x〉θ to the receiver.
+• The sender sends (create,M) to functionality Fwrap, and the functionality sends create to notify
+the receiver.
+9Recall that the CJ representation of the trace map is the identity matrix (up to scaling).
+9
+Program 1 Program for hardware token
+Hardcoded values: s0, s1 ∈ {0, 1}, x ∈ {0, 1}n, and θ ∈ {+,×}n
+Inputs: y ∈ {0, 1}n and b ∈ {0, 1}, where y is a claimed measured value for the quantum register, and b
+the evaluator’s choice bit
+1. If b = 0, check that the θ = + positions return the correct bits in y according to x. If Accept, output
+s0. Otherwise output ⊥.
+2. If b = 1, check that the θ = × positions return the correct bits in y according to x. If Accept, output
+s1. Otherwise output ⊥.
+The receiver Pr operates as follows:
+Upon input b from the environment, and |x〉θ from the receiver, and create notification from Fwrap,
+• If b = 0, measure |x〉θ in the computational basis to get string y. Input (run, (y, b)) into Fwrap.
+• If b = 1, apply H⊗n to |x〉θ, then measure in the computational basis to get string y. Input
+(run, (y, b)) into Fwrap.
+Return the output of Fwrap to the environment.
+It is easy to see that the output of Fwrap is sb for both b = 0 and b = 1.
+Note again that the hardware token, as defined in Program 1, accepts only classical input (i.e., it cannot
+be queried in superposition). As mentioned earlier, relaxing this assumption yields impossibility of a
+secure OTM implementation (assuming the receiver also has access to the token’s inverse operation), as
+shown in Section 4.
+3.2 Stand-Alone Security Against a Malicious Sender
+We note that in protocol Π of Section 3.1, once the sender prepares and sends the token, she is no longer
+involved (and in particular, the sender does not receive any further communication from the receiver).
+We call such a protocol a one-way protocol. Because of this simple structure, and because the ideal
+functionality Fwrap also does not return any message to the sender, we can easily establish stand-alone
+security against a malicious sender (see details in Appendix B).
+3.3 UC-Security against a corrupt receiver
+Our main theorem, which establishes security against a corrupt receiver is now stated as follows.
+Theorem 3.1. Construction Π above quantum-UC-realizes FOTM in the Fwrap hybrid model with statistical
+security against an actively-corrupted receiver making at most cn number of adaptive queries to the token,
+for any fixed constant c < 0.114.
+To prove Theorem 3.1, we must construct and analyze an appropriate simulator, which we now do.
+3.3.1 The simulator
+In order to prove Theorem 3.1, for an adversary A that corrupts the receiver, we build a simulator
+S (having access to the OTM functionality FOTM), such that for any unbounded environment Z, the
+executions in the real model and that in simulation are statistically indistinguishable. Our simulator S
+is given below:
+The simulator emulates an internal copy of the adversary A who corrupts the receiver. The sim-
+ulator emulates the communication between A and the external environment Z by forwarding the
+communication messages between A and Z.
+The simulator S needs to emulate the whole view for the adversary A. First, the simulator picks
+dummy inputs s̃0 = 0 and s̃1 = 0, and randomly chooses x ∈ {0, 1}n, and θ ∈ {+,×}n, and generates
+program M̃ . Then the simulator plays the role of the sender to send |x〉θ to the adversary A (who
+controls the corrupted receiver). The simulator also emulates Fwrap to notify A by sending create to
+indicate that the hardware is ready for queries.
+10
+For each query (run, (b, y)) to Fwrap from the adversary A, the simulator evaluates program M̃ (that
+is created based on s̃0, s̃1, x, θ) as in the construction, and then acts as follows:
+1. If this is a rejecting input, output ⊥.
+2. If this is the first accepting input, call the external FOTM with input b, and learn the output sb
+from FOTM. Output sb.
+3. If this is a subsequent accepting input, output sb (as above).
+3.3.2 Analysis
+We now show that the simulation and the real model execution are statistically indistinguishable. There
+are two cases in an execution of the simulation which we must consider:
+Case 1: In all its queries to Fwrap, the accepting inputs of A have the same choice bit b. In this case,
+the simulation is perfectly indistinguishable.
+Case 2: In its queries to Fwrap, A produces accepting inputs for both b = 0 and b = 1. In this case, it
+is possible that the simulation fails (the environment can distinguish the real model from the ideal
+model), since the simulator is only able to retrieve a single bit from the external OTM functionality
+FOTM (either corresponding to b = 0 or b = 1).
+Thus, whereas in Case 1 the simulator behaves perfectly, in Case 2 it is in trouble. Fortunately, in
+Theorem 3.2 we show that the probability that Case 2 occurs is exponentially small in n, the number
+of qubits comprising |x〉θ, provided the number of queries to the token is at most cn for any c < 0.114.
+Specifically, we show that for an arbitrary m-query strategy (i.e., any quantum strategy allowed by
+quantum mechanics, whether efficiently implementable or not, which queries the token at most m times),
+the probability of Case 2 occurring is at most O(22m−0.228n). This concludes the proof.
+3.4 Security analysis for the token: Intuition
+Our simulation proof showing statistical security of our Quantum OTM construction of Section 3.1
+relies crucially on Theorem 3.2, stated below. As the proof of this theorem uses quantum information
+theoretic and semidefinite programming techniques (as opposed to cryptographic techniques), let us
+introduce notation in line with the formal analysis of Appendix C.
+With respect to the construction of Section 3.1, let us replace each two-tuple (x, θ) ∈ {0, 1}n×{+,×}n
+by a single string z ∈ {0, 1}2n, which we denote the secret key. Bits 2i and 2i+ 1 of z specify the basis
+and value of conjugate coding qubit i for i ∈ {1, . . . , n} (i.e., z2i = θi and z2i+1 = xi). Also, rename the
+“quantum key” (or conjugate coding key) |ψz〉 := |x〉θ ∈ (C2)⊗n. Thus, the protocol begins by having
+the sender pick a secret key z ∈ {0, 1}2n uniformly at random, and preparing a joint state
+|ψ〉 = 1
+2n
+∑
+z∈|0,1〉2n
+|ψz〉R|z〉T . (15)
+The first register, R, is sent to the receiver, while the second register, T , is kept by the token. (Thus,
+the token knows the secret key z, and hence also which |ψz〉 the receiver possesses.) The mixed state
+describing the receiver’s state of knowledge at this point is given by
+ρR := 1
+22n
+∑
+z∈{0,1}2n
+|ψz〉〈ψz|. (16)
+Theorem 3.2. Given a single copy of ρR, and the ability to make m (adaptive) queries to the hardware
+token, the probability that an unbounded quantum adversary can force the token to output both bits s0 and
+s1 scales as O(22m−0.228n).
+Thus, the probability of an unbounded adversary (i.e., with the ability to apply the most general maps
+allowed in quantum mechanics, trace-preserving completely positive (TPCP) maps, which are not neces-
+sarily efficiently implementable) to successfully cheat using m = cn for c < 0.114 queries is exponentially
+small in the quantum key size, n. The proof of Theorem 3.2 is in Appendix C. Its intuition can be
+sketched as follows.
+11
+Proof intuition. The challenge in analyzing security of the protocol is the fact that the receiver (a.k.a.
+the user) is not only given adaptive query access to the token, but also a copy of the quantum “resource
+state” ρR, which it may arbitrarily tamper with (in any manner allowed by quantum mechanics) while
+making queries. Luckily, the GW framework [GW07] (Section 2.1)) is general enough to model such
+“queries with quantum side information”. The framework outputs an SDP, Γ (Equation (17)), the opti-
+mal value of which will encode the optimal cheating probability for a cheating user of our protocol. Giving
+a feasible solution for Γ will hence suffice to upper bound this cheating probability, yielding Theorem 3.2.
+Coherently modeling quantum queries to the token. To model the interaction between the token and
+user, we first recall that all queries to the token must be classical by assumption. To model this process
+coherently in the GW framework, we hence imagine (solely for the purposes of the security analysis) that
+the token behaves as follows:
+1. It first sends state ρR to the user.
+2. When it receives as ith query a quantum state ρi from the user, it sends response string ri to the
+user, and “copies” ρi via transversal CNOT gates to a private memory register Wi, along with ri.
+It does not access ρi again throughout the protocol, and only accesses ri again in Step 3. For clarity,
+the token runs a classical circuit, and in the formal setup of Appendix C (see Remark (C.2)), the
+token conditions each response ri solely on the current incoming message, ρi.
+3. After all rounds of communication, the token “measures” its stored responses (r1, . . . , rm) in the
+Z-basis to decide whether to accept (user successfully cheated10) or reject (user failed to cheat).
+The “copying” phase of Step 2 accomplishes two tasks: First, since the token will never read the “copies”
+of ρi again, the principle of deferred measurement [NC00] implies the transversal CNOT gates effectively
+simulate measuring ρi in the standard basis. In other words, without loss of generality the user is reduced
+to feeding a classical string ỹ to the token. Second, we would like the entire security analysis to be done
+in a unified fashion in a single framework, the GW framework. To this end, we want the token itself
+to “decide” at the end of the protocol whether the user has successfully cheated (i.e. extracted both
+secret bits). Storing all responses ri in Step 2 allows us to simulate such a final measurement in Step
+3. We reiterate that, crucially, once the token “copies” ρi and ri to Wi, it (1) never accesses (i.e. reads
+or writes to) ρi again and (2) only accesses ri again in the final standard basis measurement of Step 3.
+Together, these ensure all responses ri are independent, as required for a stateless token. A more formal
+justification is in Remark C.2 of Appendix C.
+Formalization in GW framework. To place the discussion thus far into the formal GW framework, we
+return to Figure 1. The bottom “row” of Figure 1 will depict the token’s actions, and the top row the
+user’s actions. As outlined above, the protocol begins by imagining the token sends initial state ρ0 = ρR
+to the user via register X1. The user then applies an arbitrary sequence of TPCP maps Φi to its private
+memory (modeled by register Zi in round i), each time sending a query ỹi (which is, as discussed above a
+classical string without loss of generality) to the token via register Yi. Given any such query ỹi in round
+i, the token applies its own TPCP map Ψi to determine how to respond to the query. In our protocol,
+the Ψi correspond to coherently applying a classical circuit, i.e. a sequence of unitary gates mapping
+the standard basis to itself. Specifically, their action is fully determined by Program 1, and in principle
+all Ψi are identical since the token is stateless (i.e., the action of the token in round i is unaffected by
+previous rounds {1, . . . , i− 1}). (We use the term “in principle”, as recall from above that in the security
+analysis we model each Ψi as classically copying (ỹi, ri) to a distinct private register Wi.) Finally, after
+receiving the mth query ỹm in register Ym, we imagine the token makes a measurement (not depicted
+in Fig. 1) based on the query responses (r1, . . . , rm) it returned; if the user managed to extract both s0
+and s1 via queries, then the token “accepts”; otherwise it “rejects”. (Again, we are using the fact that
+in our security analysis, the token keeps a history of all its responses ri, solely for the sake of this final
+measurement.)
+10We model the token as “accepting” when the user successfully cheats, so that a feasible solution to the semidefinite
+program Γ of Equation (17) correctly upper bounds the probability of said cheating. Formally, in the GW framework
+(Section 2.1), we will let Λ1 denote this accepting measurement for the token; see Appendix C.
+12
+With this high-level setup in place, the output of the GW framework is a semidefinite program11,
+denoted Γ (see Appendix C for further details):
+min: p (17)
+subject to: Q1 � Rm+1 (18)
+Rk = Pk ⊗ IYk
+for 1 ≤ k ≤ m+ 1 (19)
+TrXk
+(Pk) = Rk−1 for 1 ≤ k ≤ m+ 1 (20)
+R0 = p (21)
+Rk ∈ Pos(Y1,...,k ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (22)
+Pk ∈ Pos(Y1,...,k−1 ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (23)
+Above, Q1 encodes the actions of the token, i.e. the co-strategy in the bottom row of Figure 1. The
+variable p denotes an upper bound on the optimal cheating probability (i.e., the probability with which
+both s0 and s1 are extracted), subject to linear constraints (Equations (19)-(23)) which enforce that
+operator Rm+1 encodes a valid co-strategy (see Section 2.1). Theorem 9 of [GW07] now says that the
+minimum p above encodes precisely the optimal cheating probability for a user which is constrained only
+by the laws of quantum mechanics. Since Γ is a minimization problem, to upper bound the cheating
+probability it hence suffices to give a feasible solution (p,R1, . . . , Rm+1, P1, . . . , Pm+1) for Γ, which will
+be our approach.
+Intuition for Q1 and an upper bound on p. It remains to give intuition as to how one derives Q1
+in Γ, and how an upper bound on the optimal p is obtained. Without loss of generality, one may assume
+that each of the token’s TPCP maps Ψi are given by isometries Ai : Yi ⊗Wi−1 7→ Xi+1 ⊗Wi, meaning
+A†iAi = IYi⊗Wi−1 (due to the Stinespring dilation theorem). (We omit the first isometry which prepares
+state ρ0 in our discussion here for simplicity.) Let us denote their sequential application by a single
+operator A := Am · · ·A1 (note: to make the product well-defined, in Equation (3) of Appendix C, one
+uses tensor products with identity matrices appropriately). Then, the Choi-Jamio lkowski representation
+of A is given by [GW07] (see Section 2.1)
+TrZm
+(vec(A) vec(A)†), (24)
+where we trace out the token’s private memory register Zm. (The operator vec(·) reshapes matrix A
+into a vector; its precise definition is given in Section 2.1.) However, since in our security analysis, we
+imagine the token also makes a final measurement via some POVM Λ = {Λ0,Λ1}, whereupon obtaining
+outcome Λ1 the token “accepts”, and upon outcome Λ0 the token rejects, we require a slightly more
+complicated setup. Letting B1 := Λ1A, we define Q1 as [GW07]
+Q1 = TrZm
+(vec(B1) vec(B1)†). (25)
+The full derivation of Q1 in our setting takes a few steps (App. C). Here, we state a slightly simplified
+version of Q1 for exposition with intuition:
+Q1 = 1
+4n
+∑
+“successful”r
+|rm〉〈rm|Xm+1
+⊗ · · · ⊗ |r1〉〈r1|X2
+⊗ (26) ∑
+messages ỹ and keys z
+consistent with r
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+⊗ |ψz〉〈ψz|X1
+ . (27)
+Above, recall each string ri denotes the response of the token given the ith query ỹi from the user; hence,
+the corresponding projectors in Q1 act on spaces X2 through Xm+1. We say r is “successful” if it encodes
+the user successfully extracting both secret bits from the token. Each string ỹi ∈ {0, 1}n+1
+denotes the
+11Note the optimization in Equation (17) differs from that in Equation (7). This is because, technically, Equation (17)
+is not yet an SDP due to the quadratic constraint Qa � pRm. It is, however, easily seen to be equivalent to the SDP in
+Equation (7). We thank Jamie Sikora for pointing this out to us.
+13
+ith query sent from the user to the token, where each ỹi = bi ◦ yi in the notation of Program 1, i.e.
+bi ∈ {0, 1} is the choice bit for each query. Each such message is passed via register Yi. The states |ψz〉
+and strings z are defined as in the beginning of Section 3.4; recall z ∈ {0, 1}2n and |ψz〉 ∈ (C2)⊗n denote
+the secret key and corresponding quantum key, respectively. The inner summation is over all messages
+ỹ and keys z such that the token correctly returns response ri given both ỹi and z.
+Upper bounding p. To now upper bound p, we give a feasible solution Rm+1 satisfying the constraints
+of Γ. Note that giving even a solution which attains p = 1 for all n and m is non-trivial — such a solution
+is given in Lemma C.3 of Appendix C.1. Here, we give a solution which attains p ∈ O(22m−0.228n), as
+claimed in Theorem 3.2 (and formally proven in Theorem C.5 of Appendix C.1). Namely, we set
+Rm+1 = 1
+N
+∑
+“successful” r
+|rm〉〈rm|Xm+1
+⊗ · · · ⊗ |r1〉〈r1|X2
+⊗ IY1⊗···⊗Ym
+⊗ 1
+2n IX1 , (28)
+where intuitively N is the total number of strings r corresponding to successful cheating, and recall n is
+the key size. This satisfies constraint (19) of Γ due to the identity term IY1⊗···⊗Ym . The renormalization
+factor of (N2n)−1 above ensures that tracing out all Xi registers yields R0 = 1 in constraint (21) of
+Γ. We are thus reduced to choosing the minimum p such that constraint (18) is satisfied. Note that
+setting p = 1 will not work for large enough m for this choice of Rm+1. To see why, observe we have
+chosen Rm+1 to align with the block-diagonal structure of Q1 on registers X2, . . . ,Xm. Since registers
+Y1 ⊗ · · · ⊗ Ym and X1 of Rm+1 are proportional to the identity matrix, it thus suffices to characterize
+the largest eigenvalue of Q1, λmax(Q1). This is done by Lemma C.4 of Appendix C.1, which says
+λmax(Q1) = 2
+4n
+(
+1 + 1√
+2
+)n
+. (29)
+Combining this bound on λmax(Q1) with the parameters of Rm+1 above now yields the desired claim
+that p ∈ O(22m−0.228n). For (say) m ≥ n this bound is vacuous, and thus does not suffice to show even
+the trivial bound p ≤ 1 for all m, as stated. (See Lemma C.3 for a feasible solution attaining p ≤ 1 for
+all m.) However, for m < 0.114n queries, the bound is fruitful, yielding the probability that a user of
+the token successfully cheats and thus that the simulation fails is exponentially small in the key size, n.
+Simplifications of the GW SDP, the derivation of its dual SDP, and a conjectured approximately optimal
+dual feasible solution are given in Appendix D.
+4 Impossibility Results
+We now discuss “tightness” of our protocol with respect to impossibility results. To begin, it is easy
+to argue that OTMs cannot exist in the plain model (i.e., without additional assumptions) in both the
+classical and quantum settings: in the classical setting, impossibility holds, since software can always
+be copied. Quantumly, this follows by a simple rewinding argument [BGS13]. Here, we give two simple
+no-go results for the quantum setting which support the idea that our scheme is “tight” in terms of the
+minimality of the assumptions it uses. Both results assume the token is reversible, meaning the receiver
+can run both the token and its inverse operation. The results can be stated as:
+1. A stateless token which can be queried in superposition cannot be used to securely construct an
+OTM (Section 4.1).
+2. For measure and access schemes such as ours, in order for a stateless token to allow statistical
+security, it must have an exponential number of keys per secret bit (Section 4.2).
+Note that if, on the other hand, the receiver is not given access to the token’s inverse operation, it
+is unlikely for a straightforward adaption of our no-go techniques to go through. This is because, in
+the most general case where the token is an arbitrary unitary U , which the receiver may apply as a
+black box, simulating U−1 = U† appears difficult. For example, Theorem 3 of Quintino, Dong, Shimbo,
+Soeda, and Murao [Qui+19] shows that any exact implementation of U† (even with an adaptive protocol)
+which (1) succeeds with probability p > 0 and (2) where p is independent of the choice of U , requires
+k ≥ d − 1 uses of U . In our setting, d is exponential in the number of qubits, and thus so is k. Indeed,
+inverting arbitrary U would entail, as a special case, inverting arbitrary classical permutations, which
+14
+appears difficult. For example, Fefferman and Kimmel [FK18] use precisely this idea (i.e. an in-place
+permutation oracle, to which one does not have access to the inverse) to prove an oracle separation
+between two quantum generalizations of NP, Quantum-Classical Merlin Arthur and Quantum Merlin
+Arthur. We stress, however, that the works of [Qui+19; FK18] are for rather general unitaries U ,
+whereas here we have a very specific choice of U (i.e. the token’s implementation). For such a specialized
+U , it remains possible that a no-go theorem could still hold, even without black-box access to U†.
+4.1 Impossibility: Tokens which can be queried in superposition
+In our construction, we require that all queries to the token be classical strings, i.e., no querying in
+superposition is allowed. It is easy to argue via a standard rewinding argument that relaxing this
+requirement yields impossibility of a secure OTM, as long as access to the token’s adjoint (inverse)
+operation is given, as we now show. Specifically, let M be a quantum OTM implemented using a
+hardware token. Since the token access is assumed to be reversible, we may model it as an oracle12 Of
+realizing a function f : {0, 1}n 7→ {0, 1}m in the standard way, i.e., for all y ∈ {0, 1}n and b ∈ {0, 1}m,
+Of |y〉|b〉 = |y〉|b⊕f(y)〉. Now, suppose our OTM stores two secret bits s0 and s1, and provides the receiver
+with an initial state |ψ〉 ∈ A ⊗ B ⊗ C, where A, B, and C are the algorithm’s workspace, query (i.e.,
+input to Of ), and answer (i.e., Of ’s answers) registers, respectively. By definition, an honest receiver
+must be able to access precisely one of s0 or s1 with certainty, given |ψ〉. Thus, for any i ∈ {0, 1},
+there exists a quantum query algorithm Ai = UmOf · · ·OfU2OfU1 for unitaries Ui ∈ U(A ⊗ B ⊗ C)
+such that Ai|ψ〉 = |ψ′〉AB |si〉C . For any choice of i, however, this implies a malicious receiver can now
+classically copy si to an external register, and then “rewind” by applying A†i to |ψ′〉AB |si〉C to recover
+|ψ〉. Applying Ai′ for i′ 6= i to |ψ〉 now yields the second bit i′ with certainty as well. We conclude that
+a quantum OTM which allows superposition queries to a reversible stateless token is insecure.
+Remark 4.1. Above, we assumed the OTM outputs si with certainty. The argument generalizes to
+OTMs that output si with probability at least 1 − ε for small ε > 0; for this, the Gentle Measurement
+Lemma [Win99] can be used to show that both bits can be recovered with non-negligible probability.
+Remark 4.2. Our argument crucially relies on the fact that the receiver has superposition access to the
+A†i operation. In certain models (e.g., software), such access is unavoidable. However, we do not rule out
+the possibility that non-reversible superposition access to a token would allow for quantum OTMs.
+4.2 Impossibility: Tokens with a bounded number of keys
+We observed superposition queries to the token prevent an OTM from being secure. One can also ask
+how simple a hardware token with classical queries can be, while still allowing a secure OTM. Below, we
+consider such a strengthening in which the token is forced to have a bounded number of keys.
+To formalize this, we define the notion of a “measure-and-access (MA)” OTM, i.e., an OTM in which
+given an initial state |ψ〉, an honest receiver applies a prescribed measurement to |ψ〉, and feeds the
+resulting classical string (i.e., key) y into the token Of to obtain si. Our construction is an example
+of a MA memory in which each bit si has an exponential number of valid keys y such that f(y) = si.
+Can the construction can be strengthened such that each si has a bounded number (e.g., a polynomial
+number) of keys? We now show that such a strengthening would preclude security, assuming the token
+is reversible.
+For clarity, implicitly in our proof below, we model the oracle Of as having three possible outputs:
+0, 1, or 2, where 2 is output whenever Of is fed an invalid key y. This is required for the notion of
+having “few” keys to make sense (i.e., there are 2n candidate keys, and only two secret bits, each of
+which is supposed to have a bounded number of keys). Note that our construction indeed fits into this
+framework.
+Lemma 4.3. Let M be an MA memory with oracle Of , such that Of cannot be queried in superposition.
+If a secret bit si has at most ∆ keys yi such that f(yi) = si, then given a single copy of |ψ〉, one can
+extract both s0 and s1 from M with probability at least 1/∆2.
+12This formalization models Of as a classical function f which can be queried in superposition, since the aim of this
+paper is to consider “easy-to-manufacture” tokens. However, our impossibility arguments in Section 4 trivially extend to the
+case when the token is modelled by an arbitrary unitary Uf .
+15
+We conclude that if a secret bit bi has (say) at most polynomially many keys, then any measure-and-
+access OTM can be broken with at least inverse polynomial probability. The proof is given in Appendix E.
+In this sense, at least in the paradigm of measure-and-access memories, our construction is essentially
+tight — in order to bound the adversary’s success probability of obtaining both secret bits by an inverse
+exponential, we require each secret bit to have exponentially many valid keys. Note that, as in the setting
+of superposition queries, the above proof can be generalized to the setting in which the OTM returns the
+correct bit si with probability at least 1 − ε for small ε > 0. Finally, the question of whether a similar
+statement to Lemma 4.3 holds for a non-reversible token remains open.
+Acknowledgements
+We thank anonymous referees for pointing out that the impossibility result against quantum queries
+applies only if we model the token as a reversible process, as well as for finding an error in a prior version
+of this work. We thank Kai-Min Chung and Jamie Sikora for related discussions, and David Mestel for
+observing that the bound of Equation (148) is not asymptotically optimal. AB acknowledges support
+by the U.S. Air Force Office of Scientific Research under award number FA9550-17-1-0083, Canada’s
+NSERC, an Ontario ERA, and the University of Ottawa’s Research Chairs program. SG acknowledges
+support by NSF grants CCF-1526189 and CCF-1617710. HSZ acknowledges support by NSF grant
+CNS-1801470 and a Google Faculty Research Award.
+A Universal Composition (UC) Framework
+We consider simulation-based security. The Universal Composability (UC) framework was proposed by
+Canetti [Can01], culminating a long sequence of simulation-based security definitions (c.f. [GMW87;
+GL91; MR92; Bea91; Can00]); please see also [PW01; PS04; Can+07; LPV09; MR11] for alterna-
+tive/extended frameworks. Recently Unruh [Unr10] extend the UC framework to the quantum setting.
+Next, we provide a high-level description of the original classical UC model by Canetti [Can01], and then
+the quantum UC model by Unruh [Unr10].
+A.1 Classical UC Model ([Can01])
+Machines. The basic entities involved in the UC model are players P1, . . . , Pk where k is polynomial
+of security parameter n, an adversary A, and an environment Z. Each entity is modeled as a interactive
+Turing machine (ITM), where Z could have an additional non-uniform string as advice. Each Pi has
+identity i assigned to it, while A and Z have special identities idA := adv and idZ := env.
+Protocol Execution. A protocol specifies the programs for each Pi, which we denote as π = (π1, . . . , πk).
+The execution of a protocol is coordinated by the environment Z. It starts by preparing inputs to all
+players, who then run their respective programs on the inputs and exchange messages of the form
+(idsender, idreceiver, msg). A can corrupt an arbitrary set of players and control them later on. In par-
+ticular, A can instruct a corrupted player sending messages to another player and also read messages
+that are sent to the corrupted players. During the course of execution, the environment Z also interacts
+with A in an arbitrary way. In the end, Z receives outputs from all the other players and generates one
+bit output. We use EXEC[Z,A, π] to denote the distribution of the environment Z’s (single-bit) output
+when executing protocol π with A and the Pi’s.
+Ideal Functionality and Dummy Protocol. Ideal functionality F is a trusted party, modeled by
+an ITM again, that perfectly implements the desired multi-party computational task. We consider an
+“dummy protocol”, denoted PF , where each party has direct communication with F, who accomplishes
+the desired task according to the messages received from the players. The execution of PF with environ-
+ment Z and an adversary, usually called the simulator S, is defined analogous as above, in particular,
+S monitors the communication between corrupted parties and the ideal functionality F. Similarly, we
+denote Z’s output distribution as EXEC[Z,S, PF ].
+16
+Definition A.1 (Classical UC-secure Emulation). We say π (classically) UC-emulates π′ if for any
+adversary A, there exists a simulator S such that for all environments Z,
+EXEC[Z,A, π] ≈ EXEC[Z,S, π′] (30)
+We here consider that A and Z are computationally unbounded, and we call it statistical UC-security. We
+require the running time S is polynomial in that of A. We call this property Polynomial Simulation.
+Let F be a well-formed two party functionality. We say π (classically) UC-realizes F if for all adversary
+A, there exists a simulator S such that for all environments Z, EXEC[Z,A, π] ≈ EXEC[Z,S, PF ]. We
+also write EXEC[Z,A, π] ≈ EXEC[Z,S,F ] if the context is clear.
+UC-secure protocols admit a general composition property, demonstrated in the following universal
+composition theorem.
+Theorem A.2 (UC Composition Theorem [Can01]). Let π, π′ and σ be n-party protocols. Assume that
+π UC-emulates π′. Then σπ UC-emulates σπ′ .
+A.2 Quantum UC Model ([Unr10])
+Now, we give a high-level description of quantum UC model by Unruh [Unr10].
+Quantum Machine. In the quantum UC model, all players are modeled as quantum machines. A
+quantum machine is a sequence of quantum circuits {Mn}n∈N, for each security parameter n. Mn is a
+completely positive trace preserving operator on space Hstate⊗Hclass⊗Hquant, where Hstate represents
+the internal workspace of Mn and Hclass and Hquant represent the spaces for communication, where for
+convenience we divide the messages into classical and quantum parts. We allow a non-uniform quantum
+advice13 to the machine of the environment Z, while all other machines are uniformly generated.
+Protocol Execution. In contrast to the communication policy in classical UC model, we consider a
+network N which contains the space HN := Hclass ⊗Hquant ⊗iHstate
+i . Namely, each machine maintains
+individual internal state space, but the communication space is shared among all . We assume Hclass
+contains the message (idsender, idreceiver, msg) which specifies the sender and receiver of the current mes-
+sage, and the receiver then processes the quantum state on Hquant. Note that this communication model
+implicitly ensures authentication. In a protocol execution, Z is activated first, and at each round, one
+player applies the operation defined by its machine Mn on Hclass ⊗ Hquant ⊗ Hstate. In the end Z
+generates a one-bit output. Denote EXEC[Z,A,Π] the output distribution of Z.
+Ideal Functionality. All functionalities we consider in this work are classical, i.e., the inputs and
+outputs are classical, and its program can be implemented by an efficient classical Turing machine. Here
+in the quantum UC model, the ideal functionality F is still modeled as a quantum machine for consistency,
+but it only applies classical operations. Namely, it measures any input message in the computational
+basis to get a classical bit-string, and implements the operations specified by the classical computational
+task.
+We consider an “dummy protocol”, denoted PF , where each party has direct communication with F,
+who accomplishes the desired task according to the messages received from the players. The execution of
+PF with environment Z and an adversary, usually called the simulator S, is defined analogous as above,
+in particular, S monitors the communication between corrupted parties and the ideal functionality F.
+Similarly, we denote Z’s output distribution as EXEC[Z,S, PF ]. For simplicity, we also write it as
+EXEC[Z,S,F ].
+Definition A.3 (Quantum UC-secure Emulation). We say Π quantum-UC-emulates Π′ if for any
+quantum adversary A, there exists a (quantum) simulator S such that for all quantum environments Z,
+EXEC[Z,A,Π] ≈ EXEC[Z,S,Π′] (31)
+We consider here that A and Z are computationally unbounded, we call it (quantum) statistical UC-security.
+We require the running time S is polynomial in that of A. We call this property Polynomial Simulation.
+13Unruh’s model only allows classical advice, but we tend to take the most general model. It is easy to justify that almost
+all results remain unchanged, including the composition theorem. See [HSS11, Section 5] for more discussion.
+17
+Similarly, (quantum) computational UC-security can be defined. Let F be a well-formed two party
+functionality. We say Π quantum-UC-realizes F if for all quantum adversary A, there exists a
+(quantum) simulator S such that for all quantum environments Z, EXEC[Z,A,Π] ≈ EXEC[Z,S, PF ].
+Quantum UC-secure protocols also admit general composition:
+Theorem A.4 (Quantum UC Composition Theorem [Unr10, Theorem 11]). Let Π,Π′ and Σ be quantum-
+polynomial-time protocols. Assume that Π quantum UC-emulates Π′. Then ΣΠ quantum UC-emulates
+ΣΠ′ .
+Remark A.5. Out of the two protocol parties (the sender and the receiver), we consider security only in
+the case of the receiver being a corrupted party. Note that we are only interested in cases where the same
+party is corrupted with respect to all composed protocol. Furthermore, we only consider static corruption.
+B Stand-Alone Security in the case of a Malicious Sender
+In order to define stand-alone security against a malicious sender (Definition B.2), in our context, we
+closely follow definitions given in prior work [DNS10], which we now recall. (Note that, instead of
+considering the approximate case for security, we are able to use the exact one.)
+Definition B.1. An n-step quantum two-party protocol with oracle calls, denoted ΠO = (A ,B,O, n)
+consists of:
+1. input space A0 and B0 for parties A and B respectively.
+2. memory spaces A1, . . .An and B1, . . .Bn for A and B, respectively.
+3. An n-tuple of quantum operations (A1, . . .An) for A , Ai : L(Ai−1) 7→ L(Ai), (1 ≤ i ≤ n).
+4. An n-tuple of quantum operations (B1, . . .Bn) for B, Bi : L(Bi−1) 7→ L(Bi), (1 ≤ i ≤ n).
+5. Memory spaces A1, . . . ,An and B1, . . . ,Bn can be written as Ai = AiO ⊗Ai′ and Bi = BiO ⊗ Bi′,
+(1 ≤ i ≤ n) and O = (O1, . . . ,On) is an n-tuple of quantum operations: Oi : L(AOi ⊗ BOi ) 7→
+L(AOi ⊗ BOi ), (1 ≤ i ≤ n).
+If ΠO = (A ,B,O, n) is an n-turn two-party protocol, then the final state of the interaction upon
+input ρin ∈ D(A0 ⊗ B0 ⊗R) where R is a system of dimension dimA0 dimB0, is:
+[A ©∗ B](ρin) = (1L(A′n⊗B′n⊗R)⊗On)(An⊗Bn⊗1R) . . . (1L(A′1⊗B′1⊗R)⊗O1)(A1⊗B1⊗1R)(ρin) . (32)
+As in [DNS10], we specify that an oracle O can be a communication oracle or an ideal functionality
+oracle.
+An adversary Ã for an honest party A in ΠO = (A ,B,O, n) is an n-tuple of quantum operations
+matching the input and outputs spaces of A . A simulator for Ã is a sequence of quantum operations
+(Si)ni=1 where Si has the same input-output spaces as the maps of Ã at step i. In addition, S has access
+to the ideal functionality for the protocol Π.
+Definition B.2. An n-step quantum two-party protocol with oracle calls, ΠO = (A ,B,O, n) is statisti-
+cally stand-alone secure against a corrupt A if for every adversary Ã there exists a simulator S such
+that for every input ρin,
+TrBn⊗R(Ã ©∗ B) = TrBn⊗R(S ©∗ B) . (33)
+We note that Definition B.2 is weaker than some other definitions for active security used in the literature,
+e.g., [DNS12], because we ask only that the local view of the adversary be simulated.
+Given the simple structure of our protocol and ideal functionality, the construction and proof of the
+simulator is straightforward as shown below.
+Theorem B.3. Protocol Π is statistically stand-alone secure against a corrupt sender.
+18
+Proof. Since Π consists in a single message from the sender to the receiver (together with a call to the
+ideal functionality for the token), we have that A = (A1). Furthermore, since the ideal functionality Fwrap
+does not return anything to the sender, there is no need for our simulator S to call an ideal functionality.
+We thus build S that runs A on the input in register A0. When A calls the Fwrap ideal functionality,
+the simulator does nothing. Since Π is a one-way protocol, and since the ideal functionality also does not
+allow communication from the receiver to the sender,
+TrBn⊗R(Ã ©∗ B) = A (TrB0⊗R(ρin)) = S(TrB0⊗R(ρin)) . (34)
+This concludes the proof.
+C Security Analysis for the Token
+We now provide the technical result (Theorem 3.2) that is used to prove security of our Quantum OTM
+construction of Section 3.1 against a linear number of queries. The statement below is informal; as
+outlined in Section 3.4, to make it formal, in Section C.1 we model the user’s interaction with the token
+via the Gutoski-Watrous (GW) framework for quantum games [GW07]. The resulting formal statement
+we desire, which immediately yields the informal claim below, is given in Theorem C.5.
+Theorem C.1 (Informal). For any stateless hardware token implemented as in Program 1, i.e., using an
+n-qubit conjugate coding state |x〉θ, and for any user of the token (restricted only by the laws of quantum
+mechanics, meaning using any trace-preserving completely positive maps desired, regardless of efficiency
+of their implementation) making m queries to the token, the probability the user successfully queries the
+token to extract both secret bits s0 and s1 is at most O(22m−0.228n).
+Thus, we are able to prove that if the user makes at most m = cn queries with c < 0.114, then the user’s
+probability of cheating successfully is exponentially small in n.
+C.1 Security against a linear number of token queries: Primal SDP
+To show security of our hardware token implementation (Program 1) against a linear number of queries,
+we now model a user’s interaction with the token as an interactive game between two parties using the
+GW framework of Section 2.1. As outlined in Section 3.4, we shall treat the token as the co-strategy
+and the user as the strategy. An overview of how all operators introduced below fit together is given in
+Figure 3, which may be periodically referred to as the reader progresses through this section.
+Basics of our model. We proceed as follows. As depicted in Figure 1, the token (co-strategy) begins
+by preparing state ρ0 ∈ L(X1 ⊗W0), and sending message X1 (which contains ρR from Equation (15)
+to the user. The user then makes m queries, each via a distinct register Yi for i ∈ {1, . . . ,m}. For each
+query made, we model the token as returning two strings: (1) a symbol in set Σ =
+{
+0, 1, 0, 1
+}
+where 0
+and 1 denote successful 0- and 1-queries, respectively, and 0 and 1 denote unsuccessful 0- and 1-queries,
+respectively, and (2) a bit b which is set to 0 for a failed query, or secret bit bi for a successful ith query.
+Formally, the size of each register Xi for i ≥ 2 is hence three qubits. We will deviate from Figure 1 in one
+respect — we assume the token also returns the response to the final query, m, via a register Ym+1; this
+does not affect the success or failure of the user (as the latter makes no further queries at this point), but
+helps streamline the analysis. After this last response is sent out, the token measures the string s ∈ Σm
+of responses it sent back to the user, and “accepts” if and only if s contains at least one 0 and one 1.
+This will be spelled out formally below once we defined the isometries Ai for the protocol.
+Before doing so, let us introduce the terminology used in this section for discussing the secret key
+held by the token. Namely, recall in Program 1 that the token keeps secret key data x ∈ {0, 1}n and
+θ ∈ {+,×}n. Here, we shall replace these by a single string z ∈ {0, 1}2n, such that bits 2i and 2i+ 1 of
+z specify the basis and value of conjugate coding qubit i, for i ∈ {1, . . . , n} (i.e. z2i = θi and z2i+1 = xi).
+We shall call z the secret key. For consistency, we shall rename the quantum key |x〉θ from Program 1
+by |ψz〉 ∈ (C2)⊗n, i.e. |x〉θ = |ψz〉. Next, in Program 1 the token takes inputs b ∈ {0, 1} and y ∈ {0, 1}n,
+for b the choice bit and y the claimed measured value. In this section, we shall simply concatenate these
+as one string ỹ = b ◦ y ∈ {0, 1}n+1
+(we henceforth write ỹ = by for brevity), the first bit of which is
+19
+ρ0
+Φ1
+Ψ1
+Φ2
+Ψ2
+Φm
+Ψm
+X1
+W0
+Y1 X2
+Z1
+Ym
+Zm
+z
+ContentsRegister
+W1,1 z
+ContentsRegister
+W1,2 ỹ1, r(ỹ1, z)
+Wm,1 z
+ContentsRegister
+Wm,2 ỹ1, r(ỹ1, z)
+Wm,m ỹm, r(ỹm, z)
+...
+Figure 2: A reproduction of Figure 1 with additional details regarding the token’s private memory contents (bottom
+row, horizontal arrows pointing to the right) in each round. For example, in round k = 0, W0 contains the secret key,
+z. In round k = 1, W1,1 contains z and W1,2 contains ỹ1 and r(ỹ1, z). Here, r(ỹk, z) ∈ Σ denotes whether the token
+accepted or rejected query string ỹk assuming secret key z. Note the secret key z is passed along from round to round
+(otherwise, the token cannot correctly decide its response in a round k given query string ỹk).
+the choice bit. We shall refer to ỹ as a query string. With these definitions in hand, for each secret key
+z ∈ {0, 1}2n, we define a partition A0(z), A1(z), A0(z), A1(z) of {0, 1}n+1
+, which correspond to the sets
+of query strings ỹ which cause the token to return response 0, 1, 0, or 1, respectively.
+Defining the isometries Ak. Recall from Section 2.1 that the GW model begins by capturing the
+actions of a co-strategy as a sequence of linear isometries, Ak. To define these Ak, we first construct
+operators ∆k(z) : Yk 7→ Xk+1 ⊗Wk,k+1 (i.e. which map an incoming message in Yk to the token to an
+outgoing message in Xk+1 and private data to store in Wk,k+1) for k ∈ {1, . . . ,m} as follows:
+∆k(z) =
+∑
+ỹ∈A0(z)
+|00〉Xk+1 |ỹ0〉Wk,k+1〈ỹ|Yk
++ (35)
+∑
+ỹ∈A1(z)
+|10〉Xk+1 |ỹ1〉Wk,k+1〈ỹ|Yk
++ (36)
+∑
+ỹ∈A0(z)
+|0s0〉Xk+1 |ỹ0〉Wk,k+1〈ỹ|Yk
++ (37)
+∑
+ỹ∈A1(z)
+|1s1〉Xk+1 |ỹ1〉Wk,k+1〈ỹ|Yk
+. (38)
+The intuition is as follows. In round k, we model the token as (coherently) making the following classical
+computation: Upon input |ỹ〉Yk
+from the user (which consists of a choice bit b and candidate key y), the
+token sends its response in Xk+1 to the user (the first symbol of which denotes accept/reject via a symbol
+from Σ, and the second symbol of which is the corresponding secret bit s, which is set to 0 by default for
+failed queries), and classically copies (i.e. via transversal CNOT gates) both the input ỹ and response
+from Σ into Wk (the private memory of the token). Recall from Section 3.4 that coherently keeping this
+local copy of ỹ, which is never accessed again, simulates a measurement of Yk in the standard basis (by
+the principle of deferred measurement [NC00]). The response from Σ is also locally stored in Wk, solely
+for the token to be able to decide at the end of the protocol whether the user successfully extracted both
+secret bits. (More details on this below after the isometries Ak are defined.)
+Before finally defining isometries Ak, let us further elaborate on how the token’s private memory
+spaces Wk is modelled (illustrated in Figure 2).
+• W0 contains the secret key z ∈ {0, 1}2n of the token (i.e. the token knows what the secret key is).
+• Each Wk register for k > 0 is split into k + 1 parts:
+– Wk,1 contains a copy of z (this allows us to pass forward z from one round of interaction to
+the next, i.e. the token should know the secret key in all rounds), and
+20
+Operator Description
+∆k(z) 1. Sends back token’s response to user’s kth query ỹk, conditioned on key z
+2. Copies all data sent above to token’s private register
+3. Forwards token’s existing private memory contents to next round
+Ak “Bootstraps” ∆k(z) by summing over all possible keys z
+Note A0 also has special role of sending quantum key |ψz〉 to user
+A The operator obtained by taking the product of all Ak
+B1 The operator A projected down onto the space of all “accepting” strategies, i.e.
+where the token’s private memory in the last round, Wm, contains |0〉 and |1〉
+in some W ′i and W ′j for i 6= j, respectively
+Q1 The operator B1 is reshaped into a column vector via vec() mapping, then the token’s
+private memory in the last round, Wm, is traced out.
+Figure 3: An overview of how all operators in our instantiation of the GW framework fit together.
+– Wk,r for r ≥ 2 contains a copy in the standard basis of the user’s (r−1)st query string (string
+ỹ), as well as the token’s response from Σ for said query.
+Note that an additional technical reason for storing ỹ above is that it ensures ∆k(z)†∆k(z) = I, so that
+each Ai defined shortly is an isometry. We remark that while the size of W grows with m in our security
+analysis here, the actual token does not have growing memory requirements, since it stores nothing other
+than the secret key z in its private memory (i.e. registers Wk,r for r ≥ 2 exist only for our security
+analysis, not the actual implementation of the token).
+We are now ready to define isometries Ak for round k of the token’s actions, where 1 < k ≤ m:
+A0 = 1
+2n
+∑
+z∈{0,1}2n
+|ψz〉X1 |z〉W0,1 (39)
+A1 =
+∑
+z∈{0,1}2n
+∆1(z)Y1,X2,W1,2 ⊗ |z〉W1,1〈z|W0,1 (40)
+Ak =
+∑
+z∈{0,1}2n
+∆k(z)Yk,Xk+1,Wk,k+1 ⊗ |z〉Wk,1〈z|Wk−1,1
+k⊗
+r=2
+IWk,r,Wk−1,r
+(41)
+Here, A0 : C 7→ X1 ⊗W0, and Ak : Yk ⊗Wk−1 7→ Xk+1 ⊗Wk for 1 ≤ k ≤ m. The intuition is as follows:
+• A0 captures the token choosing an initial secret key z uniformly at random and preparing corre-
+sponding quantum key |ψz〉, which it sends to the user in register X1.
+• Each Ai for 1 ≤ k ≤ m consists of terms ∆k(z) and |z〉〈z|. The latter simply copies forward the
+secret key z from round i− 1 to i from private register Wk−1,1 to Wk,1 , ensuring the token always
+knows z. Recall the term ∆k(z), defined in Equation (35), captures the token reading a message ỹ
+from the user in Yk, measuring it in the standard basis (simulated by copying string ỹ to a private
+registerWk,k+1), returning an appropriate response to the user in register Xk+1, and storing a copy
+of the kth response from Σ to the user in the private register Wk,k+1.
+21
+Remark C.2. It is in the definition of the Ai above that it is now formally clear that, although in our
+analysis the token stores additional data in its private register W (in addition to the private key, z), the
+token’s response on incoming kth message ỹ depends solely on register Wk,1, which contains only the
+secret key, z. (This is most easily seen through Equation 35, where the only “bra” vector is 〈ỹ|Yk
+, meaning
+the corresponding response |00〉Xk+1 depends only on ỹ and the string z (since the term 0 depends on the
+summation criterion ỹ ∈ A0(z), which depends on z). Thus, the effective interactive behavior of the token
+is indeed stateless, as desired.
+Combining isometries Ai to get A. Having defined isometries Ai, their product now yields operator
+A from Equation (3) (where we reorder the X andW registers to clarify that incoming message Yk results
+in outgoing message Xk+1):
+A = 1
+2n
+∑
+z∈{0,1}2n
+∑
+ỹ1,...,ỹm∈{0,1}n+1
+|ỹ1r(ỹ1, z)〉Wm,2 ⊗ · · · ⊗ |ỹmr(ỹm, z)〉Wm,m+1⊗ (42)
+|r(ỹm, z)sr(ỹm,z)〉Xm+1〈ỹm|Ym ⊗ |r(ỹm−1, z)sr(ỹm−1,z)〉Xm〈ỹm−1|Ym−1 ⊗ · · ·⊗ (43)
+|r(ỹ1, z)sr(ỹ1,z)〉X2〈ỹ1|Y1 ⊗ |ψz〉X1 ⊗ |z〉Wm,1 , (44)
+where r(ỹ, z) ∈ Σ denotes whether the token accepted or rejected query string ỹ assuming secret key z,
+and s
+r(ỹ,z) ∈ {0, 1} is the secret bit returned by the token corresponding to response r(ỹ, z) ∈ Σ (recall
+we set s
+r(ỹ,z) = 0 if r(ỹ, z) ∈
+{
+0, 1
+}
+).
+Defining operator Q1. In order to next define operatorQ1 from Equation (6), we model what it means
+for a cheating user of the token to “succeed”. As mentioned earlier, this is formalized by having the
+token make a final measurement on its private memory after the protocol concludes, in order to determine
+whether the user has successfully extracted both secret bits via queries. Formally, for convenience, let
+W ′ denote the tensor product of the registers in Wm,k for 2 ≤ k ≤ m+ 1, which hold the values from Σ
+(i.e., the responses r(ỹk−1, z)). Then, a successful user makes at least one correct 0-query and at least
+one correct 1-query (where a j-query refers to a query for choice bit j).
+We define the “accepting” measurement operator Λ1, corresponding to a successful user, as follows.
+Λ1 maps W ′ to itself, and is a projector onto the set of strings with some i 6= j such that W ′i is set to |0〉
+and W ′j is set to |1〉. In other words, Λ1 projects onto set
+T := {t ∈ Σm | t contains at least one 0 and one 1}. (45)
+To use this definition of Λ1 to write down B1, we require further terminology. Define for any t ∈ T and
+fixed key z ∈ {0, 1}2n, the set of all consistent sequences of query strings ỹi ∈ {0, 1}n+1
+as:
+Yt =
+{
+(ỹ, z) ∈ {0, 1}m(n+1) × {0, 1}2n | r(ỹi, z) = ti for ỹi the ith block of (n+ 1) bits in ỹ
+}
+. (46)
+(For example, the second block of (n+ 1) bits of 0n+11n+1 is 1n+1.) In words, Yt is the set of all strings
+ỹ1ỹ2 · · · ỹmz such that the response of the token on query i, r(ỹi, z) ∈ Σ, is consistent with ti. Using this,
+define relation R ⊆ Σm × {0, 1}m(n+1) × {0, 1}2n such that
+(t, ỹ, z) ∈ R if and only if [t ∈ T and (ỹ, z) ∈ Yt] . (47)
+In words, a triple (t, ỹ, z) ∈ R if for a secret key z and query string ỹ, t ∈ T ⊆ Σm encodes the correct
+set of m responses from the token (where recall T is the set of all “successful” response strings).
+Recall from Equation (6) that to define Q1, we required B1, which in turn required Λ1 and A. With
+the latter two in hand, we can now define B1 = (
+√
+Λ1 ⊗ I)A = (Λ1 ⊗ I)A as (where recall ti = r(ỹi, z))
+B1 = 1
+2n
+∑
+(t,ỹ,z)∈R
+|ỹ1t1〉Wm,2 ⊗ · · · ⊗ |ỹmtm〉Wm,m+1⊗ (48)
+|tmstm〉Xm+1〈ỹm|Ym ⊗ |tm−1stm−1〉Xm〈ỹm−1|Ym−1 ⊗ · · · ⊗ |t1st1〉X2〈ỹ1|Y1⊗ (49)
+|ψz〉X1 ⊗ |z〉Wm,1 . (50)
+22
+By definition of the vec mapping (Section 2.1),
+vec(B1) = 1
+2n
+∑
+(t,ỹ,z)∈R
+|ỹ1t1〉Wm,2 ⊗ · · · ⊗ |ỹmtm〉Wm,m+1⊗ (51)
+|tmstm〉Xm+1 |ỹm〉Ym
+⊗ |tm−1stm−1〉Xm
+|ỹm−1〉Ym−1 ⊗ · · · ⊗ |t1st1〉X2 |ỹ1〉Y1⊗ (52)
+|z〉Wm,1 ⊗ |ψz〉X1 . (53)
+Finally, Q1 = TrWm(vec(B1) vec(B1)∗) equals
+Q1 = 1
+22n
+∑
+(t,ỹ,z)∈R
+|tmstm〉〈tmstm |Xm+1
+⊗ |ỹm〉〈ỹm|Ym
+⊗ · · ·⊗ (54)
+|t1st1〉〈t1st1 |X2
+⊗ |ỹ1〉〈ỹ1|Y1
+⊗ |ψz〉〈ψz|X1
+. (55)
+Note that we have crucially used the fact that queries to the token are classical strings. Namely, since the
+token implicitly measures its input in the standard basis (modelled by copying each string ỹi to register
+Wi), the partial trace over Wm annihilates all cross terms in vec(B1) vec(B1)∗. Thus, Q1 is conveniently
+simplified to a mixture over (t, ỹ, z) ∈ R, which is further block-diagonal with respect to all registers
+other than X1.
+For convenience, we permute subsystems to rewrite:
+Q1 = 1
+4n
+∑
+t∈T
+|tmstm〉〈tmstm |Xm+1
+⊗ · · · ⊗ |t1st1〉〈t1st1 |X2
+⊗ (56) ∑
+(ỹ,z)∈Yt
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+⊗ |ψz〉〈ψz|X1
+ . (57)
+The SDP. Having set up all required operators for the GW framework, Equation (7) of Section 2.1
+now yields the optimal probability with which a cheating user can succeed; we reproduce Equation (7)
+below for convenience. Note the subsystem ordering of Q1 below is not that of Equation (57), but rather
+Q1 ∈ Pos(Y1,...,m⊗X1,...,m+1) below; we have omitted explicitly including the permutation effecting this
+reordering to avoid clutter. Also, to account for the slight asymmetry in our protocol (the token sends
+out m+ 1 messages Xi, whereas the user only sends m messages Yi), we add a dummy space Ym+1 = C
+which models an empty (m+ 1)st message from the user to the token.
+min: p (58)
+subject to: Q1 � pRm+1 (59)
+Rk = Pk ⊗ IYk
+for 1 ≤ k ≤ m+ 1 (60)
+TrXk
+(Pk) = Rk−1 for 1 ≤ k ≤ m+ 1 (61)
+R0 = 1 (62)
+Rk ∈ Pos(Y1,...,k ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (63)
+Pk ∈ Pos(Y1,...,k−1 ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (64)
+p ∈ [0, 1] (65)
+In the analysis below, we shall sometimes analyze the optimization above, which we shall denote Γ′.
+However, note that technically it is not yet an SDP due to the quadratic constraint Q1 � pRm+1. It is,
+however, easily seen to be equivalent to the following bona fide SDP Γ:
+min: p (66)
+subject to: Q1 � Rm+1 (67)
+Rk = Pk ⊗ IYk
+for 1 ≤ k ≤ m+ 1 (68)
+TrXk
+(Pk) = Rk−1 for 1 ≤ k ≤ m+ 1 (69)
+R0 = p (70)
+Rk ∈ Pos(Y1,...,k ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (71)
+Pk ∈ Pos(Y1,...,k−1 ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (72)
+23
+Above and henceforth, we use terminology T1···k to denote the space T1 ⊗ · · · ⊗ Tk.
+Warmup: A “trivial” solution. We mentioned in Section 3.4 that obtaining a solution to Γ which
+obtains the trivial bound p ≤ 1 is not trivial. (Sometimes with SDPs, a scaled identity operator gives a
+feasible solution obtaining the desired trivial bound on the objective value; this unfortunately does not
+work here.) Let us hence warm up by demonstrating a solution attaining the trivial bound p ≤ 1.
+Lemma C.3. The SDP Γ has a feasible solution with p = 1.
+Proof. Recall from Equation (57) that
+Q1 = 1
+4n
+∑
+(t,ỹ,z)∈R
+|t, s〉〈t, s|Xm+1···2
+⊗
+(
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+)
+⊗ |ψz〉〈ψz|X1
+, (73)
+where t ∈ T ⊆ Σm and s ∈ {0, 1}m are the resulting query responses and secret bits, respectively. (Recall
+from Equation (57) that, formally, we should write st, as each s depends on t; to save clutter and
+space below, however, we drop the subscript.) Observe that any fixed ỹ ∈ {0, 1}m(n+1) and z ∈ {0, 1}2n
+determine a unique query response string t ∈ Σm (which may or may not be in T ); denote this as t(ỹ, z).
+Therefore,
+Q1 = 1
+4n
+∑
+ỹ,z
+s.t. t(ỹ,z)∈T
+|t(ỹ, z), s〉〈t(ỹ, z), s|Xm+1···2
+⊗
+(
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+)
+⊗ |ψz〉〈ψz|X1
+, (74)
+for T ⊆ Σm defined as in Equation (45). Let us drop the constraint that t(ỹ, z) ∈ T , i.e. choose
+Rm+1 = 1
+4n
+∑
+ỹ,z
+|t(ỹ, z), s〉〈t(ỹ, z), s|Xm+1···2
+⊗
+(
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+)
+⊗ |ψz〉〈ψz|X1
+. (75)
+Clearly, Q1 � p ·Rm+1 for p = 1, since we added positive semidefinite terms to Q1 to get Rm+1. Thus, if
+Rm+1 satisfies the remaining primal constraints, then it has objective function value p = 1.
+To see that Rm+1 satisfies the constraints, clearly Rm+1 has I in register Ym+1 (recall Ym+1 = C, so
+this just means Ym+1 is trivially set to 1). Let us now trace out Xm+1; we require that register Ym−1
+now also contains the identity. For this, TrXm+1(Rm+1) equals:
+1
+4n
+∑
+ỹm,...,ỹ1
+∑
+z
+|tm−1(ỹ, z)sm−1〉〈tm−1(ỹ, z)sm−1|Xm···2
+⊗
+(
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+)
+⊗ |ψz〉〈ψz|X1
+,
+(76)
+where for brevity we use tm−1(ỹ, z)sm−1 to denote the first m− 1 queries. But since we discarded the
+mth symbol of t(ỹ, z), registers Ym and X1 are now independent. Thus, bringing in the sum over ỹm,
+TrXm+1(Rm+1) = 1
+4n
+∑
+ỹm−1,...,ỹ1
+∑
+z
+|tm−1(ỹ, z)sm−1〉〈tm−1(ỹ, z)sm−1|Xm···2
+⊗ (77)
+(
+IYm ⊗ |ỹm−1〉〈ỹm−1|Ym−1
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+)
+⊗ |ψz〉〈ψz|X1
+. (78)
+In a similar fashion, tracing out registers Xm···2 will yield operator
+1
+4n IYm+1···1 ⊗
+∑
+z
+|ψz〉〈ψz|X1
+. (79)
+Finally, tracing out X1 yields IYm···1 , since there are 4n possible quantum key states |ψz〉. Hence, Rm+1
+is a feasible solution.
+24
+An upper bound on the cheating probability. We now give a feasible solution to SDP Γ which
+yields the claimed security against a linear number of queries. Its proof of correctness relies on Lemma C.4,
+which we state and prove first.
+Lemma C.4. For Q1 in Equation (57), λmax(Q1) = 2
+4n
+(
+1 + 1√
+2
+)n
+.
+Proof. The factor of 4−n in the claimed value for λmax(Q1) comes from the 4−n appearing in Equation (57);
+we henceforth thus ignore this 4−n term in this proof by redefining Q1 as 4nQ1. We shall also ignore
+the bi terms in Q1, as they shall play no role in the analysis. Now, since Q1 is block-diagonal (with
+respect to the standard basis) on registers X2,. . . ,Xm+1, Y1,. . . ,Ym, it suffices to characterize the largest
+eigenvalue of any block. We shall say that any fixed t ∈ T and ỹ ∈ {0, 1}m(n+1) defines the (t, ỹ)-block of
+Q1. (Formally, the (t, ỹ)-block of Q1 is given by Π
+t,ỹ
+Q1Π
+t,ỹ
+, where Π
+t,ỹ
+= |t〉〈t|Xm+1···2
+⊗ |ỹ〉〈ỹ|Y .)
+Lower bound. We first show lower bound λmax(Q1) ≥ 2
+4n (1 + 1√
+2 )n. To do so, we demonstrate an
+explicit t, ỹ such that the (t, ỹ)-block has eigenvalue 2
+4n (1 + 1√
+2 )n. Set t = 0m−11 (note t ∈ T ) and
+ỹ = ỹ1 . . . ỹm for ỹ1 = ỹ2 = · · · = ỹm−1 and ỹm−1 6= ỹm (note ỹi ∈ {0, 1}n+1), where the first bit of
+each of ỹ1, . . . , ỹm−1 is 0, and the first bit of ỹm is 1. In words, we are modelling m− 1 successful (and
+identical) 0-queries in the Z-basis, followed by a single successful 1-query in the X-basis. The question
+now is: Given t and ỹ, how many |ψz〉 ∈ (C2)⊗n exist such that (t, ỹ, z) ∈ R?
+To answer this, observe that the token enforces the following set of rules. Fix any i ∈ {1, . . . ,m}, and
+let |ỹi(j)〉 and |ψz(j)〉 denote the jth qubits of ỹi and ψz, respectively. Then we have rules (where H
+denotes the 2× 2 Hadamard matrix, and b denotes the complement of bit b):
+1. If ti = 0, then ∀j ∈ {1, . . . , n}, either |ψz(j)〉 = |ỹi(j)〉 or |ψz(j)〉 ∈ {|+〉, |−〉}.
+2. If ti = 1, then ∀j ∈ {1, . . . , n}, either |ψz(j)〉 = H|ỹi(j)〉 or |ψz(j)〉 ∈ {|0〉, |1〉}.
+3. If ti = 0, then ∃j ∈ {1, . . . , n} such that |ψz(j)〉 = |ỹi(j)〉.
+4. If ti = 1, then ∃j ∈ {1, . . . , n} such that |ψz(j)〉 = H|ỹi(j)〉.
+Recall now that we set t1 = 0 and tm = 1, i.e. the first query was a successful Z-basis query and the
+last query was a successful X-basis query. Applying rules 1 and 2 above thus yields that for all indices
+k, |ψz(k)〉 ∈ {|ỹ1(k)〉, H|ỹm(k)〉}. Moreover, since ỹ1 = ỹ2 = · · · = ỹm−1, it follows that for all k, both
+assignments for |ψz(k)〉 are consistent with t. We conclude that the (t, ỹ)-block of Q1 has the following
+operator in register X1:
+σ =
+n⊗
+k=1
+(|ỹ1(k)〉〈ỹ1(k)|+H|ỹm(k)〉〈ỹm(k)|H) . (80)
+But for any b, c ∈ {0, 1}, λmax(|b〉〈b|+H|c〉〈c|H) = 1+ 1√
+2 (see, e.g., [MVW13]). Thus, λmax(σ) = (1+ 1√
+2 )n,
+as claimed.
+Upper bound. We next show a matching upper bound of λmax(Q1) ≤ 2
+4n (1 + 1√
+2 )n among all (t, ỹ)-
+blocks. For any t ∈ T , there exist indices i 6= j such that ỹi and ỹj are a successful 0- and 1-query,
+respectively. Without loss of generality, assume i = 1 and j = m. Then, as in the previous case, rules 1
+and 2 imply that:
+∀k ∈ {1, . . . , n}, |ψz(k)〉 ∈ {|ỹ1(k)〉, H|ỹm(k)〉}. (81)
+Consider now any ỹi for 1 < i < m, and suppose without loss of generality that ỹi is a 0-query, i.e. its
+first bit is set to 0. There are two cases to analyze:
+• (Case 1: ti = 0) In this case, both query 1 and query i are successful 0-queries; thus, they must
+agree on all secret key bits which were encoded in the Z basis. It follows from Rule 1 that for any
+bit k on which ỹ1 and ỹi disagree, the secret key must have encoded bit k in the X-basis. In other
+words, |ψz(k)〉 = H|ỹm(k)〉 in Equation (81) (i.e. one of the two possibilities is eliminated). (If
+ỹ1 = ỹi, on the other hand, no such additional constraint exists.)
+25
+• (Case 2: ti = 0) In this case, query i is an unsuccessful 0-query. By Rule 3, there exists a bit k on
+which ỹ1 and ỹk disagree, and whose corresponding secret key bit was encoded in the Z basis. In
+other words, |ψz(k)〉 = |ỹ1(k)〉 in Equation (81) (i.e., one of the two possibilities is eliminated).
+The analysis for ỹi being a 1-query is analogous. We conclude that for any (t, ỹ)-block of Q1, the operator
+in register X1 is of the form of σ from Equation (80), except that the some of the indices k may contain an
+operator consisting of only 1 summand (e.g. |ỹ1(k)〉〈ỹ1(k)| instead of |ỹ1(k)〉〈ỹ1(k)|+H|ỹm(k)〉〈ỹm(k)|H).
+Since the omitted summands are all positive semidefinite, however, we conclude the eigenvalue on any
+(t, ỹ)-block is at most the eigenvalue of σ from Equation (80), i.e., at most λmax(Q1) ≤ 2
+4n (1 + 1√
+2 )n, as
+claimed.
+We can now prove the main result of this section.
+Theorem C.5. The SDP Γ has a feasible solution with p ∈ O(22m−0.228n).
+Proof. As Q1 in Equation (57) is block-diagonal in registers X2, . . . ,Xm+1, consider solution (for T from
+Equation (45))
+Rm+1 = 1
+|T |
+∑
+t∈T
+|tmstm〉〈tmstm |Xm+1
+⊗ · · · ⊗ |t1st1〉〈t1st1 |X2
+⊗ IY1,...,m
+⊗ 1
+2n IX1 . (82)
+(Aside: Recall that X1 is an n-qubit register above, hence the 2n renormalization factor.) Note that
+|Σm| = 4m (83)
+{t ∈ Σm | t does not contain a 0} = 3m (84)
+{t ∈ Σm | t does not contain a 1} = 3m (85)
+{t ∈ Σm | t does not contain a 0 or a 1} = 2m. (86)
+Thus, by the inclusion-exclusion principle, |T | = 4m − 2 · 3m + 2m.
+In order for Rm+1 to be feasible, we must pick p such that Q1 � pRm+1. Since Q1 is block-diagonal on
+registers X2 · · · Xm+1, it suffices to identify its block with the largest eigenvalue. In fact, each corresponding
+block for Rm+1 has eigenvalue (|T | 2n)−1. Thus, we must choose p such that
+λmax(Q1) ≤ p
+|T | 2n , (87)
+or equivalently, due to the 4−n factor in Q1,
+p ≥ |T |2n λmax (4nQ1) . (88)
+By Lemma C.4, λmax(Q1) = 2
+4n
+(
+1 + 1√
+2
+)n
+. Thus, we can set
+p = |T |
+2n−1
+(
+1 + 1√
+2
+)n
+≈ |T | · 2(−0.228)n+1, (89)
+and since |T | ∈ Θ(4m), the cheating probability satisfies p ∈ O(22m−0.228n).
+D Simplifying the Gutoski-Watrous SDP and its dual
+D.1 Streamlining the primal and dual
+We now simplify the general SDP (Equation (66) from the Gutoski-Watrous (GW) framework (note this
+simplification is independent of our particular application of the framework for OTMs, i.e. independent
+26
+of Q1), and derive its dual SDP. For convenience, we begin by reproducing the following definitions,
+including the SDP Γ of Equation (66).
+min: p (90)
+subject to: Q1 � Rm+1 (91)
+Rk = Pk ⊗ IYk
+for 1 ≤ k ≤ m+ 1 (92)
+TrXk
+(Pk) = Rk−1 for 1 ≤ k ≤ m+ 1 (93)
+R0 = p (94)
+Rk ∈ Pos(Y1,...,k ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (95)
+Pk ∈ Pos(Y1,...,k−1 ⊗X1,...,k) for 1 ≤ k ≤ m+ 1 (96)
+(t, ỹ, z) ∈ R if and only if [t ∈ T and (ỹ, z) ∈ Yt] (97)
+Q1 = 1
+4n
+∑
+t∈T
+|tmstm〉〈tmstm |Xm+1
+⊗ · · · ⊗ |t1st1〉〈t1st1 |X2
+⊗ (98) ∑
+(ỹ,z)∈Yt
+|ỹm〉〈ỹm|Ym
+⊗ · · · ⊗ |ỹ1〉〈ỹ1|Y1
+⊗ |ψz〉〈ψz|X1
+ . (99)
+Guiding example: m = 3. We explicitly run through the construction for the first non-trivial case,
+m = 3 queries. The construction then generalizes straightforwardly to all m ≥ 2. To begin, using the
+fact that R4 = P4 (since Y4 = C, due to the fact that we assumed message m + 1 from the user to the
+token is empty), Γ can be written:
+min: Tr(P1) (100)
+subject to: Q1 − P4 � 0 (101)
+− P3 ⊗ IY3 + TrX4(P4) � 0 (102)
+− P2 ⊗ IY2 + TrX3(P3) � 0 (103)
+− P1 ⊗ IY1 + TrX2(P2) � 0 (104)
+Above, we relaxed the equalities to inequalities14, which intuitively makes it easier to guess feasible
+solutions to Γ. We also omitted the positive semidefinite constraints on all Pi, since15 P4 � Q1 � 0
+implies Pi � 0 for all i. We now follow the standard Lagrange approach for deriving the dual SDP (see,
+e.g. [BV04]). Labelling equations (101),(102),(103),(104) with dual variables Y1, . . . , Y4, respectively, the
+primal variables in the Lagrange dual function can be isolated as follows:
+Primal variable Factor
+P4 −Y1 + Y2 ⊗ IX4
+P3 −TrY3(Y2) + Y3 ⊗ IX3
+P2 −TrY2(Y3) + Y4 ⊗ IX2
+P1 IX1 − TrY1(Y4)
+14This is without loss of generality, as we briefly justify. Clearly, any feasible solution for equality constraints is also
+feasible for inequality constraints. For the converse direction, suppose a feasible solution for the inequality constraints
+satisfies Pi ⊗ IYi+1 − TrXi+1 (Pi+1) = Λi � 0 for non-zero Λi; pick the smallest such i satisfying this condition. Then,
+redefining P ′i+1 := Pi+1 + |φ〉〈φ|Xi+1
+⊗ Λi � 0 for arbitrary unit vector |φ〉 satisfies Pi ⊗ IYi+1 − TrXi+1 (P ′i+1) = 0, as
+desired. Note we can recurse this trick now from constraint i to i + 1, since if Pi+1 ⊗ IYi+2 − TrXi+2 (Pi+2) � 0, then
+P ′i+1 ⊗ IYi+2 − TrXi+2 (Pi+2) � 0 (similarly for constraint Q1 � Pm+1). Thus, we obtain a new feasible solution for which
+all inequality constraints (except Q1 � Pm+1) hold with equality. Moreover, this process does not alter the assignment for
+P1 (i.e. we never define P ′1); thus the objective function value remains unchanged.
+15In our particular setting, it is clear that Q1 � 0. However, more generally in the GW framework, the operators {Qa}
+defining a measuring co-strategy all satisfy Qa � 0.
+27
+For clarity and as an example, this says the term P4(−Y1 + Y2⊗ IX4) appears in the dual function. This
+yields dual SDP:
+max: Tr(Y1Q1) (105)
+subject to: − Y1 + Y2 ⊗ IX4 = 0 (106)
+− TrY3(Y2) + Y3 ⊗ IX3 = 0 (107)
+− TrY2(Y3) + Y4 ⊗ IX2 = 0 (108)
+IX1 − TrY1(Y4) = 0 (109)
+Y1, Y2, Y3, Y4 � 0 (110)
+Now we make the following simplifications: (1) Replace Y1 with Y2 ⊗ IX4 (follows from Equation (106)),
+(2) drop the constraints Y3, Y4 � 0 (since they are implied by Y2 � 0), and (3) relax the equalities to
+inequalities (which follows similar to the argument for the primal, except here we also require that we
+are maximizing with respect to Y2 below). Hence, we obtain:
+max: Tr(Y2TrX4(Q1)) (111)
+subject to:− TrY3(Y2) + Y3 ⊗ IX3 � 0 (112)
+− TrY2(Y3) + Y4 ⊗ IX2 � 0 (113)
+IX1 − TrY1(Y4) � 0 (114)
+Y2 � 0 (115)
+Note the Y2 � 0 cannot be removed. Intuitively, this is because the constraint IX1 −TrY1(Y4) � 0 alone
+does not imply Y4 � 0. Rather, it is the constraint Y2 � 0 which forces Y4 � 0 here. Indeed, a sanity
+check in CVX for Matlab reveals removing the Y2 � 0 incorrectly yields an unbounded SDP.
+We now repeat the process by taking the dual of the dual to arrive at a simplified primal as follows.
+(Note that the inequalities above now go in the other direction, since we are starting from the dual SDP.)
+Labelling the constraints above R1, . . . , R4, we have factor table:
+Dual variable Factor
+Y2 TrX4(Q1)−R1 ⊗ IY3 +R4
+Y3 TrX3(R1)−R2 ⊗ IY2
+Y4 TrX2(R2)−R3 ⊗ IY1
+This yields primal SDP (after omitting the redundant constraints R1, R2, R3, R4 � 0):
+min: Tr(R3) (116)
+subject to:TrX4(Q1)−R1 ⊗ IY3 � 0 (117)
+TrX3(R1)−R2 ⊗ IY2 � 0 (118)
+TrX2(R2)−R3 ⊗ IY1 � 0 (119)
+Taking the dual of the primal now yields the previous dual; so it seems we are done. Relabelling variables
+for the primal and dual, we obtain the final m = 3 primal and dual SDPs, respectively:
+min: Tr(P1)
+subject to: TrX4(Q1)− P3 ⊗ IY3 � 0
+TrX3(P3)− P2 ⊗ IY2 � 0
+TrX2(P2)− P1 ⊗ IY1 � 0
+max: 〈Y1,TrX4(Q1)〉
+subject to: − TrY3(Y1) + Y2 ⊗ IX3 � 0
+− TrY2(Y2) + Y3 ⊗ IX2 � 0
+− TrY1(Y3) + IX1 � 0
+Y1 � 0
+General case. The derivation above straightforwardly extends to the case of arbitrary m ≥ 2, yielding
+primal and dual SDPs:
+28
+Primal SDP
+min: Tr(P1) (120)
+s.t. TrXm+1(Q1)− Pm ⊗ IYm � 0 (121)
+TrXi+1(Pi+1)− Pi ⊗ IYi � 0 ∀i ∈ {1, . . . ,m− 1} (122)
+(123)
+Dual SDP
+max: 〈Y1,TrXm+1(Q1)〉 (124)
+s.t. − TrYm−i+1(Yi) + Yi+1 ⊗ IXm−i+1 � 0 ∀i ∈ {1, . . . ,m} (125)
+Y1 � 0 (126)
+where note for uniformity in stating the dual constraints, we define Ym+1 := 1 in the dual SDP.
+D.2 An approximately optimal dual solution?
+We now give a simple feasible solution Y := {Yi} to the dual SDP, whose objective function value appears
+to scale roughly as one might expect, if security were to hold for our OTM construction. While we can
+explicitly prove Y is not dual optimal (thus, it only yields a lower bound on the best cheating probability),
+we conjecture it is roughly optimal up to multiplicative factors (stated precisely in Conjecture D.2), which
+would in turn imply security against subexponentially many queries to the token, as desired.
+A candidate dual solution. Recall that each Yi register encodes a message from the receiver to the
+token, consisting of n + 1 qubits. Let d := 2n+1 denote the dimension of this space. Define solution
+Y := {Y1, . . . , Ym} via:
+Yi = 1
+dm−i+1 IY1···m,X1···m . (127)
+Note that Y1 � 0 trivially, and that Equation (125) holds with equality for all i ∈ {1, . . . ,m}. Thus, Y
+is a dual feasible solution. Moreover, it obtains objective function value
+β := Tr(Q1)
+dm
+= |R|
+4ndm , (128)
+where recall we defined relation R in Equation (47) via
+(t, ỹ, z) ∈ R if and only if [t ∈ T and (ỹ, z) ∈ Yt] . (129)
+The cardinality of R. To analyze β, we require an expression for |R|, given as follows.
+Lemma D.1.
+|R| =
+(
+2m(n+1)+n
+) n∑
+α=0
+(
+n
+α
+)[
+1−
+(
+1− 1
+2α+1
+)m
+−
+(
+1− 1
+2n−α+1
+)m
++
+(
+1− 1
+2α+1 −
+1
+2n−α+1
+)m]
+(130)
+Proof. Recall again from Equation (47) that R is defined via
+(t, ỹ, z) ∈ R if and only if [t ∈ T and (ỹ, z) ∈ Yt] , (131)
+where T is the set of successful query responses. For any quantum key |ψz〉, let α denote the number of
+qubits in |ψz〉 which are encoded in the Z basis. Note that fixing α partitions R into n+ 1 sets; let Rα
+denote the set in this partition corresponding to α Z-bits. We analyze each Rα independently first.
+29
+Computing |Rα| for fixed α. Fix any 0 ≤ α ≤ n, and any secret key z ∈ {0, 1}2n with precisely α
+bits in the Z-basis; denote the resulting subset of Rα by Rα,z. We now ask: Conditioned on secret key z
+and token response t ∈ Σ =
+{
+0, 1, 0, 1
+}
+, how many query strings ỹ are consistent with t?
+• Case 1: t = 0. Since we have to get precisely all α bits correctly (i.e. those in the Z basis), and we
+can get up to n− α bits in the X basis incorrect, we have 2n−α choices for ỹ. (Note that the choice
+bit for ỹ is forced to be 0 since t = 0.)
+• Case 2: t = 1. This is analogous to t = 0, except now we can get the α Z-bits incorrect and the
+X-bits must be correct. Thus, there are 2α strings ỹ.
+• Case 3: t = 0. Since the X bits can be anything, and there is precisely one correct setting to the Z
+basis bits, we have 2n−α(2α − 1) = 2n − 2n−α choices for ỹ.
+• Case 4: t = 1. Analogous to the t = 0 case, we have 2α(2n−α − 1) = 2n − 2α strings ỹ.
+As a sanity check, note that summing the four values obtained above yields precisely d = 2n+1 strings ỹ,
+which is the dimension of each register Yi, as desired.
+To now obtain an expression for |Rα,z|, recall that any set of m queries is successful if it contains
+at least one successful 0-query and one successful 1-query. Thus, using the inclusion-exclusion formula
+(intuition to follow):
+|Rα,z| = 2m(n+1) −
+m∑
+a=0
+(
+m
+a
+)
+(2α)a
+[
+m−a∑
+b=0
+(
+m− a
+b
+)(
+2n − 2n−α
+)b (2n − 2α)m−a−b
+]
+(132)
+−
+m∑
+a=0
+(
+m
+a
+)
+(2n−α)a
+[
+m−a∑
+b=0
+(
+m− a
+b
+)(
+2n − 2n−α
+)b (2n − 2α)m−a−b
+]
+(133)
++
+m∑
+b=0
+(
+m
+b
+)(
+2n − 2n−α
+)b (2n − 2α)m−b . (134)
+Above, the first term is the set of all query strings on m messages. The negative terms count the number
+of query strings with no successful 0-queries and no successful 1-queries, respectively. For the former,
+for example, we first choose a positions in which to put the successful 1-queries, and then distribute
+0- and 1-queries among the remaining m − a positions. The final, positive, term, counts the number
+of query strings with neither a successful 0- nor a successful 1-query. Inverting the binomial expansion
+(a+ b)k =
+∑k
+l=0
+(
+k
+l
+)
+albk−l, we can next write:
+|Rα,z| = 2m(n+1) −
+m∑
+a=0
+(
+m
+a
+)
+(2α)a
+[
+(2n − 2n−α) + (2n − 2α)
+]m−a (135)
+−
+m∑
+a=0
+(
+m
+a
+)
+(2n−α)a
+[
+(2n − 2n−α) + (2n − 2α)
+]m−a (136)
++
+[
+(2n − 2n−α) + (2n − 2α)
+]m
+. (137)
+Applying the binomial expansion again yields
+|Rα,z| = 2m(n+1) −
+[
+2α + (2n − 2n−α) + (2n − 2α)
+]m (138)
+−
+[
+2n−α + (2n − 2n−α) + (2n − 2α)
+]m (139)
++
+[
+(2n − 2n−α) + (2n − 2α)
+]m
+. (140)
+Collecting like terms and factoring out 2m(n+1) yields
+|Rα,z| =
+(
+2m(n+1)
+)[
+1−
+(
+1− 1
+2α+1
+)m
+−
+(
+1− 1
+2n−α+1
+)m
++
+(
+1− 1
+2α+1 −
+1
+2n−α+1
+)m]
+. (141)
+Recall this was for any fixed secret key z. But for any fixed 0 ≤ α ≤ n, there are precisely
+(
+n
+α
+)
+2α2n−α =(
+n
+α
+)
+2n choices of z with α qubits encoded in the Z-basis. Thus,
+|Rα| =
+(
+n
+α
+)(
+2m(n+1)+n
+)[
+1−
+(
+1− 1
+2α+1
+)m
+−
+(
+1− 1
+2n−α+1
+)m
++
+(
+1− 1
+2α+1 −
+1
+2n−α+1
+)m]
+. (142)
+30
+The final expression. The claim follows since the sets Rα partition R, and so |R| =
+∑n
+α=0 |Rα|.
+Using Lemma D.1 to heuristically bound β. Recall that our goal is to understand the dual value β
+from Equation (128) obtained by our dual solution, which in turn gives us a lower bound on the optimal
+cheating probability. So let us get a sense of how |R| might scale asymptotically by deriving a heuristic
+approximation. To begin, applying the Hölder inequality to |R| in Lemma D.1 yields
+|R| ≤
+(
+2m(n+1)+2n
+)
+·max
+α
+[
+1−
+(
+1− 1
+2α+1
+)m
+−
+(
+1− 1
+2n−α+1
+)m
++
+(
+1− 1
+2α+1 −
+1
+2n−α+1
+)m]
+(143)
+We shall assume16 the maximum is attained for α = n/2. For this choice of α, recalling that for large x,(
+1− 1
+x
+)m
+≈ e−m
+x , (144)
+in the large n limit the term in the square brackets above is approximately
+[
+1− 2e−
+m
+2n/2+1 + e
+− m
+2n/2
+]
+.
+Hence, we may bound
+|R| ≤
+(
+2m(n+1)+2n
+) [
+1− 2e−
+m
+2n/2+1 + e
+− m
+2n/2
+]
+(145)
+≤
+(
+2m(n+1)
+)
+4n
+[
+1− e−
+m
+2n/2
+]
+(146)
+≈ dm4n m
+2n/2 , (147)
+for m � n, and where in the last line we used d = 2n+1. Plugging this into Equation (128), we get
+precisely the type of behavior we want:
+β = |R|
+4ndm .
+m
+2n/2 . (148)
+Thus, for polynomial m, the objective function value obtained by our dual solution from Equation (127)is
+exponentially small in the number of key bits, n (under the heuristic approximations made in this
+derivation).
+The dual solution is not optimal. Naturally, this raises the question of whether our dual solution
+Y from Equation (127) is optimal. If it were, then a matching primal solution can in principle be found
+(it is easy to see that Slater’s constraint qualification holds for the primal and dual, and so strong duality
+holds), and thus the optimal cheating probability would be approximately that given in Equation (148).
+Unfortunately, Y is provably not dual optimal. Specifically, for m = 2 and n = 1 (2 queries, 1 key
+bit), the primal optimal value is ≈ 0.85 and for m = 3, n = 1, it is17 1 (both numerical values calculated
+via CVX in Matlab). However, evaluating |R| in Lemma D.1 for these values of m and n yields β = 0.25
+and β = 0.46875, respectively.
+Moreover, the heuristic and loose upper bound on the objective function value of Y from Equa-
+tion (148) is asymptotically not optimal18, since the naive cheating strategy in which an adversary in-
+dependently measures each qubit of |ψz〉 in basis
+{
+cos π8 |0〉+ sin π
+8 |1〉,− sin π
+8 |0〉+ cos π8 |1〉
+}
+successfully
+obtains classical key x ∈ {0, 1}n (see Program 1) with probability (cos2 π
+8 )n ≈ 2−0.228n.
+Thus, the dual solution Y of Equation (127) is not optimal. However, as the heuristic derivation of
+β from Equation (148) rather naturally led to the desired type of bound on the cheating probability, we
+conjecture that Y is approximately optimal, in the following sense.
+16This assumption appears to hold in numerical calculations over various values of α.
+17With m = 3 and n = 1, it is trivial to break the OTM construction. Namely, first measure the quantum key |ψz〉 in the
+standard basis and make an honest 0-query to extract the first secret bit. Then, since |ψz〉 is only 1 qubit, we can use brute
+force to make two 1-queries to the token with the only two possible candidate keys in the X-basis, 0, or 1.
+18We thank David Mestel for bringing this to our attention.
+31
+Conjecture D.2. The optimal values for the primal and dual SDPs of Section D.1 are, up to multiplicative
+scaling by some function f(m,n) ∈ O(mc2(1/2−ε)n) for constants c > 0 and 0 < ε < 1/2, equal to
+β = |R|
+4ndm .
+If Conjecture D.2 holds, then our protocol would be secure in the sense that the optimal cheating
+probability would scale as poly(m)/2Θ(n).
+E Proof of Lemma 4.3
+Proof. Observe first that an honest receiver Alice wishing to extract si acts as follows. She applies a
+unitary Ui ∈ U(A⊗B) to get state
+|φ1〉 := Ui|ψ〉AB |0〉C . (149)
+She then measures B in the computational basis and postselects on result y ∈ {0, 1}n, obtaining state
+|φ2〉 := |φy〉A|y〉B |0〉C . (150)
+She now treats y as a “key” for si, i.e., she applies Of to B ⊗ C to obtain her desired bit si, i.e.,
+|φ3〉 := |φy〉A|y〉B |si〉C . (151)
+A malicious receiver Bob wishing to extract s0 and s1 now acts similarly to the rewinding strategy for
+superposition queries. Suppose without loss of generality that s0 has at most ∆ keys. Then, Bob first
+applies U0 to prepare |φ1〉 from Equation (149), which we can express as
+|φ1〉 =
+∑
+y∈{0,1}n
+αy|ψy〉A|y〉B |0〉C . (152)
+for
+∑
+y |αy|
+2 = 1. Since measuring B next would allow us to retrieve s0 in register C with certainty, we
+have that all y appearing in the expansion above satisfy f(y) = s0. Moreover, since s0 has at most ∆
+keys, there exists a key y′ such that |αy′ |2 ≥ 1/∆. Bob now measures B in the computational basis to
+obtain |φ2〉 from Equation (150), obtaining y′ with probability at least 1/∆. Feeding y′ into Of yields s0.
+Having obtained y′, we have that |〈φ1|φ2〉|2 ≥ 1/∆, implying∣∣∣〈ψ|U†0 |φy′〉|y′〉∣∣∣2 ≥ 1/∆, (153)
+i.e., Bob now applies U†0 to recover a state with “large” overlap with initial state |ψ〉.
+To next recover s1, define |ψgood〉 := U1|ψ〉 and |ψapprox〉 := U1U
+†
+0 |φy′〉|y′〉. Bob applies U1 to obtain
+|ψapprox〉 = β1|ψgood〉+ β2|ψ⊥good〉, (154)
+where
+∑
+i |βi|
+2 = 1, 〈ψgood|ψ⊥good〉 = 0, and |β1|2 ≥ 1/∆. Define Πgood :=
+∑
+y∈{0,1}n s.t. f(y)=s1
+|y〉〈y|.
+Then, the probability that measuring B in the computational basis now yields a valid key for s1 is
+〈ψapprox|Πgood|ψapprox〉 ≥ |β1|2 ≥
+1
+∆ , (155)
+where we have used the fact that Πgood|ψgood〉 = |ψgood〉 (since an honest receiver can extract s1 with
+certainty). We conclude that Bob can extract both s0 and s1 with probability at least 1/∆2.
+References
+[AC12] Scott Aaronson and Paul Christiano. “Quantum Money from Hidden Subspaces”. In:
+Proc. 44th Symposium on Theory of Computing (STOC) 2012. 2012, pp. 41–60. doi:
+10.1145/2213977.2213983.
+32
+https://doi.org/10.1145/2213977.2213983
+[BB84] Charles H. Bennett and Gilles Brassard. “Quantum cryptography: Public key distribution
+and coin tossing”. In: International Conference on Computers, Systems and Signal Processing
+(1984), pp. 175–179. doi: 10.1016/j.tcs.2014.05.025.
+[BDS18] Shalev Ben-David and Or Sattath. “Quantum Tokens for Digital Signatures”. arXiv:1609.09047.
+2018.
+[Bea91] Donald Beaver. “Secure Multiparty Protocols and Zero-Knowledge Proof Systems Tolerating a
+Faulty Minority”. In: Journal of Cryptology 4.2 (1991), pp. 75–122. doi: 10.1007/BF00196771.
+[Ben+92] Charles H. Bennett, Gilles Brassard, Claude Crépeau, and Marie-Hélène Skubiszewska.
+“Practical Quantum Oblivious Transfer”. In: CRYPTO’91. Ed. by Joan Feigenbaum. Vol. 576.
+LNCS. Springer, Aug. 1992, pp. 351–366.
+[BFM88] Manuel Blum, Paul Feldman, and Silvio Micali. “Non-Interactive Zero-Knowledge and Its Ap-
+plications”. In: 20th ACM STOC. ACM Press, 1988, pp. 103–112. doi: 10.1145/62212.62222.
+[BGS13] Anne Broadbent, Gus Gutoski, and Douglas Stebila. “Quantum One-Time Programs”. In:
+CRYPTO 2013, Part II. Ed. by Ran Canetti and Juan A. Garay. Vol. 8043. LNCS. Springer,
+Aug. 2013, pp. 344–360. doi: 10.1007/978-3-642-40084-1˙20.
+[BGZ15] Anne Broadbent, Sevag Gharibian, and Hong-Sheng Zhou. “Quantum One-Time Memories
+from Stateless Hardware”. arXiv:1511.01363. 2015.
+[BM82] Manuel Blum and Silvio Micali. “How to Generate Cryptographically Strong Sequences of
+Pseudo Random Bits”. In: 23rd FOCS. IEEE Computer Society Press, Nov. 1982, pp. 112–117.
+doi: 10.1137/0213053.
+[BS16] Anne Broadbent and Christian Schaffner. “Quantum Cryptography Beyond Quantum
+Key Distribution”. In: Designs, Codes and Cryptography 78.1 (2016), pp. 351–382. doi:
+10.1007/s10623-015-0157-4.
+[BV04] Stephen Boyd and Lieven Vandenberghe. Convex Optimization. Cambridge University Press,
+2004.
+[Can00] Ran Canetti. “Security and Composition of Multiparty Cryptographic Protocols”. In: Journal
+of Cryptology 13.1 (2000), pp. 143–202. doi: 10.1007/s001459910006.
+[Can01] Ran Canetti. “Universally Composable Security: A New Paradigm for Cryptographic Pro-
+tocols”. In: 42nd FOCS. IEEE Computer Society Press, Oct. 2001, pp. 136–145. doi:
+10.1109/SFCS.2001.959888.
+[Can+02] Ran Canetti, Yehuda Lindell, Rafail Ostrovsky, and Amit Sahai. “Universally composable
+two-party and multi-party secure computation”. In: 34th ACM STOC. ACM Press, May
+2002, pp. 494–503. doi: 10.1145/509907.509980.
+[Can+07] Ran Canetti, Yevgeniy Dodis, Rafael Pass, and Shabsi Walfish. “Universally Composable
+Security with Global Setup”. In: TCC 2007. Ed. by Salil P. Vadhan. Vol. 4392. LNCS.
+Springer, Feb. 2007, pp. 61–85. doi: 10.1007/978-3-540-70936-7˙4.
+[CGS08] Nishanth Chandran, Vipul Goyal, and Amit Sahai. “New Constructions for UC Secure
+Computation Using Tamper-Proof Hardware”. In: EUROCRYPT 2008. Ed. by Nigel P.
+Smart. Vol. 4965. LNCS. Springer, Apr. 2008, pp. 545–562. doi: 10.5555/1788414.1788445.
+[Cho+14] Seung Geol Choi, Jonathan Katz, Dominique Schröder, Arkady Yerukhimovich, and Hong-
+Sheng Zhou. “(Efficient) Universally Composable Oblivious Transfer Using a Minimal Number
+of Stateless Tokens”. In: TCC 2014. Ed. by Yehuda Lindell. Vol. 8349. LNCS. Springer, Feb.
+2014, pp. 638–662. doi: 10.1007/978-3-642-54242-8˙27.
+[Cho75] Man-Duen Choi. “Completely positive linear maps on complex matrices”. In: Linear Alg. Appl.
+10 (1975), p. 285. doi: 10.1016/0024-3795(75)90075-0.
+[Chu+19] Kai-Min Chung, Marios Georgiou, Ching-Yi Lai, and Vassilis Zikas. “Cryptography with Dis-
+posable Backdoors”. In: Cryptography 3.3 (2019), p. 22. doi: 10.3390/cryptography3030022.
+[CM97] Christian Cachin and Ueli Maurer. “Unconditional security against memory-bounded adver-
+saries”. In: Advances in Cryptology - CRYPTO 1997. LNCS. Springer, 1997, pp. 292–306.
+doi: 10.1007/BFb0052243.
+33
+https://doi.org/10.1016/j.tcs.2014.05.025
+https://arxiv.org/abs/1609.09047
+https://doi.org/10.1007/BF00196771
+https://doi.org/10.1145/62212.62222
+https://doi.org/10.1007/978-3-642-40084-1_20
+https://doi.org/10.1137/0213053
+https://doi.org/10.1007/s10623-015-0157-4
+https://doi.org/10.1007/s001459910006
+https://doi.org/10.1109/SFCS.2001.959888
+https://doi.org/10.1145/509907.509980
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.5555/1788414.1788445
+https://doi.org/10.1007/978-3-642-54242-8_27
+https://doi.org/10.1016/0024-3795(75)90075-0
+https://doi.org/10.3390/cryptography3030022
+https://doi.org/10.1007/BFb0052243
+[Dam+05] Ivan Damg̊ard, Serge Fehr, Louis Salvail, and Christian Schaffner. “Cryptography In the
+Bounded Quantum-Storage Model”. In: Symposium on Foundations of Computer Science -
+FOCS 2005. IEEE, 2005, pp. 449–458. doi: 10.1109/SFCS.2005.30.
+[Dam+09] Ivan Damg̊ard, Serge Fehr, Carolin Lunemann, Louis Salvail, and Christian Schaffner.
+“Improving the Security of Quantum Protocols via Commit-and-Open”. In: CRYPTO 2009.
+Ed. by Shai Halevi. Vol. 5677. LNCS. Springer, Aug. 2009, pp. 408–427. doi: 10.1007/978-3-
+642-03356-8˙24.
+[DNS10] Frédéric Dupuis, Jesper Buus Nielsen, and Louis Salvail. “Secure Two-Party Quantum
+Evaluation of Unitaries against Specious Adversaries”. In: Advances in Cryptology – Proc.
+CRYPTO 2010. LNCS. Springer, 2010, pp. 685–706. doi: 10.1007/978-3-642-14623-7˙37.
+[DNS12] Frédéric Dupuis, Jesper Buus Nielsen, and Louis Salvail. “Actively Secure Two-Party Eval-
+uation of Any Quantum Operation”. In: Advances in Cryptology – Proc. CRYPTO 2012.
+Vol. 7417. LNCS. Springer, 2012, pp. 794–811. doi: 10.1007/978-3-642-32009-5˙46.
+[DS13] Ivan Damg̊ard and Alessandra Scafuro. “Unconditionally Secure and Universally Composable
+Commitments from Physical Assumptions”. In: ASIACRYPT 2013, Part II. Ed. by Kazue
+Sako and Palash Sarkar. Vol. 8270. LNCS. Springer, Dec. 2013, pp. 100–119. doi: 10.1007/978-
+3-642-42045-0˙6.
+[Feh+13] Serge Fehr, Jonathan Katz, Fang Song, Hong-Sheng Zhou, and Vassilis Zikas. “Feasibility and
+Completeness of Cryptographic Tasks in the Quantum World”. In: TCC 2013. Ed. by Amit
+Sahai. Vol. 7785. LNCS. Springer, Mar. 2013, pp. 281–296. doi: 10.1007/978-3-642-36594-2˙16.
+[FK18] Bill Fefferman and Shelby Kimmel. “Quantum vs. Classical Proofs and Subset Verification”.
+In: 43rd International Symposium on Mathematical Foundations of Computer Science (MFCS
+2018). Ed. by Igor Potapov, Paul Spirakis, and James Worrell. Vol. 117. Leibniz International
+Proceedings in Informatics (LIPIcs). Schloss Dagstuhl–Leibniz-Zentrum fuer Informatik,
+2018, 22:1–22:23. doi: 10.4230/LIPIcs.MFCS.2018.22.
+[Gav12] Dmitry Gavinsky. “Quantum Money with Classical Verification”. In: Computational Complex-
+ity (CCC), 2012 IEEE 27th Annual Conference on. 2012, pp. 42–52. doi: 10.1109/CCC.2012.10.
+[GKR08] Shafi Goldwasser, Yael Tauman Kalai, and Guy N. Rothblum. “One-Time Programs”. In:
+CRYPTO 2008. Ed. by David Wagner. Vol. 5157. LNCS. Springer, Aug. 2008, pp. 39–56.
+doi: 10.1007/978-3-540-85174-5˙3.
+[GL91] Shafi Goldwasser and Leonid A. Levin. “Fair Computation of General Functions in Presence
+of Immoral Majority”. In: CRYPTO’90. Ed. by Alfred J. Menezes and Scott A. Vanstone.
+Vol. 537. LNCS. Springer, Aug. 1991, pp. 77–93. doi: 10.1007/3-540-38424-3˙6.
+[GMW87] Oded Goldreich, Silvio Micali, and Avi Wigderson. “How to Play any Mental Game or A
+Completeness Theorem for Protocols with Honest Majority”. In: 19th ACM STOC. Ed. by
+Alfred Aho. ACM Press, May 1987, pp. 218–229. doi: 10.1145/3335741.3335755.
+[Goy+10] Vipul Goyal, Yuval Ishai, Amit Sahai, Ramarathnam Venkatesan, and Akshay Wadia.
+“Founding Cryptography on Tamper-Proof Hardware Tokens”. In: TCC 2010. Ed. by Daniele
+Micciancio. Vol. 5978. LNCS. Springer, Feb. 2010, pp. 308–326. doi: 10.1007/978-3-642-
+11799-2˙19.
+[GW07] Gus Gutoski and John Watrous. “Toward a general theory of quantum games”. In: Proceedings
+of the 39th ACM Symposium on Theory of Computing (STOC 2007). 2007, pp. 565–574. doi:
+10.1145/1250790.1250873.
+[Hei27] Werner Heisenberg. “Schwankungserscheinungen und Quantenmechanik”. In: Zeitschrift fuer
+Physik 40.7 (July 1927), pp. 501–506. issn: 14346001. doi: 10.1007/BF01440827.
+[HSS11] Sean Hallgren, Adam Smith, and Fang Song. “Classical Cryptographic Protocols in a Quantum
+World”. In: CRYPTO 2011. Ed. by Phillip Rogaway. Vol. 6841. LNCS. Springer, Aug. 2011,
+pp. 411–428. doi: 10.1007/978-3-642-22792-9˙23.
+[IPS08] Yuval Ishai, Manoj Prabhakaran, and Amit Sahai. “Founding Cryptography on Oblivious
+Transfer - Efficiently”. In: CRYPTO 2008. Ed. by David Wagner. Vol. 5157. LNCS. Springer,
+Aug. 2008, pp. 572–591. doi: 10.1007/978-3-540-85174-5˙32.
+34
+https://doi.org/10.1109/SFCS.2005.30
+https://doi.org/10.1007/978-3-642-03356-8_24
+https://doi.org/10.1007/978-3-642-03356-8_24
+https://doi.org/10.1007/978-3-642-14623-7_37
+https://doi.org/10.1007/978-3-642-32009-5_46
+https://doi.org/10.1007/978-3-642-42045-0_6
+https://doi.org/10.1007/978-3-642-42045-0_6
+https://doi.org/10.1007/978-3-642-36594-2_16
+https://doi.org/10.4230/LIPIcs.MFCS.2018.22
+https://doi.org/10.1109/CCC.2012.10
+https://doi.org/10.1007/978-3-540-85174-5_3
+https://doi.org/10.1007/3-540-38424-3_6
+https://doi.org/10.1145/3335741.3335755
+https://doi.org/10.1007/978-3-642-11799-2_19
+https://doi.org/10.1007/978-3-642-11799-2_19
+https://doi.org/10.1145/1250790.1250873
+https://doi.org/10.1007/BF01440827
+https://doi.org/10.1007/978-3-642-22792-9_23
+https://doi.org/10.1007/978-3-540-85174-5_32
+[Jam72] Andrzej Jamio lkowski. “Linear Transformations which preserve trace and positive semi-
+definiteness of operators”. In: Rep. Math. Phys. 3 (1972), p. 275. doi: 10.1016/0034-
+4877(72)90011-0.
+[Kat07] Jonathan Katz. “Universally Composable Multi-party Computation Using Tamper-Proof
+Hardware”. In: EUROCRYPT 2007. Ed. by Moni Naor. Vol. 4515. LNCS. Springer, May
+2007, pp. 115–128. doi: 10.1007/978-3-540-72540-4˙7.
+[Kil88] Joe Kilian. “Founding Cryptography on Oblivious Transfer”. In: 20th ACM STOC. ACM
+Press, May 1988, pp. 20–31. doi: 10.1145/62212.62215.
+[KMQ11] Daniel Kraschewski and Jörn Müller-Quade. “Completeness Theorems with Constructive
+Proofs for Finite Deterministic 2-Party Functions”. In: TCC 2011. Ed. by Yuval Ishai.
+Vol. 6597. LNCS. Springer, Mar. 2011, pp. 364–381. doi: 10.1007/978-3-642-19571-6˙22.
+[Kra+14] Daniel Kraschewski, Hemanta K. Maji, Manoj Prabhakaran, and Amit Sahai. “A Full
+Characterization of Completeness for Two-Party Randomized Function Evaluation”. In:
+EUROCRYPT 2014. Ed. by Phong Q. Nguyen and Elisabeth Oswald. Vol. 8441. LNCS.
+Springer, May 2014, pp. 659–676. doi: 10.1007/978-3-642-55220-5˙36.
+[Liu14a] Yi-Kai Liu. “Building one-time memories from isolated qubits”. In: ITCS 2014. Ed. by Moni
+Naor. ACM, Jan. 2014, pp. 269–286. doi: 10.1145/2554797.2554823.
+[Liu14b] Yi-Kai Liu. “Single-Shot Security for One-Time Memories in the Isolated Qubits Model”.
+In: CRYPTO 2014, Part II. Ed. by Juan A. Garay and Rosario Gennaro. Vol. 8617. LNCS.
+Springer, Aug. 2014, pp. 19–36. doi: 10.1007/978-3-662-44381-1˙2.
+[Liu15] Yi-Kai Liu. “Privacy Amplification in the Isolated Qubits Model”. In: EUROCRYPT 2015,
+Part II. Ed. by Elisabeth Oswald and Marc Fischlin. Vol. 9057. LNCS. Springer, Apr. 2015,
+pp. 785–814. doi: 10.1007/978-3-662-46803-6˙26.
+[LPV09] Huijia Lin, Rafael Pass, and Muthuramakrishnan Venkitasubramaniam. “A unified framework
+for concurrent security: universal composability from stand-alone non-malleability”. In:
+41st ACM STOC. Ed. by Michael Mitzenmacher. ACM Press, 2009, pp. 179–188. doi:
+10.1145/1536414.1536441.
+[Mau92] Ueli M. Maurer. “Protocols for Secret Key Agreement by Public Discussion Based on Common
+Information”. In: Advances in Cryptology - CRYPTO 1992. Vol. 740. LNCS. Springer, 1992,
+pp. 461–470. doi: 10.1007/3-540-48071-4˙32.
+[MPR09] Hemanta K. Maji, Manoj Prabhakaran, and Mike Rosulek. “Complexity of Multi-party
+Computation Problems: The Case of 2-Party Symmetric Secure Function Evaluation”. In:
+TCC 2009. Ed. by Omer Reingold. Vol. 5444. LNCS. Springer, Mar. 2009, pp. 256–273. doi:
+10.1007/978-3-642-00457-5˙16.
+[MPR10] Hemanta K. Maji, Manoj Prabhakaran, and Mike Rosulek. “A Zero-One Law for Crypto-
+graphic Complexity with Respect to Computational UC Security”. In: CRYPTO 2010. Ed. by
+Tal Rabin. Vol. 6223. LNCS. Springer, Aug. 2010, pp. 595–612. doi: 10.1007/978-3-642-14623-
+7˙32.
+[MR11] Ueli Maurer and Renato Renner. “Abstract Cryptography”. In: ICS 2011. Ed. by Bernard
+Chazelle. Tsinghua University Press, Jan. 2011, pp. 1–21. doi: 10.1.1.402.6462.
+[MR92] Silvio Micali and Phillip Rogaway. “Secure Computation (Abstract)”. In: CRYPTO’91.
+Ed. by Joan Feigenbaum. Vol. 576. LNCS. Springer, Aug. 1992, pp. 392–404. doi: 10.1007/3-
+540-46766-1˙32.
+[MVW13] Abel Molina, Thomas Vidick, and John Watrous. “Optimal Counterfeiting Attacks and
+Generalizations for Wiesner’s Quantum Money”. In: Theory of Quantum Computation,
+Communication, and Cryptography. Ed. by Kazuo Iwama, Yasuhito Kawano, and Mio Murao.
+Vol. 7582. LNCS. Springer, 2013, pp. 45–64. doi: 10.1007/978-3-642-35656-8˙4.
+[NC00] M. A. Nielsen and I. L. Chuang. Quantum Computation and Quantum Information. Cambridge
+University Press, 2000.
+35
+https://doi.org/10.1016/0034-4877(72)90011-0
+https://doi.org/10.1016/0034-4877(72)90011-0
+https://doi.org/10.1007/978-3-540-72540-4_7
+https://doi.org/10.1145/62212.62215
+https://doi.org/10.1007/978-3-642-19571-6_22
+https://doi.org/10.1007/978-3-642-55220-5_36
+https://doi.org/10.1145/2554797.2554823
+https://doi.org/10.1007/978-3-662-44381-1_2
+https://doi.org/10.1007/978-3-662-46803-6_26
+https://doi.org/10.1145/1536414.1536441
+https://doi.org/10.1007/3-540-48071-4_32
+https://doi.org/10.1007/978-3-642-00457-5_16
+https://doi.org/10.1007/978-3-642-14623-7_32
+https://doi.org/10.1007/978-3-642-14623-7_32
+https://doi.org/10.1.1.402.6462
+https://doi.org/10.1007/3-540-46766-1_32
+https://doi.org/10.1007/3-540-46766-1_32
+https://doi.org/10.1007/978-3-642-35656-8_4
+[Pas+12] Fernando Pastawski, Norman Y Yao, Liang Jiang, Mikhail D Lukin, and J Ignacio Cirac.
+“Unforgeable noise-tolerant quantum tokens”. In: Proceedings of the National Academy of
+Sciences 109.40 (2012), pp. 16079 –16082. doi: 10.1073/pnas.1203552109.
+[PR08] Manoj Prabhakaran and Mike Rosulek. “Cryptographic Complexity of Multi-Party Compu-
+tation Problems: Classifications and Separations”. In: CRYPTO 2008. Ed. by David Wagner.
+Vol. 5157. LNCS. Springer, Aug. 2008, pp. 262–279. doi: 10.1007/978-3-540-85174-5˙15.
+[PS04] Manoj Prabhakaran and Amit Sahai. “New notions of security: Achieving universal compos-
+ability without trusted setup”. In: 36th ACM STOC. Ed. by László Babai. ACM Press, June
+2004, pp. 242–251. doi: 10.1145/1007352.1007394.
+[PW01] Birgit Pfitzmann and Michael Waidner. “A model for asynchronous reactive systems and its
+application to secure message transmission”. In: Proc. 22nd IEEE Symposium on Security &
+Privacy (S&P) 2001. IEEE, 2001, pp. 184–200. doi: 10.1109/SECPRI.2001.924298.
+[Qui+19] Marco Túlio Quintino, Qingxiuxiong Dong, Atsushi Shimbo, Akihito Soeda, and Mio Murao.
+“Reversing Unknown Quantum Transformations: Universal Quantum Circuit for Inverting
+General Unitary Operations”. In: Phys. Rev. Lett. 123 (21 2019), p. 210502. doi: 10.1103/Phys-
+RevLett.123.210502.
+[Ren08] Renato Renner. “Security of Quantum Key Distribution”. PhD thesis. ETH Zürich, Sept.
+2008, pp. 1–127. doi: 10.1142/S0219749908003256.
+[Unr10] Dominique Unruh. “Universally Composable Quantum Multi-party Computation”. In: EU-
+ROCRYPT 2010. Ed. by Henri Gilbert. Vol. 6110. LNCS. Springer, May 2010, pp. 486–505.
+doi: 10.1007/978-3-642-13190-5˙25.
+[Unr13] Dominique Unruh. “Everlasting Multi-party Computation”. In: CRYPTO 2013, Part II.
+Ed. by Ran Canetti and Juan A. Garay. Vol. 8043. LNCS. Springer, Aug. 2013, pp. 380–397.
+doi: 10.1007/978-3-642-40084-1˙22.
+[Unr14] Dominique Unruh. “Revocable Quantum Timed-Release Encryption”. In: EUROCRYPT 2014.
+Ed. by Phong Q. Nguyen and Elisabeth Oswald. Vol. 8441. LNCS. Springer, May 2014,
+pp. 129–146. doi: 10.1007/978-3-642-55220-5˙8.
+[Wat11] John Watrous. Lecture 7: Semidefinite programming. Latest version available at: https:
+//cs.uwaterloo.ca/˜watrous/TQI-notes/. 2011.
+[Wie83] Stephen Wiesner. “Conjugate coding”. In: ACM SIGACT News 15.1 (1983). Original article
+written circa 1970., pp. 78–88. doi: 10.1145/1008908.1008920.
+[Win99] Andreas Winter. “Coding theorem and strong converse for quantum channels”. In: IEEE
+Transactions on Information Theory 45 (1999), pp. 2481–2485. doi: 10.1109/18.796385.
+[WST08] Stephanie Wehner, Christian Schaffner, and Barbara M. Terhal. “Cryptography from Noisy
+Storage”. In: Physical Review Letters 100.22 (June 2008), p. 220502. doi: 10.1103/Phys-
+RevLett.100.220502.
+[WW10] Stephanie Wehner and Andreas Winter. “Entropic uncertainty relations—a survey”. In: New
+J. Phys. 12.2 (2010), p. 025009. issn: 1367-2630. doi: 10.1088/1367-2630/12/2/025009.
+[WZ82] William K. Wootters and Wojciech H. Zurek. “A single quantum cannot be cloned”. In:
+Nature 299.5886 (1982), pp. 802–803. doi: 10.1038/299802a0.
+[Yao82] Andrew Chi-Chih Yao. “Theory and Applications of Trapdoor Functions”. In: 23rd FOCS.
+IEEE Computer Society Press, Nov. 1982, pp. 80–91. doi: 10.1109/SFCS.1982.45.
+36
+https://doi.org/10.1073/pnas.1203552109
+https://doi.org/10.1007/978-3-540-85174-5_15
+https://doi.org/10.1145/1007352.1007394
+https://doi.org/10.1109/SECPRI.2001.924298
+https://doi.org/10.1103/PhysRevLett.123.210502
+https://doi.org/10.1103/PhysRevLett.123.210502
+https://doi.org/10.1142/S0219749908003256
+https://doi.org/10.1007/978-3-642-13190-5_25
+https://doi.org/10.1007/978-3-642-40084-1_22
+https://doi.org/10.1007/978-3-642-55220-5_8
+https://cs.uwaterloo.ca/~watrous/TQI-notes/
+https://cs.uwaterloo.ca/~watrous/TQI-notes/
+https://doi.org/10.1145/1008908.1008920
+https://doi.org/10.1109/18.796385
+https://doi.org/10.1103/PhysRevLett.100.220502
+https://doi.org/10.1103/PhysRevLett.100.220502
+https://doi.org/10.1088/1367-2630/12/2/025009
+https://doi.org/10.1038/299802a0
+https://doi.org/10.1109/SFCS.1982.45
+	1 Introduction
+	2 Preliminaries
+	2.1 The Gutoski-Watrous framework for quantum games
+	3 Feasibility of Quantum OTMs using Stateless Hardware
+	3.1 Construction
+	3.2 Stand-Alone Security Against a Malicious Sender
+	3.3 UC-Security against a corrupt receiver
+	3.3.1 The simulator
+	3.3.2 Analysis
+	3.4 Security analysis for the token: Intuition
+	4 Impossibility Results
+	4.1 Impossibility: Tokens which can be queried in superposition
+	4.2 Impossibility: Tokens with a bounded number of keys
+	A Universal Composition (UC) Framework
+	A.1 Classical UC Model (FOCS:Canetti01)
+	A.2 Quantum UC Model (EC:Unruh10)
+	B Stand-Alone Security in the case of a Malicious Sender
+	C Security Analysis for the Token
+	C.1 Security against a linear number of token queries: Primal SDP
+	D Simplifying the Gutoski-Watrous SDP and its dual
+	D.1 Streamlining the primal and dual
+	D.2 An approximately optimal dual solution?
+	E Proof of Lemma 4.3

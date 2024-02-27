@@ -1,0 +1,1620 @@
+Secure Auctions in the Presence of Rational Adversaries
+Secure Auctions in the Presence of Rational Adversaries
+Chaya Ganesh
+chaya@iisc.ac.in
+Indian Institute of Science
+Bengaluru, India
+Bhavana Kanukurthi
+bhavana@iisc.ac.in
+Indian Institute of Science
+Bengaluru, India
+Girisha Shankar
+girishabs@iisc.ac.in
+Indian Institute of Science
+Bengaluru, India
+ABSTRACT
+Sealed bid auctions are used to allocate a resource among a set
+of interested parties. Traditionally, auctions need the presence of
+a trusted auctioneer to whom the bidders provide their private
+bid values. Existence of such a trusted party is not an assumption
+easily realized in practice. Generic secure computation protocols
+can be used to remove a trusted party. However, generic techniques
+result in inefficient protocols, and typically do not provide fairness
+– that is, a corrupt party can learn the output and abort the protocol
+thereby preventing other parties from learning the output.
+At CRYPTO 2009, Miltersen, Nielsen and Triandopoulos [29],
+introduced the problem of building auctions that are secure against
+rational bidders. Such parties are modeled as self-interested agents
+who care more about maximizing their utility than about learning
+information about bids of other agents. To realize this, they put
+forth a novel notion of information utility and introduce a game-
+theoretic framework that helps analyse protocols while taking into
+account both information utility as well asmonetary utility. Unfortu-
+nately, their construction makes use a of generic MPC protocol and,
+consequently, the authors do not analyze the concrete efficiency of
+their protocol.
+In this work, we construct the first concretely efficient and prov-
+ably secure protocol for First Price Auctions in the rational setting.
+Our protocol guarantees privacy, public verifiability and fairness.
+Inspired by [29], we put forth a solution concept that we call Privacy
+Enhanced Computational Weakly Dominant Strategy Equilibrium
+that captures parties’ privacy and monetary concerns in the game
+theoretic context, and show that our protocol realizes this. We
+believe this notion to be of independent interest.
+Our protocol is crafted specifically for the use case of auctions,
+is simple, using off-the-shelf cryptographic components. Executing
+our auction protocol on commodity hardware with 30 bidders, with
+bids of length 10, our protocol runs to completion in 0.429𝑠 and has
+total communication of 82KB.
+CCS CONCEPTS
+• Security and privacy→ Cryptography.
+KEYWORDS
+Auctions, rational adversaries
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+© 2022 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-1-4503-9450-5/22/11. . . $15.00
+https://doi.org/10.1145/3548606.3560706
+ACM Reference Format:
+Chaya Ganesh, Bhavana Kanukurthi, and Girisha Shankar. 2022. Secure
+Auctions in the Presence of Rational Adversaries. In Proceedings of the 2022
+ACM SIGSAC Conference on Computer and Communications Security (CCS
+’22), November 7–11, 2022, Los Angeles, CA, USA. ACM, New York, NY, USA,
+14 pages. https://doi.org/10.1145/3548606.3560706
+1 INTRODUCTION
+From Psychology, to Economics, to Computer Science, the wide
+perspectives from which auctions have been studied is a testimony
+to their relevance in society. Auctions have been in vogue since
+time immemorial and [24] refers to auctions as early as 500 BC. In
+fact, the Roman Empire was auctioned in the year 193AD! While
+the modern age offers far less dramatic use-cases of auctions, the
+ubiquity and the monetary stakes of the use-cases make up for it.
+Governments accrue huge revenues through spectrum auctions.
+Sotheby’s auctions for the art works have been legendary in terms
+of works that have gone under their hammer. Search engines such
+as Google use auctions to determine which advertisements show
+up for a certain search and in what order. Broadcasting rights for
+sporting events are distributed through auctions. Sports franchisees
+use auctions for player-selection. It would not be too far from the
+truth to say that what can be auctioned is limited only by one’s
+imagination.
+An auction consists of a set of parties (also known as bidders)
+who are bidding for a particular object or resource. Such parties
+submit their bids i.e., the amount at which the parties are willing
+to buy the auctioned item. There are mainly two types of auctions:
+sealed bid and open bid auctions. As the name itself suggests, in
+the case of open bid auctions, the individual bids are not private. In
+sealed bid auctions, we can have either First Price Auctions or Second
+Price Auctions (Vickrey Auctions). In both these types, the winner
+of auction is the bidder who bids the highest. However, the price
+paid by the winner differs in these two auctions. In the case of first
+price auctions, the winner pays the same price that it bid (and won).
+For second price auctions, winner pays the price which equals the
+bid value of second highest bidder. First price auctions (FPA) are
+widely believed to be fairer to everyone involved and companies like
+Google are shifting to FPA for auctioning advertisement spaces [31].
+In this work, we focus on first price sealed bid auctions.
+Traditional auctions take place in presence of a trusted auction-
+eer – to whom the bidders provide their private bid values. However,
+the notion of a trusted party is difficult to realize in practice. In this
+digital age, with e-auctions being the norm, there is a need to re-
+place such a trusted party with a secure protocol that does not leak
+any private bid values. Auctions also tend to be a high-stakes game
+for the participants, offering plenty of incentives for corruption.
+Therefore an auction protocol needs to prevent corrupt behavior
+by being publicly verifiable as well as by having fairness (i.e., if one
+party learns the output, so do the other parties). Maliciously Secure
+ 
+1173
+https://orcid.org/0000-0002-2909-9177
+https://orcid.org/0000-0001-7519-4477
+https://orcid.org/0000-0002-2818-7749
+https://doi.org/10.1145/3548606.3560706
+https://doi.org/10.1145/3548606.3560706
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3548606.3560706&domain=pdf&date_stamp=2022-11-07
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+Multi-Party Computation (MPC) offers a solution to this problem:
+the set of bidders, who may be mutually non-trusting and possibly
+corrupt, may simply run an MPC protocol to compute the maxi-
+mum bid value. However, securing against malicious parties, that
+too using generic MPC, comes at a heavy cost: such solutions incur
+huge computational and communication overheads, making them
+inefficient for use in practice. Fortunately, for typical use-cases of
+auctions, safeguarding against malicious parties, who can deviate
+arbitrarily, is an overkill. Indeed, malicious strategies include those
+that parties may never adopt in real-life.
+At Crypto 2009, Miltersen, Nielsen and Triandopoulos [29], in-
+troduced the problem of building auctions that are secure against
+rational bidders. Such parties are modeled as a self-interested agents
+who care more about the monetary payoffs rather than learning in-
+formation about bids of other agents. An important contribution of
+their work is that they put forth a novel notion of information utility
+and introduce game-theoretic framework that helps us capture the
+interplay between monetary and information utilitites. Formalizing
+this is not trivial because the utility of the same information may
+be different for different parties. Yet, this abstract concept, which
+cannot be concretized, must play a role for privacy-enhanced auc-
+tions in the rational setting and this makes it very challenging. Our
+work is inspired by this beautiful work.
+In this work, we build auctions that are secure against rational
+parties who simply wish to maximize their utility. Our protocol is
+relevant in scenarios when parties can be disincentivized against
+certain kinds of “bad behavior" through monetary penalties. This
+is true, for example, in cases where parties register for the auction
+by paying a security deposit, which they will forego if cheating is
+detected. Prior work such as [8, 29] have considered auctions for ra-
+tional adversaries. We offer a detailed comparison of the efficiency
+improvements of our protocol in Section 1. Additionally, [8] has
+no formal proof of security for rational adversaries. In fact, as the
+authors themselves point out, their work as well as that of [5] has
+some non-trivial leakage – the highest bidder learns information
+where he overtook the bid of the second highest bidder. We offer a
+rigorous, game-theoretic treatment of secure auctions and demon-
+strate that our protocol achieves “Privacy Enhanced Computational
+Dominant Strategy Equilibrium", a notion that we introduce. Intu-
+itively, this means, following the protocol is the preferred option
+for each party, irrespective of what other parties might choose to
+do.
+Our Contribution. We present the first concretely efficient pro-
+tocol for First Price Auction with guaranteed privacy that achieves
+Computational Weakly Dominant Strategy Equilibrium for rational
+parties without the need for any trusted setup. Our protocol ensures
+fairness and is publicly verifiable. We have implemented our pro-
+tocol in C++ with 1840 lines of code. We build upon OpenSSL and
+Boost open source libraries. Running our protocol on a commodity
+hardware (with Intel core i7 processor, 2.9 GH), with 30 bidders, 10
+bit length bids resulted in 0.082MB communication and took 0.429s.
+We have shown that our protocol is concretely more efficient than
+other secure auction implementations, including ones using generic
+MPC protocols.
+Table 1: Comparison of protocols
+Protocol Security model Equilibrium
+SEAL [5] Passive [Non-trivial Leakage] NA
+FAST [8] Malicious [Non-trivial Leak-
+age]
+NA
+a
+Protocol in [29] Rational Computational
+Nash Equilibrium
+Our Protocol Rational Computational
+Weakly Dominant
+Strategy Equilib-
+rium
+a
+The authors analyze incentives for a rational party to cheat, but do not provide
+a proof for rational security.
+1.1 Technical Overview
+The starting point of our work is the work of [5] which in turn
+uses the Anonymous Veto Protocol(AVP) due to [19]. Originally, AVP
+was designed for computing the logical-OR of a set of 1-bit private
+inputs from different parties. This was enhanced to compute the
+maximum bid value (for auctions) in the work of [5]. We call this
+protocol Anonymous Bid Protocol (ABP) and it runs for 𝑙 rounds,
+where 𝑙 is the number of bits in the binary representation of bid
+values. Technically, in ABP, bits are written onto the bulletin board
+in the clear. However, when used in auctions, it is combined with a
+specific encoding scheme for the sake of privacy. Here, we give an
+overview of ABP with the encodings incorporated into it. The high
+level idea of the 𝑙-round ABP protocol [5] is as follows:
+(1) All messages are written onto a bulletin board.
+(2) Parties learn the highest bid value bit-by-bit. Let 𝑏𝑖 𝑗 denote
+𝑃𝑖 ’s bit used in 𝑗th round. We say that a party 𝑃𝑖 drops out
+of the race at the end of round 𝑗 , if 𝑏𝑖 𝑗 = 0 but ∃𝑖′ such that
+𝑃𝑖′ is still in the race and 𝑏𝑖′ 𝑗 = 1. Once a party 𝑃𝑖 drops
+out of the race, it continues to participate in the protocol
+using only the dummy bid value of 𝑏𝑖 𝑗 = 0 for all subsequent
+rounds.
+(3) INPUT SPECIFICATION. Parties specify their inputs in any
+round by encoding it using an encoding scheme with a spe-
+cific structure. Encoding of a 1 bit is 𝑔𝑟 for a random 𝑟 and
+where 𝑔 is the generator of an appropriately chosen group G.
+𝑃𝑖 ’s encoding of 0 is a value with the following property: if
+all parties have a zero bit, then multiplying their encodings
+will result in 1.
+(4) HIGHEST BID EVALUATION. To evaluate, the parties simply
+multiply all the encoded bid values. (This can be done pub-
+licly by any of the parties which has access to the encoded
+bids.) If, in round 𝑗 , the product is 1, then we conclude that all
+parties contributed only 0 in that round and in particular, the
+highest bidder 𝑃𝑖∗ had a 0 in the index 𝑗 i.e., 𝑏𝑖∗ 𝑗 = 0. If the
+product is not 1, then the parties conclude that the highest
+bit value in that round/index is 1. Note that this conclusion
+would indeed be correct, because of a) the property which
+encodings of 0 satisfy and b) the fact that as long as at least
+one party contributes 𝑔𝑟 for a random 𝑟 , the product of the
+encodings is unlikely to be 1.
+ 
+1174
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+At a high level, privacy follows from the Decisional Diffie Hellman
+(DDH) assumption. To use ABP to build secure auctions, [5, 8] do
+the following:
+• All parties commit to their bid values.
+• They run ABP using a bulletin board to communicate and at
+the end of which they learn the highest bid value.
+• The highest bidder opens out his commitment to prove that
+he did have the highest bid.
+• To secure against malicious adversaries, parties simply use
+NIZKs at every step in order to offer a proof of correct com-
+putation.
+There are two issues with this protocol: first, as mentioned before,
+the use of NIZKs makes it inefficient and second, the highest bidder,
+through some offline computations, can learn information on the
+bid of the second highest bidder. The idea to learn this leakage is
+as follows: when a party contributes the encoding of a 1 bit in any
+round 𝑗 , he can easily check if there is any other party who has a 1
+in that round. To do so, instead of the encoding of 1 that he used,
+he computes an encoding of 0 and multiplies it with the rest of the
+encodings that have been written onto the bulletin board. (Note
+that he can do this offline.) If the product is equal to 1, he knows
+that all other parties have contributed encodings of 0. If not, he
+knows that the rest of the parties contributed with encodings of 1.
+The highest bidder, specifically, can use this technique to determine
+the round at the end of which the second highest bidder dropped
+out of the race and learn first few bits of second highest bid.
+Preventing Leakage in [5, 8] Observe that it is the presence
+of the encodings on the bulletin board that allows all parties to
+learn the output (the winning bid value and identity of winner) in
+a publicly verifiable and fair manner. However, in order to prevent
+leakage, we need to prevent the parties from running offline com-
+putations with these encodings. This would in turn require us to
+ensure that the bulletin board does not directly contain encodings.
+At the same time, for the sake of efficiency, we need to avoid using
+generic MPC protocols. Our first idea is to designate a specific party
+as an Evaluator who, in addition to being a bidder, also handles
+the computation of the winning bid. To accomplish this, parties
+send their encodings to the evaluator. This can be accomplished
+by having the parties encrypt their encodings with the evaluator’s
+public key and writing these on to the bulletin board. This will
+enable her to learn the per-round outputs (i.e., the highest bid value
+for that round) and reveal it to the other parties. One obvious issue
+which arises is that this violates fairness but we can enforce by
+imposing monetary penalties if that happens, thereby making that
+strategy irrational for the evaluator .
+A bigger challenge is that if the evaluator has all the encodings,
+then in a case when the evaluator herself has the highest bid, she can
+learn the exact same leakage as before. The following observation
+is critical to our protocol: the evaluator does not need to learn
+the encodings when she is contributing a 1 bit herself as she can
+directly set the output of that round to be 1. We therefore need
+to ensure that she does not learn the encodings in such cases. At
+the same time, the protocol cannot leak to other parties that the
+evaluator has a 1 bit. Oblivious transfer (OT) to the rescue! Parties
+run a maliciously secure OT protocol with the evaluator wherein,
+if the evaluator ’s contributing bit in a round is 0, she learns the
+bit encodings as before and if it is 1, she learns cipher texts of
+dummy messages. This introduces a further problem: the evaluator
+could cheat and ask for real encodings even though she has a 1
+and is still in the race. While this can easily be solved using NIZKs,
+the main challenge is in figuring out how the evaluator can prove
+correctness of computation without relying on NIZKs. One way
+would be to insist that she “open out" all the randomness used in
+her OT computations (as well as the commitment to her input) so
+that the other parties can verify correctness. Revealing her own
+input is a violation of her privacy unless she has the highest bid.
+While this might seem like a deadlock situation, we argue that it is
+not. The key idea of this protocol is that the evaluator only learns
+information if she is the highest bidder. If she is not the highest
+bidder, she learns nothing other than the winning bid by cheating
+and it is fine for the other parties to not detect this cheating. In
+other words, she does not need to give a proof when she is not the
+highest bidder. (We stress that in the entire protocol, we will have
+several cheating strategies which may go undetected; this won’t be
+a problem – we will argue that in all such strategies too, the parties
+will learn nothing extra and have no incentive to cheat.) To sum up,
+when the evaluator is the highest bidder, we will have the evaluator
+offer a proof of correct computation by revealing the randomness
+used to compute the OT messages as well as her input. This does
+not leak any information because the evaluator’s bid is the highest
+and is therefore not a secret!
+As it turns out, even with this modification, the highest bidder
+could potentially learn information by deviating from the protocol.
+Consider a case when a party with the highest bid uses a 0 bit
+instead of a 1 bit in some round 𝑗 . For the rest of the rounds, he
+follows the protocol as though he did not deviate. Now consider
+a scenario where he actually wins – this means that there was
+another party who had a 1 in round 𝑗 . This is auxiliary information
+that he is not authorized to learn. Intuitively, what we need is a
+way for parties to give a proof of correct computation, in the event
+that they win. However, this is complicated by the fact that the
+evaluator does not even use the true input of the party in cases
+where she herself contributes a 1. Added to this, we also need to
+deter the evaluator from cheating. All of this results in a few more
+extensions to the protocol which we describe informally in the
+overview below.
+Finally, it may also be possible that when the evaluator an-
+nounces the winning bid, no one comes forward to claim the bid. In
+such a case, parties need to give a proof of not winning. Note that
+here too we avoid the use of NIZKs by carefully analyzing the ABP
+protocol and providing an alternate proof that will help detect the
+deviating party. Specifically, we observe that there exists a certain
+round, which we call as last decider round in which the winning
+party alone uses a 1-bit code and all other parties use 0-bit codes.
+This means, an honest losing bidder can prove that it indeed used a
+0-bit code during the last decider round. This important observation
+leads us to design proofs of not winning when the winner fails to
+turn up.
+To obtain the final protocol, we carefully consider these and
+many other subtle adversarial strategies. We refer the reader to
+Section 3. For now, we present a high level overview of the protocol.
+ 
+1175
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+Protocol Overview
+(1) Set-up PhaseWe assume that all 𝑃𝑖 who wish to participate
+in the auction, register by paying a deposit 𝐷 .
+(2) Each party 𝑃𝑖 has as input its private valuation of auctioned
+item 𝑣𝑖 , bid value 𝑏𝑖 .
+(3) 𝑃𝑖 receives the public parameters pp.
+(4) Party 𝑃𝑖 commits to its bid value as well as to the hash of
+the randomness he will use in the rest of the protocol. (This
+will be used to verify correctness of 𝑃 ′
+𝑖
+s computations, in the
+event that he claims to have the winning bid.)
+(5) One of the parties is chosen to be the evaluator and we
+denote it by 𝑃𝑒 .
+(6) Computation Phase The protocol proceeds in rounds and
+in each round parties run the ABP protocol as explained
+earlier. This roughly translates to running an OT protocol
+with the evaluator to reveal the encoding of bit it chooses
+to contribute in that round (or the encoding of a dummy bit,
+depending on the evaluator ’s input). We use the terminology
+“contributing to a round" to stress the point that the party
+may not input its true bid value for that index, if it is no
+longer in the race. At the end of this phase, the evaluator
+announces the winning bid.
+(7) If no one comes to claim the winning bid, all parties offer a
+proof of not winning.
+(8) A party, 𝑃𝑤 , claiming to have the winning bid, needs to give
+a proof of winning. First, he opens the commitment to his
+bid value which matches the winning bid. Additionally, he
+engages in a protocol with the evaluator to convince the
+evaluator that he did play honestly. Roughly this consists of
+the following steps:
+(a) 𝑃𝑤 opens his commitments to reveal his bid as well as the
+hash of the randomness. He also shares the randomness
+to enable verification of the hash value.
+(b) The evaluator uses her own randomness which she uses
+to generate the OT first message to check the consistency
+of the encodings. Informally, the evaluator verifies the
+following statement for each round: “When I contributed
+a 0 bit, the prover did send me his true encoding which is
+consistent with the bit in that index. When I contributed
+a 1 bit, the prover’s second message is computed correctly
+as a function of the encoding of his true input, encoding
+of his dummy input, the randomness he committed to, as
+well as my OT first message." This is easy to accomplish
+given that the 𝑃𝑒 has the randomness that 𝑃𝑤 has used to
+generate the OT second message as well as the encodings.
+(9) Whenever a party’s deviation is detected, the protocol ter-
+minates and the party forgoes their deposit.
+Security In order to argue security, we note that a rational party
+may see value in a) increasing his monetary utility by winning the
+protocol and b) learning information about other players’ inputs. To
+capture the latter, we use the term information utility, as introduced
+in [29]. We introduce the notion of Privacy Enhanced Computational
+Weakly Dominant Strategy Equilibrium for analyzing the privacy
+concerns of rational parties. This equilibrium states that as long as
+parties value monetary utility much more than information utility,
+there is no incentive for them to deviate from the protocol. Next,
+for parties that do not deviate from the protocol, we argue privacy
+using the simulation paradigm.
+While there have been works on cryptographic protocols achiev-
+ing Computational Nash Equilibrium (e.g. in [29], [30],[10]), to the
+best of our knowledge, ours is the first work that is able to establish
+Privacy Enhanced Computational weakly Dominant Strategy Equi-
+librium for first price auction protocols. This equilibrium notion
+can be of independent interest.
+1.2 Related Work
+Rational Secure Computation. The work of Dodis, Halevi and
+Rabin [10] initiated a line of work on capturing game-theoretic
+notions of incentives in cryptographic definitions. The work of
+Halpern and Teague [18] considered secret sharing and secure com-
+putation in the rational setting where parties are rational with a
+utility function that is curious-then-exclusive: parties primarily
+prefer to learn the output, and secondarily, if they learn the output,
+have as few other parties learn it as possible. They define a solution
+concept that is a notion of Nash equilibrium. Further works define
+more variants of equilibrium like computational versions, modeling
+collusion etc. [1, 14, 16, 17, 23]. Note that while a Nash equilibrium
+ensures that following the protocol is the optimal strategy when all
+other protocols do follow the strategy, it does not say anything in
+scenarios where parties are likely to deviate. A dominant strategy
+equilibrium, on the other hand, does not care for other people’s
+strategies: following the protocol is indeed the most preferred strat-
+egy for a party regardless of what other people’s strategy might
+be. Biçer, Yildiz and Küpçü make use of Weakly dominant strategy
+for coalitions in their work [6] to develop the notion of m-stability
+which offers threshold security against a coalition of size𝑚. An-
+other rich line of work in rational cryptography is in the Rational
+Protocol Design (RPD) framework introduced by Garay, Katz, Mau-
+rer, Tackmann and Zikas [12] and employed subsequently in [4, 13].
+In RPD, a two-party game is considered between a protocol designer
+and an external attacker where the attacker’s goal is to break secu-
+rity properties, and the goal of the protocol designer is to prevent
+the attacker from succeeding. RPD makes analysis of collusions,
+adaptive corruptions etc. easier, and also provides compositional
+guarantees. In [28], Micali and Rabin discuss prevention of collu-
+sion among bidders, participating in Vickrey auctions. In our work,
+modeling incentive-driven behaviour of mutually distrustful parties
+suffice, and we leave extending our protocol to the RPD framework
+and Vickrey auctions to future work.
+Covert Secure Computation. A different line of work on covert
+adversaries incorporates some types of incentives into crypto-
+graphic definitions. Aumann and Lindell [3] proposed the notion
+of covert adversaries that are in between standard semi-honest and
+malicious adversaries: these are parties who will cheat but only
+as long as they do not get caught cheating. This “fear" of getting
+caught is used to build more efficient protocols [2, 25]. This model
+is also captured by the rational model by defining the utility to be
+negative when an abort happens in an identifiable way.
+ 
+1176
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+Rational Secure Auctions. In the context of auctions, our work
+is closely related to three works. The work of Miltersen, Nielsen
+and Triandopoulos [29] defines a rational security framework for
+auctions and introduce the notion of Privacy enhanced 𝜖-Nash Equi-
+librium. We use the notions of monetary and information utility as
+in [29], but put forth a different solution concept. Additionally, the
+protocol of [29] uses generic MPC techniques secure against active
+corruptions. In our work, however, we take advantage of parties be-
+ing rational, and not arbitrarily malicious, to construct an efficient
+protocol. Our protocol is relevant in scenarios where (a) monetary
+penalties can be imposed on parties whose cheating is detected and
+(b) parties have access to a bulletin board. Both these assumptions
+are easily implementable in practice. Many auctions require parties
+to register with a fee anyway. The latter can be implemented with a
+simple webpage. Needless to say, for blockchain applications of auc-
+tions, the blockchain itself is a bulletin board, and one can simply
+use a smart contract for managing the deposits. On-chain auctions
+have applications in bootstrapping a virtual ASIC blockchain sys-
+tem [11], and in auction-based minting mechanisms [9].
+The work of Bag, Hao, Shahandashti, and Ghosh[5] construct an
+auction scheme called SEAL that works without any trusted party,
+and secure against passive adversaries. David, Gentile, and Pour-
+pouneh propose FAST [8] that builds on SEAL to provide security
+against active adversaries. While FAST also informally argues that
+the protocol enforces honest behavior among rational bidders, a for-
+mal rational security analysis is missing. Like SEAL and FAST, our
+protocol uses the Anonymous Veto Protocol (AVP) introduced in [19]
+as a building block. Our protocol is more efficient than both SEAL
+and FAST, and is proven to be secure in the presence of rational
+adversaries.
+1.3 Comparison with other approaches
+We now compare with other straightforward approaches, highlight
+why they do not work and their shortcomings.
+Timed primitives. Timed commitments [7, 27]: These are an ex-
+tension to standard commitments to have a forced opening phase
+wherein one can solve a time lock puzzle in order to “open" the
+commitment. It may appear that these automatically give sealed bid
+auctions achieving fairness. However, there are several issues with
+this approach. First, they offer privacy only for a certain period
+of time. While this may be sufficient for some applications, our
+auctions are designed to satisfy long-term privacy.
+Covert secure MPC. An MPC protocol is said to be secure against
+covert adversaries if honest parties are guaranteed to detect mali-
+cious behavior. If we impose monetary penalties on such detected
+parties, do we achieve our goal? It does not. First, such protocols
+only detect cheating with a constant probability, and when cheating
+goes undetected, the adversary learns private inputs. Increasing the
+detection probability to be all but negligible, will result in higher
+communication cost in existing covert secure protocols [15]. In the
+vanilla covert mode (without identifiable abort) [34], the detection
+is not necessarily unanimous among honest parties. Therefore, it
+is unclear how the penalty is imposed, and who it is distributed
+to. One way to fix this is by requiring protocols with identifiable
+abort/public verifiability, but these are achieved through the use of
+expensive TLPs.
+However, in general it is non-trivial to modify protocols based
+on timed commitments and covert secure MPC to achieve privacy
+preserving auctions.
+UsingNIZKs.Using NIZKs on top of the ABP protocol as described
+in Section 1.1 makes the protocol inefficient. The languages that
+need NIZKs (like composition of proofs of knowledge of discrete
+log or opening of a Pedersen commitment) admit Sigma proto-
+cols. However, concretely, since a NIZK proof needs to be sent per
+party per round, this adds to the communication overhead (roughly,
+2𝑛ℓ |G| where 𝑛 is the number of parties, ℓ is the bit length of the
+bid and |G| is the size of the group used by the protocol). Prior
+work on auctions, FAST [8] and SEAL [5] do make use of NIZKs in
+their protocols, but are inefficient. Moreover, even with NIZKs, the
+resulting ABP-based protocol admits leakage on the second highest
+bid. Our approach avoids this overhead, results in a reduced number
+of public key operations thus giving better concrete efficiency, and
+provides full privacy.
+2 PRELIMINARIES
+Notation. We denote the security parameter by _. Let G be the
+description of the group of order 𝑞, and 𝑔,𝑔1, ℎ be the generators of
+G. A function negl is said to be negligible if negl(𝑛) < 1/𝑝 (𝑛) for
+all positive polynomial functions 𝑝 (·) and for all 𝑛 > 𝑛0 for some
+𝑛0 ∈ N. We denote Probabilistic Polynomial Time by PPT. We also
+use ≈𝑐 to denote computational indistinguishability between two
+distributions.
+2.1 Equilibrium notions
+We now describe some game theoretic notations and definitions
+used in our work. We assume that there are 𝑛 parties (𝑃1, . . . , 𝑃𝑛)
+participating in a game.
+Definition 2.1 (Normal Form Game [20]). A normal form game is
+a tuple
+{
+{Γ𝑖 }𝑛𝑖=1, {𝑈𝑖 }𝑛𝑖=1
+}
+where for each party 𝑃𝑖 , a set of possible
+actions Γ𝑖 along with a utility function 𝑈𝑖 are specified.
+Depending on its private inputs, each party 𝑃𝑖 uses strategy
+𝜋𝑖 ∈ Γ𝑖 where Γ𝑖 is the space of strategies available for party 𝑃𝑖 ,
+during the game. We also assign utility functions 𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) to
+each party 𝑃𝑖 . These functions represent the perceived utility of
+game for the party. We say that the party 𝑃𝑖 prefers the action 𝜋i
+over action 𝜋i
+′
+if and only if𝑈𝑖 (𝜋i) > 𝑈𝑖 (𝜋i′).
+Definition 2.2 (Dominant Strategy [20]). Given a normal form
+game: {
+{Γ𝑖 }𝑛𝑖=1, {𝑈𝑖 }𝑛𝑖=1
+}
+we say 𝜋𝑖 ∈ Γ𝑖 is a Dominant Strategy if 𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) > 𝑈𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 )
+for all 𝜋𝑖 ≠ 𝜋 ′
+𝑖
+∈ Γ𝑖 and for all 𝜋−𝑖 ∈ Γ−𝑖 .
+Such a strategy 𝜋𝑖 guarantees that the party 𝑃𝑖 can accrue best
+utility among all strategies available to it. In the above case, 𝜋 ′
+𝑖
+is
+also termed as Dominated Strategy. Dominated strategies are typi-
+cally avoided by the rational parties, whereas dominant strategies
+are pursued.
+We also have a weaker notion of Dominant Strategy known as
+Weakly Dominant Strategy.
+ 
+1177
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+Definition 2.3 (Weakly Dominant Strategy [20]). Given a normal
+form game: {
+{Γ𝑖 }𝑛𝑖=1, {𝑈𝑖 }𝑛𝑖=1
+}
+we say 𝜋𝑖 ∈ Γ𝑖 is a Weakly Dominant Strategy if 𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) ≥
+𝑈𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ) for all 𝜋𝑖 ≠ 𝜋 ′
+𝑖
+∈ Γ𝑖 and for all 𝜋−𝑖 ∈ Γ−𝑖 .
+In addition, there exists some 𝜋−𝑖 ∈ Γ−𝑖 such that 𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) >
+𝑈𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ).
+As can be seen, a Weakly Dominated Strategy can realize the
+same utility as the Dominant Strategy for certain strategies.
+Definition 2.4 (Weakly Dominant Strategy Equilibrium (W-DSE) [32]).
+For a normal form game
+{
+{Γ𝑖 }𝑛𝑖=1, {𝑈𝑖 }𝑛𝑖=1
+}
+, the strategy profile
+𝜋 = (𝜋1, . . . , 𝜋𝑛) ∈ Γ is aWeakly Dominant Strategy Equilibrium if
+∀𝑃𝑖 , 𝑖 ∈ [𝑛], 𝜋𝑖 is a Weakly Dominant Strategy for party 𝑃𝑖 .
+A Dominant Strategy Equilibrium, whenever it is present, guar-
+antees that every party has a unique Dominant Strategy available
+to it. Thus, each party can realize maximum utility by adopting
+its Dominant Strategy. Since such a strategy becomes a preferred
+choice for every party in the game, the chosen strategy profile is
+an equilibrium. In our case, we show that every party has a weakly
+dominant strategy – which is to follow the protocol.
+2.2 Building Blocks
+Here we describe some of the key building blocks that we make
+use of in our protocol.
+Definition 2.5 (Commitment scheme). LetM, C, R be the message
+space, commitment space and randomness space respectively.
+A commitment scheme consists of a tuple (Setup,Commit,Open)
+of PPT algorithms where:
+• Setup(1_) → pp generates public parameters pp
+• Commit(pp;𝑚) → (𝑐; 𝑟 ) takes a message𝑚 ∈ M, random-
+ness 𝑟 ∈ R and outputs a commitment 𝑐 ∈ C
+• Open(pp, 𝑐,𝑚, 𝑟 ) → 𝐵 ∈ {0, 1} checks if the commitment 𝑐
+opens to the message𝑚
+The security of commitment scheme guarantees two proper-
+ties: hiding and binding. Informally, the hiding property guarantees
+that for any two messages 𝑚0,𝑚1, no PPT algorithm can distin-
+guish between commitments to𝑚0 and𝑚1. The binding property
+guarantees that no PPT algorithm can open a commitment to two
+different messages. We use the Pedersen Commitment Scheme that
+is computationally binding and perfectly hiding.
+Definition 2.6 (Pedersen Commitment Scheme [33]). The Pedersen
+Commitment Scheme Com instantiates the Commitment Scheme
+defined above as:
+• 𝑐 = Com(𝑚, 𝑟 ) = 𝑔𝑚ℎ𝑟 where𝑚 ∈ Z𝑞 , 𝑟 ←𝑅 Z𝑞 is chosen
+uniformly at random and 𝑐 ∈ G.
+• Open(𝑐,𝑚, 𝑟 ) → 𝐵 ∈ {0, 1} verifies if 𝑐 is indeed the right
+commitment for message𝑚 with opening randomness 𝑟 .
+The Vector Pedersen Commitment Scheme allows one to commit
+tom = (𝑚1, . . . ,𝑚𝑛) ∈ Z𝑛𝑞 as follows: given generators ℎ,𝑔1, . . . , 𝑔𝑛 ,
+such that the discrete logarithm between any two generators is
+unknown, 𝑐 = Com(m, 𝑟 ) = ℎ𝑟
+∏𝑛
+𝑖=1 𝑔
+𝑚𝑖
+𝑖
+.
+Oblivious Transfer. We make use of Oblivious Transfer for se-
+curely sharing messages between parties. Let M,R be the message
+space and randomness space respectively. An OT protocol proceeds
+as follows for two PPT parties 𝑅 and 𝑆 :
+• OT.R1 (𝛼, 𝛽) → (𝑜𝑡𝑟1, 𝑠𝑡𝑎𝑡𝑒) is invoked by 𝑅 with inputs
+𝛼 ∈ {0, 1}, randomness 𝛽 ∈ R. 𝑜𝑡𝑟1 is the first message sent
+by 𝑅 to 𝑆 . 𝑠𝑡𝑎𝑡𝑒 denotes the state of protocol.
+• OT.S(𝑚0,𝑚1, 𝛾) → 𝑜𝑡𝑠 takes messages𝑚0,𝑚1 ∈ M, random-
+ness 𝛾 ∈ R and outputs message to be sent by 𝑆 to 𝑅.
+• OT.R2 (𝑜𝑡𝑠, 𝑠𝑡𝑎𝑡𝑒) →𝑚𝛼 uses the message from 𝑆 and inter-
+nal state to retrieve the message𝑚𝛼 .
+The security of OT protocol ensures that the receiver does not learn
+about𝑚1−𝛼 and sender does not learn about 𝛼 .
+Collision Resistant Hash Function. A collision resistant hash
+function (CRH) is a function family for which it is hard to find
+inputs that map to the same output. More formally, a familyH𝑘 is
+a CRH if for every PPT A, Prhash←H𝑘
+((𝑥1, 𝑥2) ← A(hash) |𝑥1 ≠
+𝑥2, hash(𝑥1) = hash(𝑥2)) ≤ negl(_) where each hash maps ℓ bit
+strings to 𝑘 bit strings.
+Bulletin Board. The Bulletin Board (BB) is an abstraction for au-
+thenticated broadcast channel with memory. In our protocol, parties
+can write messages on to the BB for public consumption. The BB is
+expected to satisfy following properties: (i) Every message written
+on the BB is associated to a party and is readable by all other parties.
+(ii) The messages written on BB are immutable. A bulletin board
+can be realized using blockchains. However, for several real-world
+use cases of auctions – tech auctions, sporting auctions, for exam-
+ple – we might be willing to place a minimal assumption on the
+availability of a bulletin board (a website, for example).
+3 AUCTION PROTOCOL
+We first describe our security model. We then present some build-
+ing blocks used by the protocol followed by a detailed protocol
+specification.
+3.1 Security Model
+We consider rational PPT parties that are not viewed as being
+either honest or corrupt; instead, they are simply rational and are
+motivated by some utility function.
+We are interested in strategies that are self-enforcing – i.e., each
+party chooses such a strategy that there is no incentive to deviate
+from it. In other words, the choice of strategies is an equilibrium.We
+seek a Dominant Strategy Equilibrium for computationally bounded
+parties for non-adaptive strategies. However, such a preference to
+follow the protocol among parties, in itself does not address privacy
+concerns of the parties. We need more guarantees from the protocol
+for addressing privacy. For this, we introduce the notion of Privacy
+Enhanced Computational Weakly Dominant Strategy Equilibrium,
+inspired by the work of [29].
+Definition 3.1 (Privacy Enhanced Computational Weakly Domi-
+nant Strategy Equilibrium). Let (𝑃1, . . . , 𝑃𝑛) be a set of rational PPT
+parties with their respective efficiently computable utility functions
+𝑈𝑖 . Let 𝜋𝑖 ∈ Γ𝑖 be the strategy for 𝑃𝑖 of following Π. Let 𝜋 ′
+𝑖
+∈ Γ𝑖 be
+an arbitrary efficiently computable strategy.
+ 
+1178
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+We say that the protocol Π is a Privacy Enhanced Computational
+Weakly Dominant Strategy Equilibrium if the following hold with
+probability (1 − negl(_)), where _ is the security parameter.
+(1) Π is a Weakly Dominant Strategy Equilibrium; i.e.,
+𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) ≥ 𝑈𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 )
+for all arbitrary efficiently computable 𝜋−𝑖 .
+(2) For every 𝑃𝑖 , there exists a simulator Sim𝑃𝑖 such that the view
+of 𝑃𝑖 in a real execution of the protocol is computationally
+indistinguishable from the output of the simulator:
+ViewΠ
+𝑃𝑖 ,real
+≈𝑐 SimΠ
+𝑃𝑖
+where View𝑃𝑖 ,real is the random variable of the transcript of 𝑃𝑖 in
+protocol Π.
+3.2 Anonymous Bidding Protocol
+In constructing our protocol, we use the Anonymous Bidding Pro-
+tocol (ABP) to compute the highest bid value which is a variation
+of the Anonymous Veto Protocol (AVP) first described in [19] and
+later used with modifications in [5] and [8].
+ABP runs for 𝑙 rounds – where 𝑙 is the number of bits in the
+binary representation of the bid values. The protocol proceeds as
+below:
+• Each bidder 𝑃𝑖 participates in ABP by inputting one bit from
+their bid value at a time. This continues until he is in the
+race. If in a round, there is a bidder who inputs a 1 while the
+party 𝑃𝑖 has 0 in that index, he drops out of the race at the
+end of that round.
+• A party who has lost out on the race, continues to participate
+in the protocol but only contributes a 0 to the rest of the
+computation.
+• Any round 1 ≤ 𝑗 ≤ 𝑙 which has at least one bidder bidding
+a 1 bit is considered as the decider round.
+• Thus, a bidder 𝑃𝑖 uses the bid 𝑑𝑖 𝑗 during round 𝑗 as
+𝑑𝑖 𝑗 =
+
+0, if 𝑃𝑖 is not in race
+or 𝑃𝑖 bid 0 in any of previous decider rounds.
+𝑏𝑖 𝑗 , if 𝑃𝑖 is in the race
+or 𝑃𝑖 bid 1 in all previous decider rounds.
+• Logical OR of all individual bids used in 𝑗th round is evalu-
+ated to be the 𝑗th winning bit. i.e.,
+𝑏𝑤𝑗 =
+𝑛∨
+𝑖=1
+𝑑𝑖 𝑗
+Observe that, decider round 𝑗 has the corresponding winning
+bit 𝑏𝑤𝑗 = 1.
+• Winning bid 𝑏𝑤 is computed as 𝑏𝑤 = 𝑏𝑖1 | | · · · | |𝑏𝑖𝑙
+Wemake use of this protocol for computing the highest bid value.
+Although the ABP protocol has been described above using raw
+bits, for the actual computation, raw bits are not used. Instead we
+make use of encoded bits that hide the actual bit values – thus
+preserving privacy.
+3.3 Bit Encoding Scheme
+In order to ensure the privacy of the bits used during computation,
+we require the bits to be encoded such that no PPT party can distin-
+guish between the encoding of 0 and encoding of 1. For this wemake
+use of Bit Encoding Scheme (BES). This scheme is adopted from [5].
+It follows from the DDH assumption holding in the group G that
+the distributions of 0-bit code and 1-bit code are computationally
+indistinguishable. The encoding and corresponding computation
+on the coded bits are performed as follows:
+(1) Each bidder 𝑃𝑖 , 𝑖 ∈ [𝑛] allocates private keys 𝑥𝑖 𝑗 , 𝑟𝑖 𝑗 ←𝑅 Z𝑞 ,
+𝑖 ∈ [𝑛], 𝑗 ∈ [𝑙]. Public keys 𝑋𝑖 𝑗 = 𝑔𝑥𝑖 𝑗 are published to the
+bulletin board.
+(2) Once public keys from all bidders are available, each bidder
+computes:
+𝑌𝑖 𝑗 =
+∏𝑖−1
+𝑘=1
+𝑋𝑘 𝑗∏𝑛
+𝑘=𝑖+1 𝑋𝑘 𝑗
+(3) Each contributed bit 1 𝑑𝑖 𝑗 is encoded as :𝐵𝑖 𝑗 = BESEncode(𝑑𝑖 𝑗 )
+where
+BESEncode(𝑏𝑖 𝑗 ) =
+{
+0-bit code : 𝑌
+𝑥𝑖 𝑗
+𝑖 𝑗
+if 𝑑𝑖 𝑗 = 0
+1-bit code : 𝑔𝑟𝑖 𝑗 if 𝑑𝑖 𝑗 = 1
+(4) The 𝑗th winning bit is computed as the logical-OR of indi-
+vidual bidding bits 𝑏𝑖 𝑗 for the 𝑗th position: 𝑏𝑤𝑗 =
+∨𝑛
+𝑖=1 𝑏𝑖 𝑗 .
+This is computed using the bit codes as follows:
+𝑏𝑤𝑗 =
+{
+0, if
+∏𝑛
+𝑖=1 𝐵𝑖 𝑗 = 1
+1, if
+∏𝑛
+𝑖=1 𝐵𝑖 𝑗 ≠ 1
+We refer the reader to [5] for proofs establishing the indistinguisha-
+bility of the distributions of 0-code and 1-code which follows from
+DDH.
+3.4 Privacy Preserving First Price Auction
+Protocol
+In this section, we describe the protocol Π for running a First Price
+Auction. For the sake of simplicity, we assume that the bid values
+are all distinct. However, we can easily extend our protocol to
+include a simple tie-breaking mechanism. We also make use of
+fixed value of security deposit amount of 𝐷 for all parties. Since
+most practical auctions have a reserve price, that is the minimum
+bidding amount, the deposit 𝐷 can be chosen to be equal to the
+reserve price of the auction. Of this deposit, 𝐷/2 is used exclusively
+in the last phase of the protocol where the potential winner (who
+claims to have the winning bid) engages with the evaluator to verify
+that he does indeed have the winning bid. The remainder of the
+deposit is something that any party may forfeit if they are caught
+cheating in other parts of the protocol.
+Protocol Specification The protocol for running first price auc-
+tions is specified below. We make use of a maliciously secure OT
+protocol Π𝑂𝑇 : (OT.R1,OT.R2,OT.S).
+We note that selecting public parameters(pp) in our protocol
+does not require any central authority or use of a separate protocol.
+Our pp – comprising of a DDH hard group G, generator 𝑔 – can be
+generated using off-the-shelf parameters as recommended by NIST
+1
+We denote by 𝑑𝑖 𝑗 the bit that a party 𝑃𝑖 contributes or uses in round 𝑗 ; this may or
+may not be equal to 𝑏𝑖 𝑗 which is 𝑃 ′𝑖 s true bid value in index 𝑗
+ 
+1179
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+(e.g. secp256k1 elliptic curve).
+Setup Phase:
+(1) Each party 𝑃𝑖 is initialized with its private valuation of
+auctioned item 𝑣𝑖 , bid value 𝑏𝑖 .
+(2) Each party 𝑃𝑖 registers for the auction by depositing its
+security deposit 𝐷 . In turn 𝑃𝑖 receives the public param-
+eters pp = (𝑞,G, 𝑔, 𝑔1, ℎ).
+(3) The party 𝑃𝑖 samples the private keys 𝑥𝑖 𝑗 , 𝑟𝑖 𝑗 ←𝑅 Z𝑞 ,
+𝑗 ∈ [𝑙]
+(4) 𝑃𝑖 generates a CR hash for the concatenated private ran-
+domness
+• For 𝑖 ≠ 𝑒 , 𝜌i = 𝑥𝑖1 | | · · · | |𝑥𝑖𝑙 | |𝑟𝑖1 | | · · · | |𝑟𝑖𝑙 | |𝛾𝑖1 | | · · · | |𝛾𝑖𝑙 .
+Note that 𝑥𝑖 𝑗 s and 𝑟𝑖 𝑗 s are used to encode bit 0 and
+bit 1, respectively. 𝛾𝑖 𝑗 s are used as randomness for
+generation of OT messages by OT sender 𝑃𝑖 .
+• For 𝑖 = 𝑒 , 𝜌i = 𝑥𝑖1 | | · · · | |𝑥𝑖𝑙 | |𝑟𝑖1 | | · · · | |𝑟𝑖𝑙 | |𝛽11 | | · · · | |𝛽𝑛𝑙 .
+Again, 𝑥𝑖 𝑗 s and 𝑟𝑖 𝑗 s are used to encode bit 0 and bit
+1, respectively. 𝛽𝑘 𝑗 s are used as randomness for gen-
+eration of OT messages by OT receiver (evaluator 𝑃𝑒 )
+while interacting with the party 𝑃𝑘 .
+• 𝐻𝑖 = hash(𝜌𝑖 )
+(5) Party 𝑃𝑖 chooses 𝑅𝑖 ←𝑅 Z𝑞 . Computes commitment
+(as per Definition 2.6) 𝑐𝑖 = Com(𝑏𝑖 , 𝐻𝑖 , 𝑅𝑖 ) = 𝑔𝑏𝑖𝑔
+𝐻𝑖
+1
+ℎ𝑅𝑖 .
+These commitments are written to BB.
+(6) Writes the public keys 𝑋𝑖 𝑗 = 𝑔𝑥𝑖 𝑗 for 1 ≤ 𝑗 ≤ 𝑙 to BB.
+We denote the evaluator by 𝑃𝑒 .
+Computation Phase
+(1) For 𝑗 ∈ [𝑙], each party 𝑃𝑖 chooses his contributing bid-
+ding bit 𝑑𝑖 𝑗 following ABP as specified in §3.2. 𝑃𝑖 gen-
+erates the bit codes 𝐵𝑖 𝑗 ← BESEncode(𝑑𝑖 𝑗 ) (with either
+𝑥𝑖 𝑗 or 𝑟𝑖 𝑗 as appropriate).
+(2) 𝑃𝑒 plays the role of the Receiver in pair-wise OT with all
+other parties 𝑃𝑖 , 𝑖 ≠ 𝑒 , to obtain the bit codes as follows
+for rounds 𝑗 = 1 to 𝑙 :
+• 𝑃𝑒 sets 𝛼 𝑗 = 𝑑𝑒 𝑗 , 𝛽𝑖 𝑗 ←𝑅 Z𝑞 and invokes
+OT.R1 (𝛼 𝑗 , 𝛽𝑖 𝑗 )
+• OT sender 𝑃𝑖 sets 𝑀
+(0)
+𝑖 𝑗
+= 𝐵𝑖 𝑗 , 𝑀
+(1)
+𝑖 𝑗
+←𝑅 G. Samples
+𝛾𝑖 𝑗 ←𝑅 Z𝑞 . 𝑃𝑖 invokes OT.S
+(
+𝑀
+(0)
+𝑖 𝑗
+, 𝑀
+(1)
+𝑖 𝑗
+, 𝛾𝑖 𝑗
+)
+to ob-
+tain 𝐶
+(0)
+𝑖 𝑗
+,𝐶
+(1)
+𝑖 𝑗
+, which are written to BB.
+• When 𝛼 𝑗 = 0, 𝑃𝑒 retrieves the bit code 𝐵𝑖 𝑗 , 𝑖 ≠ 𝑒 from
+OT using OT.R2 (𝐶 (0)𝑖 𝑗
+), computes the bit 𝑏𝑤𝑗 as men-
+tioned in BES description §3.3 and writes the same to
+BB. If the bit 𝑏𝑤𝑗 = 0, 𝑃𝑒 also writes the bit-codes for
+each bidder to the BB as a proof of correct computation
+of 0-bit.
+• When 𝛼 𝑗 = 1, 𝑃𝑒 writes 𝑏𝑤𝑗 = 1 to BB.
+After 𝑙 rounds, the protocol proceeds to Verification
+Phase.
+(3) If any party 𝑃𝑖 fails to write its messages or if 𝑃𝑒 doesn’t
+output the bit 𝑏𝑤𝑗 to BB within 𝜏 time units, they are
+considered to have aborted and protocol proceeds to
+terminate and the deposits are redistributed.
+(4) After 𝑙 rounds, each party constructs the value of win-
+ning bid as 𝑏𝑤 = 𝑏𝑤1 | |𝑏𝑤2 | | . . . | |𝑏𝑤𝑙 .
+ 
+1180
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+Verification Phase – Winner verification
+(1) The party 𝑃𝑤 claims auction by opening its commitment.
+𝑃𝑤 writes 𝑅𝑤 to BB.
+(2) If winner is not the evaluator , 𝑃𝑤 opens its OT sender
+randomness 𝛾𝑤𝑗 for all 𝑗 ∈ [𝑙] and writes the same to
+BB.
+(3) 𝑃𝑤 writes all its private keys 𝑥𝑤𝑗 , 𝑟𝑤𝑗 for rounds 𝑗 ∈ [𝑙]
+to BB.
+(4) Evaluator verifies validity of private randomness:
+𝐻𝑤
+?
+= hash (𝑥𝑖1 | | · · · | |𝑥𝑖𝑙 | |𝑟𝑖1 | | · · · | |𝑟𝑖𝑙 | |𝛾𝑖1 | | · · · | |𝛾𝑖𝑙 )
+(5) Evaluator uses the OT sender randomness 𝛾𝑤𝑗 and 𝐶
+(0)
+𝑖 𝑗
+to retrieve the bit codes used by 𝑃𝑤 during the computa-
+tion phase.
+(6) Evaluator also uses the private keys shared by 𝑃𝑤 to
+compute the bit codes and checks if they match with
+retrieved bit codes. For each 𝑗 ∈ [𝑙]:
+if 𝑏𝑤𝑗 = 1 : 𝐵𝑖 𝑗 = 𝑔𝑟𝑖 𝑗
+if 𝑏𝑤𝑗 = 0 : 𝐵𝑖 𝑗 = 𝑌
+𝑥𝑖 𝑗
+𝑖 𝑗
+,where 𝑌𝑖 𝑗 =
+∏𝑖−1
+𝑘=1
+𝑋𝑘 𝑗∏𝑛
+𝑘=𝑖+1 𝑋𝑘 𝑗
+and 𝑋𝑘 𝑗 is public key for round 𝑗 posted by parties 𝑃𝑘 .
+If there is a match, confirms that 𝑃𝑤 is the winner.
+(7) If there is discrepancy in some round 𝑗 , Evaluator flags
+the same against 𝑃𝑤 . In case there is any rebuttal from
+𝑃𝑤 , then evaluator opens its OT sender randomness 𝛽𝑤𝑗
+during round 𝑗 to prove that 𝑃𝑤 is indeed cheating. In
+such a case, 𝑃𝑤 loses its entire deposit 𝐷 such that, 𝐷/2
+is redistributed among remaining parties and 𝐷/2 is paid
+out to evaluator to compensate for its loss of information
+during rebuttal.
+(8) In case evaluator 𝑃𝑒 is the winner, 𝑃𝑒 opens its OT first
+message randomness 𝛽𝑖 𝑗 for all 𝑖 ∈ [𝑛] \ {𝑒} to prove
+that winning bits are same as those used as choice bits
+of OT.
+Note that if cheating is detected by any of the parties,
+the protocol terminates and the deposits are appropri-
+ately redistributed. If there is no cheating, the protocol
+terminates and 𝑃𝑤 wins the auction.
+Verification Phase – No Claim verification
+(1) If 𝑃𝑤 doesn’t announce itself, each party provides proof
+of not winning for the last decider round 𝑗 to prove that
+it has used 0-bit code in that round.
+(a) Each party 𝑃𝑖 writes its secret key 𝑥𝑖 𝑗 used to generate
+the 0-bit code to BB.
+(b) Evaluator 𝑃𝑒 opens its OT first message to prove that it
+has used choice bit as 0 during round 𝑗 . 𝑃𝑒 also opens
+its OT receiver randomness 𝛽𝑖 𝑗 for each party during
+round 𝑗 .
+(c) Party 𝑃𝑖 , 𝑖 ≠ 𝑒 opens randomness used for sending OT
+messages, 𝛾𝑖 𝑗 . This helps to reconstruct the bit code.
+These values are written to BB.
+(d) 𝑃𝑖 ’s proof can be verified as: Compute 𝑀
+(0)
+𝑖 𝑗
+, use the
+secret key 𝑥𝑖 𝑗 to generate the 0-bit code 𝐵𝑖 𝑗 and check
+if 𝐵𝑖 𝑗
+?
+= 𝑀
+(0)
+𝑖 𝑗
+. 𝑃𝑖 is deemed cheating if the equality
+doesn’t hold.
+(2) If every party 𝑃𝑖 is able to send correct proof of not-
+winning, this means, the computed value 𝑏𝑤 is incorrect.
+This can happen only when 𝑃𝑒 has cheated. Thus, in such
+a case, 𝑃𝑒 is considered to be cheating. The protocol ter-
+minates and the deposits are appropriately redistributed.
+Figure 1: Specification for First Price Auction Protocol Π
+Correctness. We show correctness of our protocol in the full ver-
+sion of paper.
+4 SECURITY AGAINST RATIONAL
+ADVERSARIES
+The security of our construction relies on the DDH assumption as
+well as security of the following building blocks: a) Security of the
+commitment scheme Com, b) Malicious security of the OT protocol
+Π𝑂𝑇 and c) Collision resistance of the hash function hash.
+Our goal, informally, is to show that following properties hold:
+(1) Eqilibrium (Part (1) of Definition 3.1). We first show that
+the dominant strategy is for parties to follow the protocol.
+This property relies on the security of our ABP encoding
+scheme (DDH), security of Pedersen commitments, collision
+resistance of the hash function as well as malicious security
+of the OT protocol .
+(2) Simulation (Part (2) of Definition 3.1). When parties follow
+the protocol, we show privacy using the simulation para-
+digm. Specifically, we show the existence of a simulator such
+that the view of the parties in the real world is indistinguish-
+able from that output by the simulator. Here we use hiding
+property of Pedersen commitments, only semi-honest se-
+curity of the OT protocol and indistinguishability of ABP
+encoding scheme (DDH).
+ 
+1181
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+4.1 Existence of Weakly Dominant Strategy
+Equilibrium (weak DSE)
+We begin by setting some notation.
+• 𝑏𝑖 : Bid value of party 𝑃𝑖 .
+• 𝑣𝑖 : Perceived private valuation of the auction item by 𝑃𝑖 .
+Note that, motivation for 𝑃𝑖 to participate in auction requires
+𝑣𝑖 > 𝑏𝑖 .
+• 𝑢𝑖 : Γ × {0, 1}∗ ↦→ R is the monetary utility function of party
+𝑃𝑖 mapping a strategy and all information on the BB to a
+value.
+• 𝑧𝑖 : Γ × {0, 1}∗ ↦→ R is the information utility function of
+party 𝑃𝑖 mapping a strategy and all information on the BB
+to a value.
+• 𝑈𝑖 : Γ × {0, 1}∗ ↦→ R is the total utility function.
+• C: Set of parties caught deviating.
+A party’s utility function considers the gains or losses incurred
+by the party because of its actions. In addition to monetary con-
+siderations, parties are also curious to learn information about the
+bid values of other parties. For this, we consider a information
+utility function 𝑧𝑖 . The total utility is a linear combination of the
+two components. Parties can have arbitrary privacy concerns (and
+value information differently). However, we assume certain restric-
+tions on 𝑧𝑖 , like not valuing “less” information higher than learning
+“more" information. These are reasonable, since it does not make
+sense to value learning, for instance, first bit of a certain party more
+than learning the first two bits of the same party. Similarly, parties
+do not value positively leaking their own information. Finally, we
+assume that parties value the monetary component of the utilities
+higher than the information component. That is, primarily, they
+want to win the auction; secondarily, they are concerned about
+revealing their information and learning information about other
+parties’ inputs.
+We now consider the monetary utility function of an individual
+party 𝑃𝑖 from participating in Π:
+𝑢𝑖 =
+
+= 𝑣𝑖 − 𝑏𝑖 max(𝑏1, . . . , 𝑏𝑛) = 𝑏𝑖 and 𝑃𝑖 doesn’t deviate
+= 0 max(𝑏1, . . . , 𝑏𝑛) ≠ 𝑏𝑖 and 𝑃𝑖 doesn’t deviate
+= −𝐷/2 𝑃𝑖 deviates and gets caught
+= −𝐷 𝑃𝑒 identifies 𝑃𝑖 ’s cheating
+but 𝑃𝑖 rebuts and loses
+= 𝐷/2 if 𝑖 ≠ 𝑒 , 𝑃𝑒 identifies cheater.
+But cheater does not rebut
+=
+𝐷 | C |
+2(𝑛−|C) | 𝑃𝑖 doesn’t deviate, C is set of parties caught
+deviating
+In an ideal execution with a trusted party, each party 𝑃𝑖 learns
+the winning bid value and the identity of the winning party. Let
+this information be valued at 𝑍𝑖 ∈ R+ by 𝑃𝑖 . By correctness of our
+protocol, the information utility of the honest strategy of following
+the protocol is 𝑍𝑖 . We show that a deviating bidder never realizes
+more utility than when it is not deviating (Lemmas 4.2, 4.1 for
+monetary utility, and Lemma 4.3 for information utility).
+Remark. We emphasize that an evaluator is also a bidder in the
+auction. Hence, all arguments in the security proofs below are
+applicable to evaluator as well. Wherever necessary, the role of
+evaluator and its impact on security are analyzed separately.
+4.2 Strategies for Rational Parties
+During each round of the protocol, a party can choose either a 0-bit
+code, a 1-bit code or choose to abort based on its private random
+coins. A winning bidder not playing evaluator role has a deviat-
+ing strategy incorrectRebuttal. Additionally, if a party is also the
+evaluator (𝑃𝑒 ), it can choose to compute the winning bid correctly
+or incorrectly. Since we are not considering any collusion among
+the parties, such a choice would be independent of choices made
+by other parties. As a result, we have following set of strategies
+available to the parties at the beginning of each round:
+Γ𝑖 = {𝑠0→0, 𝑠0→1, 𝑠1→0, 𝑠1→1, incorrectRebuttal, abort},∀𝑖 ∈ [𝑛] \ 𝑒
+Γ𝑒 ={𝑠0→0, 𝑠0→1, 𝑠1→0, 𝑠1→1, abort, correctCompute,
+incorrectCompute, correctVerify, incorrectVerify}
+where (i)𝑠𝑎→𝑏 denotes that the protocol requires bidder to use a bit
+𝑎 and bidder uses bit 𝑏. (ii)abort: The bidder stops participating in
+the protocol. (iii) correctCompute: The evaluator chooses to com-
+pute the winning bid value correctly. (iv) incorrectCompute: The
+evaluator chooses to compute the winning bid value incorrectly. (v)
+correctVerify: The evaluator chooses to verify winner’s claim cor-
+rectly. (vi) incorrectVerify: The evaluator chooses to verify winner’s
+claim incorrectly. Among these 𝑠0→0, 𝑠1→1, correctCompute and
+correctVerify correspond to honest behavior or no deviation; and,
+𝑠0→1, 𝑠1→0, incorrectRebuttal, incorrectCompute and incorrectVerify
+correspond to deviating strategies.
+We can specify the strategies chosen by a party 𝑃𝑖 for the entire
+auction as 𝜋𝑖 = (𝜋𝑖1, . . . , 𝜋𝑖𝑙 ). Let 𝜋𝑖 𝑗 denote the strategy used by
+𝑃𝑖 while following the protocol during 𝑗th round and 𝜋 ′
+𝑖 𝑗
+denote
+a deviating strategy. Then we have 𝜋𝑖 𝑗 ∈ {𝑠0→0, 𝑠1→1} and 𝜋 ′
+𝑖 𝑗
+∈
+{𝑠0→1, 𝑠1→0, incorrectRebuttal, abort}. Because of its special role,
+the evaluator 𝑃𝑒 has two additional strategies available to it apart
+from the ones available to it as a bidder. Hence,
+𝜋𝑒 𝑗 ∈ {𝑠0→0, 𝑠1→1, correctCompute, correctVerify} and
+𝜋 ′𝑒 𝑗 ∈ {𝑠0→1, 𝑠1→0, incorrectCompute, abort, incorrectVerify}
+For each party 𝑃𝑖 , the choice of strategies by all other parties
+in the auction is denoted by 𝜋−𝑖 . To emphasize the fact that these
+choices by other parties could be either honest or cheating strate-
+gies, we denote it by 𝜋−𝑖 . Every rational bidder’s desire is to achieve
+their maximum utility. This means that, rational bidders will avoid
+any strategy that will push them out of the race. Once a party does
+drop out of the race too, it will avoid strategies which would further
+reduce its utility. (This, for example, is sure to happen if the party
+cheats and is detected.) In the following, we will show that honestly
+following the protocol is the Weakly Dominant Strategy. Utility
+realized as a result of any deviation is no better than what can be
+realized by following the protocol.
+We want to establish that for a rational party, any deviation
+is irrational; i.e., certainly not utility enhancing and potentially
+utility diminishing. We will show this for the two deviations in
+next two Lemmas. Firstly observe that, if any bidder 𝑃𝑖 aborts, the
+ 
+1182
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+bidder gains nothing from its participation in auction. Moreover,
+the bidder ends up forfeiting its security deposit; thus having a
+net negative utility. Hence abort as a strategy is always utility
+decreasing and dominated by non-deviating strategies (either 𝑠0→0
+or 𝑠1→1). Similarly the strategy incorrectRebuttal is not rational
+either. For this, consider a party 𝑃𝑖 who claims win but is correctly
+caught cheating by the evaluator. If 𝑃𝑖 chooses to rebut incorrectly,
+the opening of OT first message randomness by evaluator would
+certainly implicate 𝑃𝑖 making him lose full deposit 𝐷 . On the other
+hand, 𝑃𝑖 can choose to accept the cheating and only lose deposit
+of 𝐷/2. Thus this strategy would not be adopted by any rational
+party.
+We therefore need to focus our attention on only two strategies
+for a regular party 𝑃𝑖 : 𝑠1→0, 𝑠0→1.
+Proof while using Strategy 𝑠1→0 Consider an arbitrary bidder 𝑃𝑖
+who has followed the protocol till some arbitrary round 𝑗 during the
+computation phase and is still in the race. Suppose that 𝑃𝑖 has the
+bit 𝑏𝑖 𝑗 = 1; i.e., 𝑃𝑖 needs to use 1-bit code for computation during
+the 𝑗th round. Suppose 𝑃𝑖 ’s strategy during the round 𝑗 is 𝑠1→0 –
+i.e., uses a 0-bit code instead of 1-bit code during round 𝑗 . For such
+a deviation we establish the following result.
+Lemma 4.1. For any PPT party 𝑃𝑖 , let 𝜋𝑖 be the honest strategy
+profile, and 𝜋 ′
+𝑖
+be the strategy profile in which 𝑃𝑖 deviates using 𝑠1→0
+in some round. Then, assuming that DDH assumption holds in G,
+Com is a secure commitment scheme, and hash is a CRH, the strategy
+𝜋𝑖 weakly dominates the strategy 𝜋 ′
+𝑖
+for all 𝑖 ∈ [𝑛] during all rounds
+as per Definition 2.4.
+Proof. Consider the round 𝑗 where 𝑃𝑖 deviates for the first time
+and uses the deviating strategy 𝑠1→0. Let 𝜋−𝑖 denote strategies
+of parties other than 𝑃𝑖 . Let us consider following cases on the
+winning bid at the end of the protocol
+(1) CASE: Winning Bid = 𝑏𝑖 . It is easy to see that, regardless of
+his subsequent strategies, 𝑃𝑖 will be detected as a cheating
+party and will have negative utility. If he chooses to not
+declare himself the winner, he will be caught during proof
+of not winning (because we assumed unique bids). If he
+declares himself the winner, he will get caught in his post-
+win verification protocol he runs with the evaluator. There’s
+of course a chance that 𝑃𝑖 is the evaluator i.e., 𝑃𝑒 . In this case,
+any cheating is easily detected by as the evaluator will not
+be able to provide a proof of winning.
+(2) CASE: Winning Bid ≠ 𝑏𝑖 . Here we need to consider a few
+cases:
+(a) 𝑃𝑖 was actually the highest bidder. In this case, 𝑃𝑖 would
+have won the auction. It is easy to see that his utility in
+this case is strictly less than what it would have been if
+he was honest.
+(b) 𝑃𝑖 was not the highest bidder and someone gets caught
+for cheating. In this case, either 𝑃𝑖 also gets caught for
+cheating or he doesn’t. In the former case, his utility has
+diminished and in the latter case, his utility is no more
+than what it would have been if he was honest.
+(c) 𝑃𝑖 was not the highest bidder and someone else wins the
+auction. In this case, his utility is no more than what it
+would have been if he was honest.
+To argue that the protocol is a weakly dominant strategy,
+we need to show that there exists a strategy profile for other
+players, where 𝑃 ′
+𝑖
+s utility from following the protocol is
+strictly more than not following it. To see this, consider the
+strategy profile 𝜋−𝑖 wherein every party other than 𝑃𝑖 uses
+the strategy 𝑠1→0 during every round. In this case case if 𝑃𝑖
+chooses to be honest, 𝑃𝑖 is guaranteed to win. On the other
+hand, 𝑃𝑖 ’s deviation would result in either losing the auction
+or getting caught to lose security deposit. Thus in this case,
+𝑢𝑖 (𝜋𝑖 , 𝜋−𝑖 ) > 𝑢𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ).
+Remark.What this lemma demonstrates is that no party has mone-
+tary incentive to deviate using 𝑠1→0 as their first deviating strategy.
+Going forward, we will show this for all strategies and this will
+effectively mean that no party has a monetary incentive to devi-
+ate. □
+Proof while using Strategy 𝑠0→1 Now consider an arbitrary bid-
+der 𝑃𝑖 who deviates for the first time in round 𝑗 and uses the strategy
+𝑠0→1. We show that such a strategy is dominated by the honest
+strategy.
+Lemma 4.2. For any PPT party 𝑃𝑖 , let 𝜋𝑖 be the honest strategy
+profile, and 𝜋 ′
+𝑖
+be the strategy profile in which 𝑃𝑖 deviates for the first
+time in round 𝑗 and uses 𝑠0→1. Then, assuming that DDH assumption
+holds in G, Com is a secure commitment scheme, and hash is a CRH,
+the strategy 𝜋𝑖 weakly dominates the strategy 𝜋 ′
+𝑖
+as per Definition 2.4.
+Proof. Let 𝜋−𝑖 denote strategies of parties other than 𝑃𝑖 . Con-
+sider the round 𝑗 where 𝑃𝑖 has decided to use the deviating strategy
+𝑠0→1 for the first time. We will show that irrespective of the strate-
+gic choices of other bidders, 𝑃𝑖 cannot realize utility better than
+what it would have done without deviation. We will consider the
+following cases:
+The first observation is that whenever a party plays this strategy,
+he will forgo his chances of winning the auction. Even if his “fake”
+bid is the winning bid, he will never be able to prove his claim.
+Therefore, in this case, 𝑃𝑖 will either get caught cheating or he will
+go under the radar, i.e., undetected. With the former, his utility
+diminishes compared to what it would have been if he had played
+honestly. With the latter, his utility is either the same as what it
+would have been if he had been honest (if his “true” bid was never
+the highest bid) or it diminishes (if his “true” bid was actually the
+highest bid).
+To show that following the protocol is a weakly dominant strat-
+egy, we need to show that there exists a strategy profile for other
+players, where 𝑃 ′
+𝑖
+s utility from following the protocol is strictly
+more than not following it. To see this, consider the strategy pro-
+file 𝜋−𝑖 wherein every party other than 𝑃𝑖 uses the strategy 𝑠1→0
+during every round. In this case case if 𝑃𝑖 chooses to be honest,
+𝑃𝑖 is guaranteed to win. On the other hand, 𝑃𝑖 ’s deviation would
+result in either losing the auction or getting caught to lose security
+deposit. Thus in this case, 𝑢𝑖 (𝜋𝑖 , 𝜋−𝑖 ) > 𝑢𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ).
+ 
+1183
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+Remark. To summarize, this lemma demonstrates that no party
+has monetary incentive to deviate using 𝑠0→1 as their first deviating
+strategy. □
+We now show that there is no monetary incentive to deviate for
+𝑃𝑒 . We defer the proof to the full version of paper.
+Lemma 4.3. For PPT evaluator 𝑃𝑒 , let 𝜋𝑒 be the honest strategy
+profile, and 𝜋 ′𝑒 be the strategy profile in which 𝑃𝑒 deviates in round 𝑗
+for the first time and uses incorrectCompute in some round during
+computation phase or using incorrectVerify during verification phase.
+Then, assuming that DDH assumption holds in G, Com is a secure
+commitment scheme, Π𝑂𝑇 is a malicious secure OT implementation
+and hash is a CRH, the strategy 𝜋𝑒 dominates the strategy 𝜋 ′𝑒 . where
+𝜋−𝑖 denotes arbitrary strategies of parties other than 𝑃𝑖 .
+𝑢𝑒 (𝜋𝑒 , 𝜋−𝑒 ) ≥ 𝑢𝑒 (𝜋 ′𝑒 , 𝜋−𝑒 ) ∀𝜋−𝑒 ∈ Γ−𝑒
+Remark. Combining the above lemmas, we have demonstrated
+that no party has a monetary incentive to deviate using strategies
+𝑠0→1, 𝑠1→0, incorrectCompute and incorrectVerify as their first de-
+viating strategy. They may offer information utility which we dis-
+cuss next.
+4.3 Information Utility
+Recall that the information utility realized by 𝑃𝑖 as a result of the
+protocol run without any deviation is 𝑧𝑖 (𝜋𝑖 , 𝜋−𝑖 ) = 𝑍𝑖 . In the follow-
+ing, we show that this is the maximum information utility that any
+bidder can realize, unless the party 𝑃𝑖 is willing to loose monetary
+utility.
+Lemma 4.4. For any PPT party 𝑃𝑖 , let 𝜋𝑖 be the honest strategy pro-
+file, and 𝜋 ′
+𝑖
+be the strategy profile in which 𝑃𝑖 deviates using 𝑠0→1 or
+𝑠1→0 in some round. Let 𝑧𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ) be the information utility gained
+by 𝑃𝑖 using the deviations. Then, assuming that DDH assumption
+holds in G, Com is a secure commitment scheme, and hash is a CRH,
+the information utility realized by 𝑃𝑖 is no more than what it would
+have realized without deviation; i.e.,
+𝑧𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ) ≤ 𝑍𝑖
+(unless 𝑃𝑖 diminishes his monetary utility), where 𝜋−𝑖 denotes arbi-
+trary strategies of parties other than 𝑃𝑖 .
+Due to space constraints, we defer the proof to the full version of
+paper, and provide a high-level idea of the proof here. We make use
+of the fact that deviation using strategy 𝑠1→0 is not rational since
+party has to forego auction to learn the information. On the other
+hand, any deviation with 𝑠0→1 masks the bits used by other bidders.
+Thus we show that any party learns no more information as a result
+of deviation than it would have learnt by following the protocol.
+We also argue that the not-winning-proofs provided in a scenario
+resulting from adversarial action do not divulge any information
+about the bid values.
+PuttingTogether Proof ofRational Security. Lemmas 4.1, 4.2, 4.3
+and 4.4 show that no rational party will deviate from the protocol.
+Together, these establish Part (1) of Definition 3.1.
+Theorem 4.5. Let 𝑃𝑖 , 𝑖 ∈ [𝑛] be any PPT party participating in the
+first price auction, the protocol Π described in Figure 1. Then, assum-
+ing that DDH assumption holds in G, Com is a secure commitment
+scheme, Π𝑂𝑇 is a malicious secure OT implementation and hash is
+a CRH, the protocol Π is a weakly dominant strategy equilibrium as
+per Definition 2.4.
+Proof. For party 𝑃𝑖 , let 𝜋𝑖 denote the strategy to follow the
+protocol, and 𝜋 ′
+𝑖
+denote any arbitrary efficient deviation. Let 𝜋−𝑖 be
+arbitrary efficient strategies of other parties. From Lemmas 4.1, 4.2,
+and 4.3, we have ∀𝜋 ′
+𝑖
+∈ Γ𝑖 ,
+𝑢𝑖 (𝜋𝑖 , 𝜋−𝑖 ) ≥ 𝑢𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 )
+From Lemma 4.4 we have,
+𝑍𝑖 ≥ 𝑧𝑖 (𝜋 ′𝑖 )
+It follows that, for all 𝑃𝑖 ,𝑈𝑖 (𝜋𝑖 , 𝜋−𝑖 ) ≥ 𝑈𝑖 (𝜋 ′𝑖 , 𝜋−𝑖 ),∀𝜋
+′
+𝑖
+∈ Γ𝑖 and
+∀𝜋−𝑖 ∈ Γ−𝑖 . We have that 𝜋𝑖 is a weakly dominant strategy for 𝑃𝑖
+for all 𝑖 . Thus, Π is a Weakly Dominant Strategy Equilibrium. □
+4.4 Privacy Enhanced weak DSE
+Given the equilibrium from Theorem 4.5, to argue privacy, it suf-
+fices to show that nothing beyond the output is learned by parties
+who are non-deviating. We show security of our protocol against
+such semi-honest parties who follow the protocol but might at-
+tempt to learn more information from the protocol transcript, thus
+establishing Part (2) of Definition 3.1. We use the ideal world – real
+world paradigm.
+Theorem 4.6. AssumingCom is secure commitment scheme, DDH
+assumption holds in groupG, Π𝑂𝑇 is a semi-honest secure OT protocol
+and hash is a CRH, protocol Π specified in Figure 1 securely realizes
+the functionality F in the presence of semi-honest adversaries.
+We present the ideal functionality F and the proof in the full
+version of paper.
+The following theorem stating that Π is a Privacy Enhanced Com-
+putational Dominant Strategy Equilibrium, follows as a corollary of
+Theorems 4.5 and 4.6.
+Theorem 4.7. Let 𝑃𝑖 , 𝑖 ∈ [𝑛] be rational parties with respective
+utility functions (𝑈1, . . . ,𝑈𝑛) as described above. Assuming Com is
+a secure commitment scheme, DDH in group G, Π𝑂𝑇 is a maliciously
+secure OT protocol and hash is a CRH, the protocol Π described in Fig-
+ure 1 is a privacy enhanced computational weakly dominant strategy
+equilibrium as per Definition 3.1.
+5 EXPERIMENTAL RESULTS
+Our protocol was implemented in C++ with 1840 lines of code. We
+built upon OpenSSL and Boost open source libraries. The over-
+whelming cost of the protocol is computation over the group (even
+for 30 bidders, the total communication in the protocol was under
+100 KB). Of this, exponentiation over Elliptic curve group using
+the secp256k1 curve forms bulk of the cost. In Table 2, we compare
+the number of exponentiations required by our protocol with other
+prior protocols such as [5, 8] (even though they suffer from non
+trivial leakage). Even so, we observe that our protocol makes 2X
+lesser exponentiation calls than prior works.
+ 
+1184
+Secure Auctions in the Presence of Rational Adversaries CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+Protocol Communication
+Complexitya
+Number of exponen-
+tiations
+SEAL 53𝑛𝑙 |G| 48𝑛𝑙 + 44𝑙
+FAST (9𝑛𝑙 + 10𝑛) |G| 23𝑛𝑙 + 20𝑙 + 8 log 𝑙 + 2
+Protocol
+in [29]
+𝑂 (𝑛3) NA
+b
+Our
+Protocol
+(4𝑛𝑙 + 7𝑙 + 5) |G| 10𝑛𝑙 + 5𝑛 − 9𝑙
+a
+We have assumed that a group element from G is at least twice the size of
+element from Z𝑞
+b
+The work makes use of generic MPC protocols for auction.
+Table 2: Comparison of efficiency of protocols. 𝑙 is the num-
+ber of bits in bid values, 𝑛 is the number of parties partici-
+pating in the auction.
+We implemented our protocol and executed it on a single ma-
+chine with Intel core i7 processor, 2.9 GHz. Figure 2 depicts the
+overall runtime of our protocol as a function of the number of bid-
+ders for different number of bits used to represent the bid values.
+This is plot of average of 3 runs for each number of bidders, with
+number of bidders ranging from 5 − 70.
+Figure 2: Protocol Run time vs number of bidders
+The run time for our protocol𝑇 is a function of number of group
+exponentiations 𝑁 = 10𝑛𝑙 + 5𝑛 − 9𝑙 . For a fixed number of bits 𝑙 ,
+the computation time𝑇 ∝ 𝑛. Thus the run time scales linearly with
+the number of parties. This is corroborated by Figure 2.
+Protocol Data sent
+(in MB)
+Run time
+(in msec)
+SEAL
+(has non-trivial leakage)
+0.509 1010
+MP-SPDZ MASCOT
+(malicious)
+312.2 935
+MP-SPDZ MASCOT
+(semi-honest)
+57.53 189
+MP-SPDZ BMR
+(malicious)
+613.12 2136
+MP-SPDZ BMR
+(semi-honest)
+103.8 225.2
+Our Protocol 0.082 429
+Table 3: Comparison of implementation of protocols for 𝑛 =
+30 parties, 𝑙 = 10 bits used for binary representation of bids.
+The rows indicate the amount of data communicated and
+run time for computing the highest bid value.
+The concrete efficiency of protocols is compared in Table 3.
+Among similar works, we only compare with SEAL implemen-
+tation since a public implementation of FAST is not available. We
+have chosen the values of 𝑛 and 𝑙 to be same as the ones used
+in SEAL implementation – for better comparison. Note however
+that the choice of 𝑙 = 10 need not be a limitation since the bid
+values can always be scaled by a constant factor. We have also
+used Multi-Protocol SPDZ (MP-SPDZ) [21] library to benchmark
+MPC protocols that can evaluate the max value (i.e. identify the
+highest bid value) among a given set of 30 private inputs. The
+MP-SPDZ is an implementation of several MPC protocol variants,
+with a common high-level programming interface. Among these,
+we use MASCOT [22] and BMR [26] protocols in malicious and
+semi-honest security modes for comparison.
+6 CONCLUSION
+We construct a protocol for First Price Auction that is provably
+secure in the rational setting. Our implementation demonstrates
+that our construction is concretely efficient. We introduce the no-
+tion of Privacy Enhanced Computational Weakly Dominant Strat-
+egy Equilibrium as a solution concept, which we believe can be
+used to construct and analyse other cryptographic protocols. Our
+work leaves open several interesting questions about extending
+the protocol to other flavors of auctions such as Vickrey auctions,
+multi-unit auctions; and analysing other adversarial models like
+adaptive strategies, and colluding rational parties.
+ACKNOWLEDGMENTS
+The research of the first author was supported by Core Research
+Grant CRG/ 2020/ 004488, SERB, Department of Science and Tech-
+nology, India and a Google India Faculty Research Award. The re-
+search of the second author was supported, in part, by a Microsoft
+Collaborative Research Grant.
+ 
+1185
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Chaya Ganesh, Bhavana Kanukurthi, & Girisha Shankar
+REFERENCES
+[1] Ittai Abraham, DannyDolev, Rica Gonen, and Joseph Y. Halpern. 2006. Distributed
+computing meets game theory: robust mechanisms for rational secret sharing
+and multiparty computation. In 25th ACM PODC, Eric Ruppert and Dahlia Malkhi
+(Eds.). ACM, 53–62. https://doi.org/10.1145/1146381.1146393
+[2] Gilad Asharov and Claudio Orlandi. 2012. Calling Out Cheaters: Covert Security
+with Public Verifiability. InASIACRYPT 2012 (LNCS, Vol. 7658), XiaoyunWang and
+Kazue Sako (Eds.). Springer, Heidelberg, 681–698. https://doi.org/10.1007/978-3-
+642-34961-4_41
+[3] Yonatan Aumann and Yehuda Lindell. 2007. Security Against Covert Adversaries:
+Efficient Protocols for Realistic Adversaries. In TCC 2007 (LNCS, Vol. 4392), Salil P.
+Vadhan (Ed.). Springer, Heidelberg, 137–156. https://doi.org/10.1007/978-3-540-
+70936-7_8
+[4] Christian Badertscher, Juan A. Garay, Ueli Maurer, Daniel Tschudi, and Vassilis
+Zikas. 2018. But Why Does It Work? A Rational Protocol Design Treatment of
+Bitcoin. In EUROCRYPT 2018, Part II (LNCS, Vol. 10821), Jesper Buus Nielsen and
+Vincent Rijmen (Eds.). Springer, Heidelberg, 34–65. https://doi.org/10.1007/978-
+3-319-78375-8_2
+[5] Samiran Bag, Feng Hao, Siamak F Shahandashti, and Indranil Ghosh Ray. 2019.
+SEAL: Sealed-bid auction without auctioneers. IEEE Transactions on Information
+Forensics and Security 15 (2019), 2042–2052.
+[6] Osman Biçer, Burcu Yildiz, and Alptekin Küpçü. 2021. m-Stability: Threshold
+Security Meets Transferable Utility. In Proceedings of the 2021 on Cloud Computing
+Security Workshop. 73–82.
+[7] Dan Boneh and Moni Naor. 2000. Timed Commitments. In CRYPTO 2000 (LNCS,
+Vol. 1880), Mihir Bellare (Ed.). Springer, Heidelberg, 236–254. https://doi.org/10.
+1007/3-540-44598-6_15
+[8] Bernardo David, Lorenzo Gentile, and Mohsen Pourpouneh. 2022. FAST: fair auc-
+tions via secret transactions. In International Conference on Applied Cryptography
+and Network Security. Springer, 727–747.
+[9] Dominic Deuber, Nico Döttling, Bernardo Magri, Giulio Malavolta, and Sri Ar-
+avinda Krishnan Thyagarajan. 2020. Minting Mechanism for Proof of Stake
+Blockchains. In ACNS 20, Part I (LNCS, Vol. 12146), Mauro Conti, Jianying Zhou,
+Emiliano Casalicchio, and Angelo Spognardi (Eds.). Springer, Heidelberg, 315–334.
+https://doi.org/10.1007/978-3-030-57808-4_16
+[10] Yevgeniy Dodis, Shai Halevi, and Tal Rabin. 2000. A cryptographic solution to a
+game theoretic problem. In Annual International Cryptology Conference. Springer,
+112–130.
+[11] Chaya Ganesh, Claudio Orlandi, Daniel Tschudi, and Aviv Zohar. 2021. Virtual
+ASICs: Generalized Proof-of-Stake Mining in Cryptocurrencies. In Data Privacy
+Management, Cryptocurrencies and Blockchain Technology - ESORICS 2021 Inter-
+national Workshops, DPM 2021 and CBT 2021, Darmstadt, Germany, October 8,
+2021, Revised Selected Papers. Springer, 173–191.
+[12] Juan A. Garay, Jonathan Katz, Ueli Maurer, Björn Tackmann, and Vassilis
+Zikas. 2013. Rational Protocol Design: Cryptography against Incentive-Driven
+Adversaries. In 54th FOCS. IEEE Computer Society Press, 648–657. https:
+//doi.org/10.1109/FOCS.2013.75
+[13] Juan A. Garay, Jonathan Katz, Björn Tackmann, and Vassilis Zikas. 2015. How
+Fair is Your Protocol? A Utility-based Approach to Protocol Optimality. In 34th
+ACM PODC, Chryssis Georgiou and Paul G. Spirakis (Eds.). ACM, 281–290. https:
+//doi.org/10.1145/2767386.2767431
+[14] S. Dov Gordon and Jonathan Katz. 2006. Rational Secret Sharing, Revisited. In
+SCN 06 (LNCS, Vol. 4116), Roberto De Prisco and Moti Yung (Eds.). Springer,
+Heidelberg, 229–241. https://doi.org/10.1007/11832072_16
+[15] Vipul Goyal, Payman Mohassel, and Adam Smith. 2008. Efficient Two Party
+and Multi Party Computation Against Covert Adversaries. In EUROCRYPT 2008
+(LNCS, Vol. 4965), Nigel P. Smart (Ed.). Springer, Heidelberg, 289–306. https:
+//doi.org/10.1007/978-3-540-78967-3_17
+[16] Joseph Y. Halpern. 2008. Beyond nash equilibrium: solution concepts for the 21st
+century. In 27th ACM PODC, Rida A. Bazzi and Boaz Patt-Shamir (Eds.). ACM,
+1–10. https://doi.org/10.1145/1400751.1400752
+[17] Joseph Y. Halpern and Rafael Pass. 2010. Game Theory with Costly Computation:
+Formulation and Application to Protocol Security. In ICS 2010, Andrew Chi-Chih
+Yao (Ed.). Tsinghua University Press, 120–142.
+[18] Joseph Y. Halpern and Vanessa Teague. 2004. Rational secret sharing and mul-
+tiparty computation: Extended abstract. In 36th ACM STOC, László Babai (Ed.).
+ACM Press, 623–632. https://doi.org/10.1145/1007352.1007447
+[19] Feng Hao and Piotr Zieliński. 2006. A 2-round anonymous veto protocol. In
+International Workshop on Security Protocols. Springer, 202–211.
+[20] Jonathan Katz. 2008. Bridging Game Theory and Cryptography: Recent Results
+and Future Directions (Invited Talk). In TCC 2008 (LNCS, Vol. 4948), Ran Canetti
+(Ed.). Springer, Heidelberg, 251–272. https://doi.org/10.1007/978-3-540-78524-
+8_15
+[21] Marcel Keller. 2020. MP-SPDZ: A versatile framework for multi-party com-
+putation. In Proceedings of the 2020 ACM SIGSAC conference on computer and
+communications security. 1575–1590.
+[22] Marcel Keller, Emmanuela Orsini, and Peter Scholl. 2016. MASCOT: Faster
+Malicious Arithmetic Secure Computation with Oblivious Transfer. In ACM CCS
+2016, Edgar R. Weippl, Stefan Katzenbeisser, Christopher Kruegel, Andrew C.
+Myers, and Shai Halevi (Eds.). ACM Press, 830–842. https://doi.org/10.1145/
+2976749.2978357
+[23] Gillat Kol and Moni Naor. 2008. Cryptography and Game Theory: Designing
+Protocols for Exchanging Information. In TCC 2008 (LNCS, Vol. 4948), Ran Canetti
+(Ed.). Springer, Heidelberg, 320–339. https://doi.org/10.1007/978-3-540-78524-
+8_18
+[24] Vijay Krishna. 2009. Auction Theory. (2009).
+[25] Yehuda Lindell. 2013. Fast Cut-and-Choose Based Protocols for Malicious and
+Covert Adversaries. In CRYPTO 2013, Part II (LNCS, Vol. 8043), Ran Canetti and
+Juan A. Garay (Eds.). Springer, Heidelberg, 1–17. https://doi.org/10.1007/978-3-
+642-40084-1_1
+[26] Yehuda Lindell, Benny Pinkas, Nigel P Smart, and Avishay Yanai. 2019. Efficient
+constant-round multi-party computation combining BMR and SPDZ. Journal of
+Cryptology 32, 3 (2019), 1026–1069.
+[27] Giulio Malavolta and Sri Aravinda Krishnan Thyagarajan. 2019. Homomorphic
+Time-Lock Puzzles and Applications. Cryptology ePrint Archive, Report 2019/635.
+https://eprint.iacr.org/2019/635.
+[28] Silvio Micali and Michael O. Rabin. 2014. Cryptography miracles, secure auctions,
+matching problem verification. Commun. ACM 57, 2 (2014), 85–93. https:
+//doi.org/10.1145/2574871
+[29] Peter BroMiltersen, Jesper Buus Nielsen, and Nikos Triandopoulos. 2009. Privacy-
+Enhancing Auctions Using Rational Cryptography. In CRYPTO 2009 (LNCS,
+Vol. 5677), Shai Halevi (Ed.). Springer, Heidelberg, 541–558. https://doi.org/
+10.1007/978-3-642-03356-8_32
+[30] Atsuko Miyaji and Mohammad Shahriar Rahman. 2012. Privacy-preserving set
+operations in the presence of rational parties. In 2012 26th International Conference
+on Advanced Information Networking and Applications Workshops. IEEE, 869–874.
+[31] Ben Morrisroe. 2022. What Will Google’s First Price Auction Mean For Publish-
+ers. https://www.publift.com/blog/what-will-googles-first-price-auction-mean-
+for-publishers.
+[32] Yadati Narahari. 2014. Game theory and mechanism design. Vol. 4. World Scien-
+tific.
+[33] Torben P. Pedersen. 1992. Non-Interactive and Information-Theoretic Secure
+Verifiable Secret Sharing. In CRYPTO’91 (LNCS, Vol. 576), Joan Feigenbaum (Ed.).
+Springer, Heidelberg, 129–140. https://doi.org/10.1007/3-540-46766-1_9
+[34] Peter Scholl, Mark Simkin, and Luisa Siniscalchi. 2021. Multiparty computation
+with covert security and public verifiability. Cryptology ePrint Archive (2021).
+ 
+1186
+https://doi.org/10.1145/1146381.1146393
+https://doi.org/10.1007/978-3-642-34961-4_41
+https://doi.org/10.1007/978-3-642-34961-4_41
+https://doi.org/10.1007/978-3-540-70936-7_8
+https://doi.org/10.1007/978-3-540-70936-7_8
+https://doi.org/10.1007/978-3-319-78375-8_2
+https://doi.org/10.1007/978-3-319-78375-8_2
+https://doi.org/10.1007/3-540-44598-6_15
+https://doi.org/10.1007/3-540-44598-6_15
+https://doi.org/10.1007/978-3-030-57808-4_16
+https://doi.org/10.1109/FOCS.2013.75
+https://doi.org/10.1109/FOCS.2013.75
+https://doi.org/10.1145/2767386.2767431
+https://doi.org/10.1145/2767386.2767431
+https://doi.org/10.1007/11832072_16
+https://doi.org/10.1007/978-3-540-78967-3_17
+https://doi.org/10.1007/978-3-540-78967-3_17
+https://doi.org/10.1145/1400751.1400752
+https://doi.org/10.1145/1007352.1007447
+https://doi.org/10.1007/978-3-540-78524-8_15
+https://doi.org/10.1007/978-3-540-78524-8_15
+https://doi.org/10.1145/2976749.2978357
+https://doi.org/10.1145/2976749.2978357
+https://doi.org/10.1007/978-3-540-78524-8_18
+https://doi.org/10.1007/978-3-540-78524-8_18
+https://doi.org/10.1007/978-3-642-40084-1_1
+https://doi.org/10.1007/978-3-642-40084-1_1
+https://eprint.iacr.org/2019/635
+https://doi.org/10.1145/2574871
+https://doi.org/10.1145/2574871
+https://doi.org/10.1007/978-3-642-03356-8_32
+https://doi.org/10.1007/978-3-642-03356-8_32
+https://www.publift.com/blog/what-will-googles-first-price-auction-mean-for-publishers
+https://www.publift.com/blog/what-will-googles-first-price-auction-mean-for-publishers
+https://doi.org/10.1007/3-540-46766-1_9
+	Abstract
+	1 Introduction
+	1.1 Technical Overview
+	1.2 Related Work
+	1.3 Comparison with other approaches
+	2 Preliminaries
+	2.1 Equilibrium notions
+	2.2 Building Blocks
+	3 Auction Protocol
+	3.1 Security Model
+	3.2 Anonymous Bidding Protocol
+	3.3 Bit Encoding Scheme
+	3.4 Privacy Preserving First Price Auction Protocol
+	4 Security against Rational adversaries
+	4.1 Existence of Weakly Dominant Strategy Equilibrium (weak DSE)
+	4.2 Strategies for Rational Parties
+	4.3 Information Utility
+	4.4 Privacy Enhanced weak DSE
+	5 Experimental Results
+	6 Conclusion
+	Acknowledgments
+	References

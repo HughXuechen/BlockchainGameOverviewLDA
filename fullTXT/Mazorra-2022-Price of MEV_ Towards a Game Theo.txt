@@ -1,0 +1,887 @@
+Price of MEV:  Towards a Game Theoretical Approach to MEV
+Price of MEV:
+Towards a Game Theoretical Approach to MEV
+Bruno Mazorra
+∗
+Department of Information &
+Communication Technologies,
+Universitat Pompeu Fabra,
+Barcelona, Spain
+brunomazorra@gmail.com
+Michael Reynolds
+University College of London
+London, United Kingdom
+mireynolds@pm.me
+Vanesa Daza
+Universitat Pompeu Fabra
+Barcelona, Spain
+vanesa.daza@upf.edu
+ABSTRACT
+Maximal (also miner) extractable value, or MEV, usually refers to
+the value that privileged players can extract by strategically or-
+dering, censoring, and placing transactions in a blockchain. Each
+blockchain network, which we refer to as a domain, has its own
+consensus, ordering, and block-creation mechanisms, which gives
+rise to different optimal strategies to extract MEV. The strategic
+behaviour of rational players, known as searchers, lead to MEV
+games that have different impacts and externalities in each domain.
+Several ordering mechanisms, which determine the inclusion and
+position of transactions in a block, have been considered to con-
+struct alternative games to organise MEV extraction, and minimize
+negative externalities; examples include sealed bid auctions, first
+input first output, and private priority gas auctions. However, to
+date, no sufficiently formal and abstract definition of MEV games
+have been made.
+In this paper, we take a step toward the formalization of MEV
+games and compare different ordering mechanisms and their ex-
+ternalities. In particular, we attempt to formalize games that arise
+from common knowledge MEV opportunities, such as arbitrage and
+sandwich attacks. In defining these games, we utilise a theoretical
+framework that provides groundwork for several important roles
+and concepts, such as the searcher, sequencer, domain, and bun-
+dle. We also introduce the price of MEV as the price of anarchy of
+MEV games, a measure that provides formal comparison between
+different ordering mechanisms.
+Author Keywords: Defi, MEV, Game theory.
+CCS CONCEPTS
+• Security and privacy→ Privacy-preserving protocols; Economics
+of security and privacy.
+∗
+Author also affiliated to Nokia Bell Labs, Nozay, France. Author is part of a project
+that has received funding from the European Union’s Horizon 2020 research and
+innovation programme under grant agreement number 814284. External Collaborator
+of Flashbots.
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+DeFi ’22, November 11, 2022, Los Angeles, CA, USA
+© 2022 Association for Computing Machinery.
+ACM ISBN 978-1-4503-9882-4/22/11. . . $15.00
+https://doi.org/10.1145/3560832.3563433
+ACM Reference Format:
+Bruno Mazorra, Michael Reynolds, and Vanesa Daza. 2022. Price of MEV:
+Towards a Game Theoretical Approach to MEV. In Proceedings of the 2022
+ACM CCS Workshop on Decentralized Finance and Security (DeFi ’22), No-
+vember 11, 2022, Los Angeles, CA, USA. ACM, New York, NY, USA, 8 pages.
+https://doi.org/10.1145/3560832.3563433
+1 INTRODUCTION
+The notion of miner-extractable value (MEV) introduced in [5], and
+formally defined in [3], measures the value that miners can extract
+by strategically ordering, censoring, and including transactions
+in a block. This extra value is usually induced by different DeFi
+protocols, such as decentralized exchanges and Lending protocols.
+The most popular MEV operations are cyclic arbitrage and sand-
+wiches
+1
+. In general, block proposers (typically validators or miners),
+have the power to dictate or influence the inclusion and ordering
+of pending transactions in a new block. Thus, rational proposers
+have access to extra rewards per block. However, as shown in [5],
+this power is not limited to block proposers. Blockchain users and
+bots, usually termed searchers, can use strategies like spamming
+transactions or outbidding competitors to extract MEV themselves.
+For this and other reasons, the term miner-extractable value has
+evolved to mean maximal extractable value, formally defined in
+[16], which does not limit extraction to block proposers. We often
+refer to block proposers and searchers as players.
+Depending on the network protocol, which we refer to as the
+domain, and type of MEV being extracted, rational searchers have
+incentives to take different actions to increase their expected rev-
+enue. For example, [5] showed that Ethereum, a network with
+higher propagation latency, incentivises searchers to widen their
+view of the mempool to outbid their competitors, while domains
+like Polygon PoS, where the propagation of transactions is proba-
+bilistic, incentivises searchers to spam transactions to extract MEV.
+This motivates a more general formulation of the MEV game pre-
+sented in [5] such that models of rational searcher behaviour can
+be derived from a domain input.
+1.1 Our contributions
+The main goal of this paper is to formalise MEV games with a finite
+number of players under different ordering mechanism and auction
+designs which are defined by various environment conditions and
+rules such as latency of players, PoW/PoS consensus, and mempool
+visibility. To this end, the following topics will be covered:
+1
+https://explore.flashbots.net/
+ 
+15
+https://doi.org/10.1145/3560832.3563433
+https://doi.org/10.1145/3560832.3563433
+https://explore.flashbots.net/
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3560832.3563433&domain=pdf&date_stamp=2022-11-07
+DeFi ’22, November 11, 2022, Los Angeles, CA, USA Bruno Mazorra, Michael Reynolds, and Vanesa Daza
+• Inspired by [3], we provide a formal definition of MEV and lo-
+cal MEV as an optimization problem constrained by player re-
+sources. In our definition, we emphasize relative constraints
+like capital, software resources, and view of the mempool.
+• We formally define a more abstract and general MEV game
+that provides a foundation for analysing the incentives of
+searchers in different domains.
+• We also introduce different negative externalities that arise
+from MEV games, and we formally define the Price of Anar-
+chy in MEV games under different cost functions as a way to
+quantify their impact. We explore the specific case of block
+space misuse, which we refer to as the price of MEV, and
+compute this to characterize and classify different ordering
+mechanisms.
+1.2 Previous Work
+In Flashboys 2.0 [5] Daian et al. proposed a formalization of the
+priority gas auction (PGA) model and proved mathematically and
+empirically the existence of Grim-Trigger Nash equilibrium under
+certain conditions. However, the results are limited to two players
+and the PoW Ethereum domain, and do not consider reverted trans-
+action costs proportional to the bid or that players can engage in
+Sybil attacks. In [9], the authors explore the equilibrium of sand-
+wich MEV as a router game. Likewise, in [18], the authors compare
+empirically the miner’s revenue and the searchers competition of ar-
+bitrage opportunities before and after the introduction of Flashbots
+MEV auctions on Ethereum. In [10], the first formalization of cross
+chain MEV was proposed. However, to the best of our knowledge,
+there is no formal and empirical study on the impacts of MEV on
+several distinct domains.
+2 THEORETICAL FRAMEWORK
+In general, miner or maximum extractive value (MEV) is a term that
+refers to any excess profits that a block proposer or searcher can
+make based on transaction ordering and/or transaction inclusion.
+MEV was introduced in [5], formally defined in [3], and extended in
+cross-domain environments in [10]. Another similar definition was
+given in [16], except MEV was treated independently of a player.
+The MEV opportunities we consider in this paper are limited to
+the profits a player can obtain by modifying the blockchain state.
+In this section, we will formalize this kind of MEV opportunity
+using the concept of profitable ‘bundles’. Then, we will define ‘lo-
+cal’ MEV as the maximally profitable bundle a specific player can
+construct. Similar to [10], we start by formally defining the domain
+and searcher:
+Definition 2.1. A domainD is a self-contained system with a glob-
+ally shared state st. This state is altered by various agents through
+actions (sending transactions, constructing blocks, slashing, etc.),
+that execute within a shared execution environment’s semantics.
+Each domain has a predefined consensus protocol that includes a
+set of valid algorithms to order transactions, denoted by prt(D).
+A blockchain is a domain, however, there are other non-blockchain
+domains that also have MEV, like centralized exchanges.
+Definition 2.2. A searcher (in general, we will call it a player)
+in a domain D is a participant that assumes that sequencers fol-
+low a specific set of rules and take strategic actions (send bundles
+with specific bids) to maximize their own utility. In general, we
+will assume that a player’s utility depends linearly on their token
+balances.
+In a domain D with state st, the update of the state st after
+executing transactions tx is given by st ◦ tx. For an ordered set of
+transactions 𝐵 = {tx1, ..., tx𝑙 }, we have the composition st ◦ 𝐵 =
+st ◦ tx1 ◦ .... ◦ tx𝑙 .
+Similar to [3], we use Addr to denote the set of all possible ac-
+counts andT to denote the set of all tokens.We define𝑏 : 𝐴×T→ Z
+as the function that maps a pair of, an account and a token, to its
+current balance. More precisely, for 𝑎 ∈ Addr we let 𝑏 (𝑎, ·) denote
+the balance of all tokens held in 𝑎 and𝑏 (𝑎,𝑇 ) denote the account bal-
+ance of token𝑇 . Abusing notation, we will denote by 𝑏 (𝑎) the value
+of 𝑏 (𝑎, ·) priced by a numéraire 𝐸. That is, if there is a pricing vector
+𝑝 = (𝑝𝑇→𝐸 )𝑇 ∈T, then 𝑏 (𝑎) = 𝑝 · 𝑏 (𝑎, ·) =
+∑
+𝑇 ∈T 𝑝𝑇→𝐸𝑏 (𝑎,𝑇 ).
+Definition 2.3. An ordering mechanism is a set of rules that de-
+termines the order and inclusion of a set of transactions in a block.
+More formally, let T be the set of all transactions, an ordering
+mechanism is a map or : P≤ (T ) → P≤ (T ), where P≤ (T ) is the
+set of all ordered subsets of T , such that or(𝑇 ) ⊆ 𝑇 for all 𝑇 ⊆ T .
+Definition 2.4. A sequencer is an agent of a domain responsible
+for maintaining the liveness and consistency through a set of ac-
+tions. We distinguish four types of sequencers: dummy, dummy
+Byzantine, rational and partially rational. A sequencer is dummy if
+he follows the validator consensus protocol prt(D). A sequencer is
+dummy Byzantine if they misbehave, but other nodes can detect his
+misconduct. A sequencer is rational if it follows a set of valid actions
+on the domainD to maximize its revenue (including deviating from
+an ordering mechanism). Therefore, if a player misbehaves to max-
+imize their payoff but can not be identified, punished, or slashed,
+we say that is a rational player. A sequencer is partially rational
+if they commit to using a specific valid ordering mechanism to
+maximize its payoff. The commitment is public, but not necessarily
+publicly verifiable. In general, the action of following the ordering
+mechanism is not publicly verifiable (there are no validity proofs),
+however, users and more sophisticated players can probabilistically
+identify misbehavior.
+On Ethereum (before the merge), miners are usually partially
+rational. In general, miners run mev-geth2, which receives a block
+transaction ordering of highest revenue from the Flashbots relayer.
+Rational sequencers could take the Flashbots block and reorg to
+maximize their own revenue. Nevertheless, miners do not deviate
+from the mev-geth intended protocol
+3
+. For this reason, players
+participating in the MEV extraction are not necessarily sequencers;
+they take a sequence of actions to bias nodes to maximize their own
+revenue. The set of actions that a sequencer can follow depends on
+the domain and can include arbitrary actions. Studying the impact
+that rational players and sequencers can have in a domain is helpful
+2
+Mev-geth is deprecated post-merge, currently validators are using MEV-boost.
+3
+However, recent miners are deviating from the Flashbots protocol to extract more
+value. No formal or academic work has proved this yet. These are statements from
+some Flashbots team members.
+ 
+16
+Price of MEV: Towards a Game Theoretical Approach to MEV DeFi ’22, November 11, 2022, Los Angeles, CA, USA
+to bound the set of actions. For example, in selfish mining [17] the
+set of actions to construct or publish the private chains.
+From now on, we will assume that sequencers are partially ra-
+tional. An example of an ordering mechanism is the default geth
+client, which uses a greedy approximation algorithm to optimize
+the blocks’ transaction fee revenue.
+A sequencer receives a set of concurrent transactions tx1, ..., tx𝑛
+with gas price𝑚1, ...,𝑚𝑛 and 𝑔1, ..., 𝑔𝑛 units of gas. If the sequencer
+includes tx𝑖 , it obtains𝑚𝑖𝑔𝑖 in fees. Since the gas used per block
+is restricted in every domain by some constant 𝐿, the sequencer
+must choose a subset of transactions T such that
+∑
+𝑖:tx𝑖 ∈T 𝑔𝑖 ≤ 𝐿.
+Then, a node that tries to maximize its revenues per block needs
+to solve the following Knapsack optimization problem, which we
+name Knapsack Extractable Value (KEV) problem:
+max
+𝑛∑︁
+𝑖=1
+𝑥𝑖𝑚𝑖𝑔𝑖
+s.t.
+𝑛∑︁
+𝑖=1
+𝑥𝑖𝑔𝑖 ≤ 𝐿,
+𝑥𝑖 ∈ {0, 1}.
+We note by KEV(T ) the solutions’ revenue of the optimization
+problem. Knapsack optimization problems [15] are NP-complete;
+that is, no known polynomial time algorithm finds an optimal
+solution. Thus, each sequencer usually chooses different algorithms
+to approximate the optimal solution. For example, Parity nodes
+order transactions by gas price𝑚 without considering the gas costs.
+Another example is the Flashbots relayer, which uses a greedy
+approximation algorithm [1], ordering transactions by the ratio of
+miner payment and gas consumed (a natural extension of ordering
+by gas price taking into account direct payments and more than
+one transaction). However, the problem that the Flashbots relayer
+tries to solve is quite different, since it does not include reverted
+transactions or competing bundles. Moreover, we proved (see C)
+that there are examples where this algorithm does not produce
+a good approximation. In [2], the authors reformulate the block
+production as a linear programming problem without taking into
+account competing bundles. We will give more details after defining
+bundles.
+Now that we have settled up some ground definitions, we will
+focus next on the formalization of the extraction of MEV opportu-
+nities. To simplify the games, we will not consider the complete
+MEV extraction per block, but separate the MEV opportunities into
+“independent/concurrent” ones.
+Definition 2.5. Let P be the set of all players. A set of transactions
+T = {tx1, ..., tx𝑘 } and a state st induce an MEV opportunity in a
+domain D to a player 𝑃 ∈ P if they can construct an ordered set of
+transactions 𝐵 such that:
+Δ𝑏 (𝑃 ; st ◦ 𝐵, st) := 𝑏 (𝑃, st ◦ 𝐵) − 𝑏 (𝑃, st) > 0, (1)
+where 𝑏 is the balance of 𝑃 with the corresponding order. We call 𝐵
+a profitable bundle or bundle. If 𝐵 consists of a unique transaction,
+we say that 𝐵 is an MEV-transaction. Each bundle can contain ex-
+tra metadata, such as sequencer timestamps, bundle hash, sender
+ID, and gas price. For a given state st, each bundle incurs exe-
+cution costs called gas costs. From the bundle metadata and the
+domain state, the bundle execution incurs some payments, denoted
+by pr(𝐵), to a sequencer or set of sequencers responsible for exe-
+cuting the bundle.
+Definition 2.6. A set of bundles 𝐵1, ..., 𝐵𝑛 are order-invariant valid
+if for every permutation 𝜎 ∈ 𝑆𝑛 we have that the state transition
+st −→ st ◦ 𝐵𝜎 (1) ◦ ... ◦ 𝐵𝜎 (𝑛) (2)
+is a valid state transition and is invariant among all the permuta-
+tions. A set of bundles 𝐵1, ..., 𝐵𝑛 compete in a state 𝑠 if for all 𝑖 and
+𝑗 , st→ st ◦ 𝐵𝑖 ◦ 𝐵 𝑗 is not a valid state transition.
+Definition 2.7. We say that a bundle 𝐵 is a partial extraction of a
+bundle 𝐵′ if 𝐵 and 𝐵′ compete, and Δ𝑏 (𝑃, st ◦𝐵) < Δ𝑏 (𝑃 ′, st ◦𝐵′).
+The Flashbots combinatorial auction (FBCA) allows players to
+bid for bundles. The Flashbots allocation rule tries to solve the
+block optimization problem with conflicting constraints. That is,
+the block can not contain competing bundles (bundles that contain
+same transactions or bundles that revert). So, the FBCA can be
+modelled as the knapsack problem with a conflict graph𝐺 = (𝑉 , 𝐸)
+[11], where𝑉 is the set of bundles, and𝑢𝑣 ∈ 𝐸 if and only if bundles
+𝑢 and 𝑣 compete. Flashbots use a greedy approximation algorithm,
+leading to an auction mechanism similar to a first-price sealed
+auction, since players can only observe winning bundles. That
+is, the bundles are ordered by effective gas price (or average gas
+price, see more details in the appendix A) and afterwards prune the
+conflicting bundles. In case of symmetric gas efficiencies, the MEV
+opportunity is sealed to the higher bidder and pays what they bid.
+In general, this algorithm does not give the optimal solution (see
+appendix C). It also allows searchers to check for relayer deviation
+with just the executed block and the bundle sent by the searcher.
+In other words, theoretically, searchers can privately monitor the
+correct functioning of the relayer.
+Now we are ready to define the local MEV for a player 𝑃 or
+MEV𝑃 for short. The definition we provide is similar to the one pro-
+vided in [3]. However, in [3], players have constraints on the state
+transitions, but not on the set of bundles that they can construct.
+Definition 2.8. Let D be a domain with state st, a player 𝑃 with
+local mempool view T𝑀
+𝑃
+and a set of transactions T𝑃 that the player
+𝑃 can construct. We denote by C𝑃 = T𝑀
+𝑃
+∪ T𝑃 to be the set of
+reachable transactions. We define the local MEV of 𝑃 with state st
+(MEV𝑃 (st)) as the solution to the following optimization problem
+max
+𝐵
+Δ𝑏 (𝑃 ; st ◦ 𝐵, st)
+s.t. 𝐵 ⊆ C𝑃 ,
+st→ st ◦ 𝐵 is a valid state transition in D
+Let argmev𝑃 (st) be the set of bundles that are a solution to the
+optimization problem
+4
+. The constraints of reachable bundles is
+subject to a player’s information, gas efficiency, budget, ability to
+propose blocks, etc.
+Observe that if all players have access to the same MEV op-
+portunities and have access to all bundles, then this definition is
+4
+Observe that this definition fundamentally depends on the token balance. In the
+presence of a unique token, MEV𝑃 is trivially defined. Nevertheless, in the presence of
+multiple domains and tokens this definition is non-trivial. Moreover, in this definition,
+we are assuming that all players value equally the tokens, assuming the existence of
+some transferable utility. We leave a more general definition of local MEV for future
+work.
+ 
+17
+DeFi ’22, November 11, 2022, Los Angeles, CA, USA Bruno Mazorra, Michael Reynolds, and Vanesa Daza
+equivalent to the one provided in [3]. If the mempool view is the
+empty set, we will refer to the MEV as on top of block MEV, and we
+will denote it by TMEV𝑃 .
+Lemma 2.9. For a given player 𝑃 and a state st, if
+𝐵 ∈ argmev𝑃 (st), then MEV𝑃 (st ◦ 𝐵) = 0.
+Proof. Assume otherwise. Let st and 𝐵 ∈ argmev𝑃 (st) such
+that MEV𝑃 (st) > 0. Then, there exist 𝐵′ such that Δ𝑏 (𝑃, st ◦ 𝐵 ◦
+𝐵′, st ◦ 𝐵) > 0. Taking the bundle 𝐵′′ = 𝐵 ∪ 𝐵′, we have that
+Δ(𝑃, st ◦ 𝐵′′, st) > MEV𝑃 (st), that is a contradiction. □
+Definition 2.10. For a set of reachable bundles C, we define the
+C-permissionless MEV ( MEV
+C
+) as the minimum local MEV that
+can be extracted among players that have access to the bundles in
+C. More formally,
+MEV
+C (st) := min
+𝑃 s.t C⊆T𝑃
+MEV𝑃 (st).
+If for all players 𝑃 with reachable bundles C, MEV𝑃 (st) = 0, we
+say that st is a null MEV state. We denote the set of null MEV states
+as NS.
+Remark: Note that this definition is an extension of the defini-
+tion made in [16] when C𝐾 is the set of transactions that burns 𝐾
+coins. In other words, MEV
+C𝐾
+permissionless is MEV that can be
+extracted by players with at least 𝐾 coins. In this paper, we will
+assume that a finite number of players are able to capture a spe-
+cific MEV opportunity. In other words, we will fix a set of players
+P = {𝑃1, ..., 𝑃𝑛}. For each 𝑃 ∈ P, we define st𝑖 as the state that
+realizes the extraction MEV𝑃 . Then, we will assume that for each
+player 𝑃 ∈ P, MEV𝑃 (st𝑗 ) = 0 for all 𝑃 ∈ P.
+3 THE MEV STAGE GAME
+In [5], the authors proposed a formalization of the game played by
+different players in Ethereum to extract an MEV opportunity of
+gross value ev ∈ R≥0. In the model, they assume that the ordering
+mechanism is given by ordering by gas price and the game have
+a structure of all-pay auction. That is, players pay for losing the
+auction. In this section, we propose a generalization of this model.
+In the model, we propose more general notions of ordering mech-
+anisms, latency, external costs and values observed by players. In
+other words, we will formalize the game played for extracting a
+given MEV opportunity in a specific block in a specific Domain.
+Afterwards, we will define the utility of the players as a function
+of their balance and the notion of strategy. Finally, we introduce a
+solution concept of the MEV stage game, the Sybil resistant Nash
+equilibrium.
+We model the MEV game as a sequential game among a set of
+𝑛 searchers P = {𝑃1, ..., 𝑃𝑛} who can send bundles to obtain an
+MEV opportunity. We will assume that all players compete for the
+same MEV opportunity and have sufficient capital to extract it.
+When a specific player wins the MEV opportunity, it reaches a null
+MEV state for all players. In the following, we will provide a list of
+points that will define the MEV stage game. This game will take
+into account the latency of the players, the duration of the blocks,
+the mechanism of transaction inclusion, and the costs of improving
+software, node location, etc.
+(1) Continuous time: Searchers act in continuous time rather
+than discrete rounds (as in typical extensive-form games).
+That is, at any moment in time, players can take an action
+that, in our case study, will be sending a bundle.
+(2) Local MEV: At time 𝑡 , each player 𝑃𝑖 finds an MEV oppor-
+tunity of value 𝑣𝑖 (𝑡) ∼ 𝑉𝑖 (𝑡), (in general, such that 𝑣𝑖 (𝑡) ≥
+𝑣𝑖 (𝑠)) for all 𝑡 ≥ 𝑠 , with {𝑉𝑖 (𝑡) : 𝑡 ≥ 0} being a family of
+distributions. More specifically, for each time 𝑡 , the player
+finds a bundle 𝐵 such that Δ𝑏 (st ◦ 𝐵, st) = 𝑣𝑖 (𝑡).
+(3) Latency: Searchers can see each other’s actions, but not
+immediately, due to the latency in the peer-to-peer network.
+The latency is modeled by a directed weighted graph 𝐺 =
+(𝐸,𝑉 ). Each searcher controls a set of nodes 𝑁𝑖 ⊆ 𝑉 . So, if
+𝑃 𝑗 sends a bundle from a subset of peers 𝐿𝑗 ⊆ 𝑁 𝑗 at time 𝑡 𝑗 ,
+𝑃𝑖 observe the bundle at time 𝑡 = 𝑡 𝑗 + 𝑑 (𝐿𝑗 , 𝑁𝑖 ), where 𝑑 is
+the non-symmetric distance induced by the weight.
+(4) Probabilistic auction duration: The auction terminates
+at a randomly drawn time when a new block is mined. We
+model the block interval as a positive random variable B.
+(5) Competitors information: Players do not necessarily know
+the number of competitors and their features. However, each
+player estimates the number of competitors and their behav-
+ior.
+(6) Access to a public correlating device: Let (Ω, Pr) be a
+probability space. All searchers observe the first drawn𝑤 ∈
+[0, 1] of a uniform public random variable 𝑋 (a beacon or
+the hash of the previous block). This can be used by players
+to coordinate their actions.
+(7) Auction Mechanism: Sequencers have a predefined algo-
+rithm that inputs a set of bundles and outputs an order of
+transactions for inclusion in a block. We will denote this
+algorithm by the ordering mechanism. This ordering mecha-
+nism and the characteristics of the MEV opportunity (Back-
+running, Front-running, sandwich,...) determines the rev-
+enue for each player. The ordering mechanism and the MEV
+opportunity determinate an auction A = (x, pr), that is, a
+pair of maps that take as inputs the set of bundles and a ran-
+dom event and outputs a winner and the payment induced
+per each player. More formally,
+x : View𝑠 × Ω → {𝑥 ∈ {0, 1}𝑛 : 𝑥 · 1𝑇 ≤ 1}
+pr : View𝑠 × Ω → R𝑛 .
+where View𝑠 is the set of transactions seen by the sequencer
+when constructing the block.
+(8) External costs: Players can improve their mempool view,
+reduce their latency, and improve their software to increase
+their local MEV. The set of external actions that a player 𝑃𝑖
+can take rely on a set of actions A𝑖 , and the costs of taking
+those actions are modeled by a function 𝑐𝑖 : A𝑖 → R.
+Definition 3.1. Given a set of playersP, a random positive variable
+B, a gossip network graph 𝐺 and an auction mechanism, A =
+(x, pr), an MEV game is G = (P,𝐺,B,A, (𝑐𝑖 )𝑖=1,..,𝑛). We say the
+game is symmetric if all players share the same features. That is,
+𝑉𝑖 = 𝑉𝑗 , 𝑐𝑖 = 𝑐 𝑗 for all 𝑖, 𝑗 , A are symmetric functions and 𝐺 is a
+homogeneous graph.
+ 
+18
+Price of MEV: Towards a Game Theoretical Approach to MEV DeFi ’22, November 11, 2022, Los Angeles, CA, USA
+The MEV game has a structure of sequential continuous game, and
+therefore we can define utilities, strategies, and solution concepts
+such as Nash equilibrium.
+Definition 3.2. A strategy 𝑆𝑖 is a procedure for participating in
+the MEV stage game and may be probabilistic. 𝑆𝑖 takes the fol-
+lowing form, for a current time 𝑡 and a local view view𝑖 (𝑡) of the
+player 𝑖: (𝑎, view′
+𝑖
+(𝑡)) ← 𝑆𝑖 (𝑡, view𝑖 (𝑡)). The output 𝑎 is the action
+taken by 𝑃𝑖 and is bounded by domain constraints. The output
+view′
+𝑖
+(𝑡) is the updated state, that is, view′
+𝑖
+(𝑡) = view𝑖 (𝑡) ∪ {𝑎}.
+A strategy of a player 𝑖 is non-adaptive if it does not depend
+on the local view view𝑖 (𝑡). More formally, for every 𝑡 and ev-
+ery pair view𝑖 (𝑡), view′𝑖 (𝑡) ∈ View𝑖 (𝑡), it holds 𝑆𝑖 (𝑡, view𝑖 (𝑡)) =
+𝑆𝑖 (𝑡, view′𝑖 (𝑡)).
+Definition 3.3. Let 𝑆 = (𝑆1, ..., 𝑆𝑛) be a strategy tuple, then the
+expected payoff of the player 𝑃𝑖 is
+𝑢𝑖 (𝑆𝑖 , 𝑆−𝑖 ) := E[Δ𝑏𝑖 | 𝑆],
+where 𝑆−𝑖 is an 𝑛 − 1 tuple without the 𝑖th coordinate. We denote
+by S𝑖 the set of all strategies.
+That is, 𝑢𝑖 (𝑆𝑖 , 𝑆−𝑖 ) is the expected payoff of player 𝑖 if they ex-
+ecute the strategy 𝑆𝑖 , the other players execute the strategy 𝑆−𝑖
+in a domain D. Notice that we assume players have a monotone
+risk-neutral utility over the balances.
+Definition 3.4. Let G be an MEV stage game, we say that a tuple
+of strategies (𝑆1, ..., 𝑆𝑛) is a Nash equilibrium (NE) if for each player
+𝑃𝑖
+𝑢𝑖 (𝑆𝑖 , 𝑆−𝑖 ) ≥ 𝑢𝑖 (𝑆𝑖 , 𝑆−𝑖 ), for all strategies 𝑆𝑖 .
+In other words, if players are taking the strategies (𝑆1, ..., 𝑆𝑛), none
+of them have incentives to deviate unilaterally. We denote NE(G)
+the set of all Nash equilibrium.
+However, the notion of Nash equilibrium is not strong in per-
+missionless environments. For example, the equilibrium of firms
+competing in the Cournot price model [14] is weak against Sybil
+attacks. Another example is the equilibrium constructed in the the-
+orem of Flashboys 2.0 [5] that proves that exponential raise bidding
+strategies with grim-trigger area a Nash equilibrium in the game
+with two players. Nevertheless, one can prove that agents have
+incentives to use Sybil attacks to maximize their payoff. For this
+reason, we introduce a stronger notion of a solution concept for
+MEV games that are resistant to Sybil attacks:
+Definition 3.5. Let G be a symmetric
+5
+MEV game with 𝑛 players,
+and let 𝜙 : N→
+⊕∞
+𝑖=1 S𝑖 be a strategy mapping. A Sybil resistant
+Nash equilibrium is 𝜙 such that for all 𝑛 ∈ N, 𝜙 (𝑛) ∈
+⊕𝑛
+𝑖=1 S𝑖 ,
+and 𝜙 (𝑛) is a Nash equilibrium, where for each 𝑖 ∈ {1, . . . , 𝑛} and
+𝑗 ∈ {1, . . . , 𝑛 + 1} − {𝑖},
+𝑢𝑖 (𝜙 (𝑛)𝑖 , 𝜙 (𝑛)−𝑖 ) ≥ 𝑢𝑖 (𝜙 (𝑛 + 1)𝑖 , 𝜙 (𝑛 + 1)−𝑖 )
++ 𝑢 𝑗 (𝜙 (𝑛 + 1) 𝑗 , 𝜙 (𝑛 + 1)− 𝑗 ).
+The notion of Sybil resistance is important in permissionless
+pseudo-anonymous environments such as blockchains. Players
+have the ability to generate additional addresses to take more profits
+from cooperative strategies. In future work, we will prove that
+5
+This definition can be extended to non-symmetric games, but we will leave it for
+future work.
+Sybil resistant cooperative Nash equilibrium exist in the priority
+gas auction in the non-repeated games, and the existence of Sybil
+resistant equilibrium in games with private mempools.
+3.1 Example: Priority gas auction (PGA)
+In this section, we will give an example of MEV game, a general-
+ization of the priority gas auction given in [5]. Differently than [5],
+in this model, we not assume that the reverted transactions have
+a constant cost and the players do not share latency and cost pa-
+rameters. More precisely, in this game, the transactions are ordered
+by gas price𝑚. For a player 𝑃𝑖 , a bundle incurs gas costs 𝑔𝑖 ∈ R≥0
+if it extracts the MEV opportunity, and 𝛾𝑖 ∈ R≥0 otherwise (other
+player wins the MEV opportunity and the bundle reverts). That
+is, if a player 𝑃𝑖 bids𝑚𝑖 , the player loses𝑚𝑖𝑔𝑖 in case of winning
+the MEV opportunity, and𝑚𝑖𝛾𝑖 otherwise. We will assume that all
+searchers find the MEV opportunity at the beginning of the auction
+and that the first bundle executed in the block will extract the MEV
+opportunity. That is, 𝑣𝑖 (𝑡) = ev for all 𝑡 ≥ 0. So, the game induces
+the following auction mechanism:
+x𝑖 (𝑚1, ...,𝑚𝑛) =
+{
+1, if𝑚𝑖 > max𝑗≠𝑖 {𝑚 𝑗 }
+0, otherwise
+pr(𝑚1, ...,𝑚𝑛) =
+{
+𝑔𝑖𝑚𝑖 , if𝑚𝑖 > max𝑗≠𝑖 {𝑚 𝑗 }
+𝛾𝑖𝑚𝑖 , otherwise
+So, the total profits of player 𝑖 is𝑢𝑖 = evx𝑖 (𝑚1, ...,𝑚𝑛)−pr𝑖 (𝑚1, ...,𝑚𝑟 ).
+We let 𝐵𝑖 = (𝑡𝑖 ,𝑚𝑖 ; 𝑖) denote a MEV profitable bundle of a searcher
+𝑖 . Here 𝑡𝑖 is the time at which the bid is placed,𝑚𝑖 is the gas price,
+and 𝑖 is the identity of the bidder. We will assume that the gossip
+network has a complete graph structure. That is, a player 𝑗 , sees a
+bundle 𝐵 = (𝑡,𝑚; 𝑖) at time 𝑡𝑖 + Δ 𝑗 . We denote by view𝑖 (𝑡) the set
+of all bundles seen by the searcher 𝑖 at time 𝑡 (including their own
+bundle) and the state of the auction (active or finished). We denote
+by View𝑖 (𝑡) the set of all possible views at time 𝑡 for a searcher 𝑖 .
+The following theorem states that, a wide ranges of outcomes
+are feasible in the PGA auction. In general, this Nash equilibrium
+points induce to minimal revenue to the sequencer and share the
+profits among the searchers.
+Theorem 3.6 (PGA Folks’ theorem). LetD be a PoW domain with
+B ∼ Exp(_). Let,
+𝐹 = {(𝑥1, ..., 𝑥𝑛) : 𝑥𝑖 ∈ [0, ev − 𝑔𝑖𝑚],
+𝑛∑︁
+𝑖=1
+𝑥𝑖
+ev − 𝑔𝑖𝑚
+≤ 1},
+where𝑚 = ev(1− 𝑒−_Δmin )/(𝑔min (1− 𝑒−_Δmin ) +𝛾min𝑒
+−_Δmin ) and
+𝛾min = min{𝛾𝑖 }. Then, given a suitable correlating device 𝐷 , for
+any payoff vector 𝒗 ∈ 𝐹 there exists a correlated Nash equilibrium
+6 (𝑆1, ..., 𝑆𝑛) such that 𝒖 = (𝑢1 (𝑆1, 𝑆−1), ..., 𝑢𝑛 (𝑆𝑛, 𝑆−𝑛)) = 𝒗. The
+strategies used by the players consists of choosing a uniform cor-
+relating device in {1, ..., 𝑛}. The player 𝑖 bids if 𝐷 = 𝑖 . If a player
+𝑗 ≠ 𝑖 deviates and bids when 𝐷 ≠ 𝑗 , then other players execute a
+grim-trigger, leading to losses to all players.
+6
+The set of Nash equilibrium are not Sybil resistant. In future work, we will propose
+a general transformation that transforms non-Sybil resistant equilibrium in Sybil
+resistant equilibrium in sequential games.
+ 
+19
+DeFi ’22, November 11, 2022, Los Angeles, CA, USA Bruno Mazorra, Michael Reynolds, and Vanesa Daza
+4 PRICE OF MEV
+MEV games have an important impact on users, network conges-
+tion, computation overload, and blockchain liveness. On one hand,
+some MEV opportunities arise from value extracted from users. On
+the other hand, in general, MEV games induce an inefficient extrac-
+tion of MEV opportunities, leading to network congestion (e.g. P2P
+network load), and chain congestion (e.g. block-space usage). In this
+paper, we will not take into account the negative externalities of
+MEV on individual users (for example, sandwich attacks and oracle
+manipulation), but rather the negative externalities that impact the
+consensus protocol, liveness, chain quality, stake distribution, etc.
+Suppose there is an MEV opportunity on a state st, with a set of 𝑛
+players that compete to extract it, sending bundles 𝐵1, ..., 𝐵𝑘 . Then,
+a sequencer, using the ordering mechanism or, outputs a block (this
+order mechanism does not necessarily respect the internal order of
+the bundles). In this setting, we define the block space cost as the
+gas cost of executing the block built by the ordering mechanism
+using the bundles, more formally
+𝐶 (𝐵1, ..., 𝐵𝑘 ; st) = gasUsed
+(
+st ◦ or(∪𝑘𝑖=1𝐵𝑖 )
+)
+. (3)
+We naturally extend the function of cost over strategies by taking
+the outcome (or the expected outcomes in case of mixed strategies)
+of the strategies (the broadcasted bundles). Clearly, ex-post it is
+trivial to compute the gas cost. However, ex-ante, estimating the
+gas costs induced by the MEV game is much more complex due to
+the non-commutative nature of execution costs. Also, other cost
+functions can be very relevant in some domains. Different MEV
+games can induce other types of negative externalities, such as
+wasted resources induced by computation costs
+7
+or centralization
+effects.
+In general, self-interested behaviour by strategic players leads
+to an inefficient result, an outcome that could be improved upon
+given centralized control over everyone’s action [13]. Nevertheless,
+imposing such control can be costly, infeasible or undesirable (due
+to trust assumptions). This motivates the search for conditions
+and mechanisms in which decentralized optimization by strategic
+agents is guaranteed to produce a near-optimal outcome. The price
+of anarchy (PoA) [12] is a measure that quantifies how far is the
+worst Nash equilibrium (in the sense of social cost) with respect
+to any optimal configuration that minimizes the social cost. More
+formally, given a cost function 𝐶 and the set of Nash equilibrium
+𝑁𝐸, the price of anarchy is defined as:
+PoA =
+max𝑆∈𝑁𝐸 𝐶 (𝑆)
+min𝑆 𝐶 (𝑆)
+.
+Different examples of the study of the price of anarchy can be seen
+in [4, 12, 13]. However, the price of anarchy in the MEV game is,
+in general, not well-defined. For example, assume that two players
+are competing for extracting the same arbitrage opportunity. Then,
+as we will see, the block space cost of extracting the arbitrage
+opportunity will be the sum of gas used by executing both searchers’
+transactions. However, the minimal cost of the game is zero, since
+not extracting theMEV opportunity is a feasible outcome. Therefore,
+the ratio is not defined, leaving an inconsistent definition of the
+7
+For example, the energetic costs induced by computing TH/s in blockchains that
+order transactions by nonce. See BSC-PR for more details.
+price of anarchy in the MEV game. In the following, we propose a
+small adjustment to have a well-defined price of anarchy in theMEV
+game, which we denote as the Price of MEV. This measure tracks
+the social costs induced by the competition among individually
+rational agents for MEV extraction in a particular MEV game. More
+precisely, the Price of MEV is a family of measures parametrized by
+the social cost functions. This family of measurements can be useful
+to compare the negative externalities and trade-offs of different
+MEV games. Similar to the price of anarchy definition, the price
+of MEV of game G with social cost 𝐶 is the ratio of the worst
+Nash equilibrium with respect to the extraction made by the most
+efficient player in an order-free consensus protocol blockchain.
+Definition 4.1. Given a cost function 𝐶 , the set of Sybil resistant
+Nash equilibrium SNE(G), and the set of actions that induce a null
+MEV state NS, we define the price of MEV as:
+PoMEV(G, 𝑛) =
+max𝑆∈𝑆𝑁𝐸 (G) 𝐶 (𝑆)
+min𝑆∈NS𝐶 (𝑆)
+,
+where min𝑎∈NS𝐶 (𝑎) is the minimum cost taken by extracting the
+MEV opportunity.
+We argue that a more efficient mechanism to extract MEV op-
+portunities (low Price of MEV) can have an important impact on
+blockchain stability, users utility, and consensus protocol
+8
+. In the
+case where the cost function is defined over pure strategies, we can
+extend the definition naturally over the mixed strategies, taking
+the expectancy of the outcomes.
+5 CONCLUSIONS AND FUTUREWORK
+In this work, we proposed measures to formally study the Nash
+equilibrium and negative externalities of different ordering mecha-
+nisms. We think that this is import due to the future changes on
+Ethereum mainnet about Proposer-Builder separation and MEV-
+boost [7]. We leave for future work to study and compute the price
+of MEV of popular proposed ordering mechanisms. Also, in the
+future we will study the negative externalities of zero-sum MEV
+opportunities such as sandwich attacks, time bandit attacks, eclipse
+attacks, draining bot attacks
+9
+, and censorship attacks. We conjec-
+ture that a domain with suboptimal block-space market design will
+lead to more block-space misuse (high price of MEV), raising the
+transactions fees of the underlying domain. The higher transactions
+fees will increase the direct payments of the miner (another form
+of MEV) and the market inefficiencies. This market inefficient will
+imply inefficient price discover, creating more internal and cross
+chain MEV opportunities. We call this effect the Circular forces of
+MEV 1.
+REFERENCES
+[1] Yalçın Akçay, Haijun Li, and Susan H Xu. Greedy algorithm for the general
+multidimensional knapsack problem. Annals of Operations Research, 150(1):17–
+29, 2007.
+[2] Guillermo Angeris, Alex Evans, and Tarun Chitra. A note on bundle profit
+maximization. Stanford University, 2021.
+[3] Kushal Babel, Philip Daian, Mahimna Kelkar, and Ari Juels. Clockwork finance:
+Automated analysis of economic security in smart contracts. arXiv preprint
+arXiv:2109.04347, 2021.
+8
+Note that we are assuming that the extractable value exists and will be extracted.
+9
+https://github.com/Defi-Cartel/salmonella
+ 
+20
+Price of MEV: Towards a Game Theoretical Approach to MEV DeFi ’22, November 11, 2022, Los Angeles, CA, USA
+Figure 1: Circular forces of MEV
+[4] George Christodoulou and Elias Koutsoupias. The price of anarchy of finite
+congestion games. In Proceedings of the thirty-seventh annual ACM symposium
+on Theory of computing, pages 67–73, 2005.
+[5] Philip Daian, Steven Goldfeder, Tyler Kell, Yunqi Li, Xueyuan Zhao, Iddo Bentov,
+Lorenz Breidenbach, and Ari Juels. Flash boys 2.0: Frontrunning in decentralized
+exchanges, miner extractable value, and consensus instability. In 2020 IEEE
+Symposium on Security and Privacy (SP), pages 910–927. IEEE, 2020.
+[6] Ethereum. Sort transactions at the same gas price by received time. 2020.
+[7] Flashbots. Mev-boost, 2022.
+[8] Mahimna Kelkar, Fan Zhang, Steven Goldfeder, and Ari Juels. Order-fairness
+for byzantine consensus. In Annual International Cryptology Conference, pages
+451–480. Springer, 2020.
+[9] Kshitij Kulkarni, Theo Diamandis, Tarun Chitra, et al. Towards a theory of
+maximal extractable value i: Constant function market makers. arXiv preprint
+arXiv:2207.11835, 2022.
+[10] Alexandre Obadia, Alejo Salles, Lakshman Sankar, Tarun Chitra, Vaibhav Chellani,
+and Philip Daian. Unity is strength: A formalization of cross-domain maximal
+extractable value. arXiv preprint arXiv:2112.01472, 2021.
+[11] Ulrich Pferschy and Joachim Schauer. The knapsack problemwith conflict graphs.
+J. Graph Algorithms Appl., 13(2):233–249, 2009.
+[12] Tim Roughgarden. Selfish routing and the price of anarchy. MIT press, 2005.
+[13] Tim Roughgarden. Intrinsic robustness of the price of anarchy. Journal of the
+ACM (JACM), 62(5):1–42, 2015.
+[14] Roy J Ruffin. Cournot oligopoly and competitive behaviour. The Review of
+Economic Studies, 38(4):493–502, 1971.
+[15] Harvey M Salkin and Cornelis A De Kluyver. The knapsack problem: a survey.
+Naval Research Logistics Quarterly, 22(1):127–144, 1975.
+[16] Alejo Salles. On the formalization of mev.
+https://writings.flashbots.net/research/formalization-mev/, 2021.
+[17] Ayelet Sapirshtein, Yonatan Sompolinsky, and Aviv Zohar. Optimal selfish mining
+strategies in bitcoin. In International Conference on Financial Cryptography and
+Data Security, pages 515–532. Springer, 2016.
+[18] Ben Weintraub, Christof Ferreira Torres, Cristina Nita-Rotaru, and Radu State.
+A flash (bot) in the pan: Measuring maximal extractable value in private pools.
+arXiv preprint arXiv:2206.04185, 2022.
+A EXAMPLES OF ORDERING MECHANISMS
+For the sake of completeness, we will provide a list of examples of
+ordering mechanisms. They are induced in different domain and
+consensus protocol designs.
+• Priority gas orderingmechanism : Sequencers try to solve
+the KEV by using the greedy approximation algorithm that
+consists of ordering the transactions by gas price. In this
+case, if a player is trying to capture an MEV opportunity, it
+must monitor the mempool and choose an optimal gas price
+𝑚. If a player is trying to front-run a transaction tx, with gas
+price𝑚, it is enough to outbid it with𝑚 + [. In this setting,
+if the gas cost of exploiting this MEV opportunity is 𝑔, the
+block-space price of MEV of the uni-agent game is 1.
+• Flashbots mechanism: Searchers send bundles to the re-
+layer through a private channel. The Flashbots relayer tries
+to build the block with the highest profits among all the
+PGA FSS R.O. Perms. MP
+Ethereum (Geth) ✓ ✗/∼ ✗ ✓ ✗
+Polygon ✗ ✗ ✓ ✓ ✗
+BSC ✓ ✗ ✗ ✓ ✗
+Avalanche ✗ ✓ ✗ ✗ ✓
+Arbitrum ✗ ✓ ✗ ✓ ✓
+Shutter Network ✓ ✗ ✗ ✓ ✓
+Solana ✗ ✓ ✗ ✓ ✗
+Flashbots (alpha-v0.6) ✓ ✗ ✗/ ✓ ✓
+Table 1: MEV games features different chains. Perms= Per-
+missionless and MP = Mempool Privacy.
+blocks that can be constructed using the transactions in the
+public mempool and the Flashbots mempool of bundles. But
+the bundles have a number of allocation constraints that the
+Flashbots relayer must account for [16]. In order to build the
+block with the highest profit, Flashbots (to our knowledge)
+uses a greedy approximation algorithm. As described in the
+Flashbots documentation, a bundle 𝐵 is ordered by effective
+gas price / bundle score, which is defined as,
+𝑠𝑐 (𝐵) :=
+Δ𝑐𝑜𝑖𝑛𝑏𝑎𝑠𝑒 +
+∑
+𝑡𝑥∈𝐵\TX 𝑔(𝑡𝑥)𝑚(𝑡𝑥)∑
+𝑡𝑥∈𝐵 𝑔(𝑡𝑥)
+where Δ𝑐𝑜𝑖𝑛𝑏𝑎𝑠𝑒 denotes the direct payment to the miner,
+TX is the set of mempool transactions, 𝑔(𝑡𝑥) is the gas used
+by 𝑡𝑥 and𝑚(𝑡𝑥) is the gas price of 𝑡𝑥 .
+• Random ordering mechanism: The transactions included
+in the next block and the order of transaction execution are
+probabilistic with a uniform distribution.
+• First input first output mechanism: The transactions are
+ordered by the sequencer local’s timestamps or by a pseudo-
+global timestamp such as the one mentioned in [8]. In this
+sense, players with better geolocation and propagation algo-
+rithms will win the MEV game. However, in decentralized
+systems, this will depend on the leader geolocation that will
+change randomly per round.
+• Dictatorship/Permissioned mechanism: The sequencer
+has its own arbitrary ordering rule, prioritizing transactions
+of a fixed set of addresses. In this setting, players do not have
+a lot of freedom to interact or win the MEV opportunity.
+In other words, the sequencer will censor other players’
+transactions to prioritize its own extraction. Moreover, this
+potentially will induce inefficient market prices. However,
+the block-space price of anarchy is minimized since just one
+player is extracting it. This rule also models the situation
+where the miner captures the MEV opportunity, prioritizing
+its own profitable bundles.
+• Metadata mechanism: Let ({0, 1}𝑛, ≤) be a total ordered
+set. Transactions and bundles can add a parameter nonce,
+giving them an associated hash identification. Then the bun-
+dles and transactions are ordered by hashes. For example, if a
+transaction tx with nonce tries to extract a back-running ar-
+bitrage opportunity, then a player will try to produce a trans-
+action that extracts the opportunity nonce nonce’ < nonce.
+ 
+21
+DeFi ’22, November 11, 2022, Los Angeles, CA, USA Bruno Mazorra, Michael Reynolds, and Vanesa Daza
+B BOT EXAMPLE
+Before the pull request [6], transactions with the same gas price
+were randomly ordered, creating incentives for searchers to spam
+transactions to capture an MEV opportunity. In the following, we
+will show how a particular MEV bot that captured back running
+opportunities, was responsible for consuming unnecessary block
+space to increase its expected revenue. A lot of examples can be seen
+using tools such as mev-inspect-py. Moreover, we could lower
+bound the estimated block space price of MEV by ≈ 7.
+Figure 2: Total gas used and efficient gas used by bot MEV
+Bot 0x00...E9a
+C FLASHBOTS V0.6 COUNTER-EXAMPLE
+Let FBR(𝐵1, ..., 𝐵𝑛) be the revenue using the Flashbots greedy ap-
+proximation algorithm. Let OTP(𝐵1, ..., 𝐵𝑛) be the maximal revenue
+of the Flashbots combinatorial problem.
+Claim: The Flashbots combinatorial auction is not optimal. More
+specifically,
+inf{ FBR(𝐵1, ..., 𝐵𝑘 )
+OPT(𝐵1, ..., 𝐵𝑘 )
+: for 𝐵1, ..., 𝐵𝑘 bundles} ≤ 1
+⌊ 𝐿
+𝑔𝑚𝑖𝑛
+⌋ − 1
+,
+where 𝑔𝑚𝑖𝑛 is the minimal gas consumed by competing bundles
+and 𝐿 is the gas limit of a block.
+Proof: Let 𝐵1, ..., 𝐵𝑘 all the bundles such that, 𝐵1 compete with
+𝐵𝑖 for all 𝑖 ≠ 1 and 𝐵𝑖 , 𝐵 𝑗 are pairwise non-competing bundles.
+Moreover, assume that 𝐵1 has gas costs 𝐿/𝑘 and effective gas bid
+𝑚 + Y for Y > 0 and all the other bundles have gas bid 𝑚. Then,
+the Flashbots algorithm outputs 𝐵 = {𝐵1}, leaving to a sequencers’
+revenue of 𝑚 + Y. On the other hand, the optimal valid block is
+𝐵 = {𝐵2, ..., 𝐵𝑘 } with𝑚(𝑘 − 1) revenue. The result follows using
+bundles with gas cost 𝑔𝑚𝑖𝑛 .
+ 
+22
+	Abstract
+	1 Introduction
+	1.1 Our contributions
+	1.2 Previous Work
+	2 Theoretical Framework
+	3 The MEV stage game
+	3.1 Example: Priority gas auction (PGA)
+	4 Price of MEV
+	5 Conclusions and Future Work
+	Bibliography
+	References
+	A Examples of ordering mechanisms
+	B Bot example
+	C Flashbots v0.6 counter-example

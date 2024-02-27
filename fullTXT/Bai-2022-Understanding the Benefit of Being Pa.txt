@@ -1,0 +1,1922 @@
+Understanding the Benefit of Being Patient in Payment Channel Networks
+Understanding the Benefit of Being Patient in
+Payment Channel Networks
+Qianlan Bai , Yuedong Xu , and Xin Wang
+Abstract—Scaling blockchain efficiency is crucial to its
+widespread usage in which the payment channel is one of the
+most prominent approaches. With payment channels and the
+network they construct, two users can move some transactions
+off-chain to avoid expensive and time-consuming on-chain
+settlements. Existing works are devoted to designing high-
+throughput payment channel networks (PCNs) or efficient PCN
+routing policies to reduce the fee charged by intermediate nodes.
+In this paper, we investigate the PCN routing from a different
+perspective by answering whether the routing fee of transactions
+can be saved through being a bit more patient. The key idea is to
+reorder the processing sequence of atomic transactions, other
+than to handle each of them separately and immediately. We
+present two mechanisms, one is periodic transaction processing
+and the other is purely strategic waiting. In the former, the
+incoming transactions in a short time interval are processed
+collectively. We formulate an optimization model to minimize
+their total routing fee and derive the optimal permutation of
+processing transactions as well as the routing policy for each of
+them. A Shapley value based scheme is presented to redistribute
+the benefit of reordering among the transactions efficiently and
+fairly. In the latter, we model the waiting time of a strategic
+transaction on a single payment channel as the first passage time
+problem in queuing theory when the transaction value is higher
+than the channel balance upon its arrival. By capturing the
+balance dynamics, we are able to calculate the recursive
+expression of waiting time distribution that is useful to gauge a
+user’s cost of patience. Experimental results manifest that our
+cost redistribution mechanism can effectively save routing fees
+for all the transactions, and the waiting time distribution
+coincides with the model well.
+Index Terms—Blockchain, payment channel, game theory,
+Shapley value.
+I. INTRODUCTION
+SINCE the advent of Bitcoin in 2008 [1], we have wit-
+nessed the booming of various decentralized cryptocur-
+rencies and the tremendous attentions they have gained. The
+historical transactions between cryptocurrency clients are
+recorded in a global and public data structure known as block-
+chain. It is envisioned that blockchain technology together
+with digital payment will embrace many new fields such as
+healthcare [2], manufacturing [3], edge computing [4], etc.
+Despite their ever-growing prosperity, cryptocurrencies suffer
+from unsatisfactory scalability. For instance, Bitcoin [5] pro-
+cesses 7 transactions per second and Ethereum processes 15
+transactions per second [6]. In contrast, Visa network [7] can
+handle 1700 transactions per second, several orders of magni-
+tude ahead of cryptocurrencies. The very low throughput hur-
+dles its wide adoption. Scaling blockchain efficiency has
+become one of the most important issues that need to be
+solved in order to ravel the transitional means of payment.
+At present, there are several effective ways of improving the
+scalability of blockchain including payment channel [8], [11],
+segregated witness [9] and sharding [10] in which the payment
+channel is the most prominent one. It is an off-chain solution that
+two cryptocurrency users are allowed to deposit tokens on the
+blockchain for the transactions between them. When establishing
+a payment channel, both parties agree on the amount of deposit,
+also called capacity, which measures the maximum value of
+transfer from one to the other at this moment. In the course of a
+transaction, the sum of capacity in both directions remains the
+same but the unilateral balance changes. The users (or nodes inter-
+changeably) that do not have a direct channel can process transac-
+tions using multiple intermediate nodes and channels based on
+some protocols. Practical PCNs include Lightning network [8] in
+the Bitcoin system that utilizes the Hash-time Lock Contract
+(HTLC) scheme. A transaction can be routed from the sender to
+the receiver via intermediate nodes as long as the channel balan-
+ces on this route are sufficient, or will be processed on the public
+chain otherwise. As a return, the intermediate nodes will charge
+each transaction a certain amount of fee for the interconnections
+provided, and this amount is usually much lower than the overall
+settlement on the public chain. Selecting the appropriate interme-
+diate channels with the minimum cost has become an important
+issue in a blockchain PCN system.
+The literature on route selection with the purpose of transac-
+tion cost reduction can be roughly categorized into two types.
+One is for an individual transaction. Zhang et al. [12] designed
+the Cheapay algorithm to find the cheapest available path with
+time and capacity constraints. A series of closely related
+works by Piatkivskyi et al. [16] and Rohrer et al. [17]
+presented new mechanisms which divided a transaction and
+transmitted on different paths to resist the capacity constraints.
+Manuscript received May 28, 2021; revised January 16, 2022; accepted
+February 19, 2022. Date of publication February 25, 2022; date of current ver-
+sion May 23, 2022. This work was supported in part by the Key-Area Research
+and Development Program of Guangdong Province under Grant 2020B010166003,
+in part by the Shanghai-Hong Kong Collaborative Project under Grant
+18510760900, in part by the Natural Science Foundation of China under Grant
+62072117, and in part by the Zhuhai Research Institute of Fudan University.
+Recommended for acceptance by Prof. Tie Qiu. (Corresponding author: Yuedong
+Xu.)
+Qianlan Bai and Xin Wang are with the School of Computer Science and
+Technology, Fudan University, Shanghai 200237, China (e-mail: 17210
+720025@fudan.edu.cn; xinw@fudan.edu.cn).
+Yuedong Xu is with the School of Information Science and Engineering,
+Fudan University, Shanghai 200237, China (e-mail: ydxu@fudan.edu.cn).
+Digital Object Identifier 10.1109/TNSE.2022.3154408
+IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022 1895
+2327-4697 © 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See ht_tps://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+https://orcid.org/0000-0003-0842-285X
+https://orcid.org/0000-0003-0842-285X
+https://orcid.org/0000-0003-0842-285X
+https://orcid.org/0000-0003-0842-285X
+https://orcid.org/0000-0003-0842-285X
+https://orcid.org/0000-0003-4168-3998
+https://orcid.org/0000-0003-4168-3998
+https://orcid.org/0000-0003-4168-3998
+https://orcid.org/0000-0003-4168-3998
+https://orcid.org/0000-0003-4168-3998
+mailto:
+mailto:
+mailto:
+mailto:
+Ren et al. [14] proposed a new charging mechanism to main-
+tain the balance of capacity, where the percentage of charges
+is defined as a reciprocal of the exponential function of the
+current capacity, so that more transactions can be processed
+successfully. The other is to design routing mechanisms for a
+sequence of transactions. Wang et al. in [13] proposed the
+Flash algorithm for PCN routing. They divided transactions
+into two categories according to the transaction amount,
+mainly focusing on the transaction fee cost of large transac-
+tions and the path detection cost of small-scale transactions.
+Varma and Maguluri utilized bilateral queues to process as
+many transactions as possible with the method of capacity re-
+balancing [18]. Sivaraman et al. proposed the Spider network
+with the idea of packetizing transactions and adopting a multi-
+path transport protocol for high-throughput PCN routing [15].
+However, the literature puts the emphasis on either the mini-
+mum cost or the high efficiency, while little attention is paid
+to their delicate trade-off.
+In this paper, we study the payment channel routing from a
+novel perspective: instead of pursuing extreme efficiency, can
+the users save their transaction routing fees by being a bit more
+patient? Existing PCNs process the incoming transactions atom-
+ically and instantaneously [15]. Multiple transactions that arrive
+at different instants are routed on a first-come-first-serve (FCFS)
+basis. Two adverse effects might occur. One is that a transaction
+fails in the PCN and has to resort to the costly public chain if
+there is no path with sufficient balances; the other is that the
+overall routing fee of a set of transactions (from/to different
+nodes) is usually high. As the underlying reason, PCNs are time
+evolving with dynamic edge balances. For instance, Alice and
+Bob has built a payment channel. After a transaction from Alice
+to Bob, the balance of Alice to Bob decreases and that of Bob to
+Alice increases, and their total balance remains unchanged.
+Therefore, the FCFS processing is myopic in that a transaction
+possibly misses the cheap paths created by the subsequent trans-
+actions, or intercepts the cheap paths of subsequent transactions.
+Combined with the atomic transfer of transaction values in full,
+the FCFS means further increases the total routing fee. Inspired
+by this observation, we propose to reorder the processing of
+incoming transactions to reduce the routing fees, other than to
+process them immediately.
+Our first mechanism stipulates that the incoming transactions
+are handled together at a fixed duration periodically or a fixed
+number of transactions. We formulate an optimization problem
+to minimize their total atomic routing fee whose output is the
+permutation of orders of transactions and the corresponding
+routing policy for each of them. Some transactions gain more,
+some gain less, while some others might lose. Under certain
+rules, we present a coalitional game framework to incentivize
+the form of a grand coalition using the famous Shapley value as
+the cost re-distribution mechanism. This mechanism is shown to
+be individual rational, efficient and fair such that all the transac-
+tions in the coalition benefit from the reduction of total routing
+fee, and the higher success rate of PCN processing is achieved.
+Our second mechanism is rather intuitive. A “patient” trans-
+action can wait for the increase of the edge balance if the ini-
+tial balance upon its arrival is below its transaction value. This
+simple approach is also practical in the current payment chan-
+nel network. However, computing how much time it should
+wait is a very challenging task even on a single PCN channel
+with bidirectional edges. We model the waiting time as the
+first passage time in queuing theory, that is, the first time that
+the initial balance increases above the transaction value, given
+the stochastic transaction arrival processes on both directions
+of a single payment channel. A novel stochastic model is built
+to capture the dynamics of edge balance. We compute the
+recursive expression of the distribution of waiting time that is
+useful for the transaction sender to gauge his cost of patience.
+Simulation results validate the accuracy of our model.
+Our major contributions are briefly summarized as below.
+� We propose a novel idea of reordering the transactions
+actively or opportunistically, other than the chronologi-
+cal processing in order to reduce the PCN routing cost.
+� We present a periodic transaction processing scheme
+that yields an optimal transaction order, and formulate a
+coalitional game with Shapley value as the benefit
+redistribution mechanism.
+� We present a novel transient queuing model to capture
+the balance dynamics of a payment channel, and calcu-
+late the recursive expression on the waiting time distri-
+bution of a strategic transaction.
+The remainder of this paper is organized as follows.
+Section II describes the background and related work.
+Section III models the payment routing problem and introdu-
+ces the concept of transaction reordering. The coalition mech-
+anism design is presented in Section IV and the stochastic
+waiting time is mathematically analyzed in Section V.
+Section VI validates the Shapley-value based mechanism and
+the stochastic model. Section VII concludes our work.
+II. BACKGROUND AND RELATED WORK
+In this section, we present the basics of the payment channel
+routing and describe the literature that is pertinent to our
+study.
+A. A Premier on Payment Channel Network
+Payment channel is a method to realize the off-chain over-
+coming the scalability issue [8]. It allows two users not to
+commit all processed transactions to the public blockchain.
+The users publish a transaction to the public blockchain when
+establishing a new payment channel where they deposit coins
+into a multi-signature address [19] controlled by both users.
+Once the channel is established, they can make transactions
+over the channel and maintain channel balances by them-
+selves, without committing these transactions to the block-
+chain. When the two users want to close a channel, they need
+to publish a transaction to the public blockchain [32]. How-
+ever, connecting each pair of users off-chain incurs a rela-
+tively high cost, especially when the direct transactions
+between them are infrequent. The users must pay the transac-
+tion fee on public chain when creating a new payment chan-
+nel. To trade with others without direct channels in PCNs, the
+payments can be processed through multiple hops of channels
+1896 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+in the PCNs. This may lead to issues that the intermediate
+node denies performing payment transfer after receiving coins
+from the preceding one.
+To address these issues, the Hashed Time-Lock Contract
+(HTLC) mechanism has been introduced [8], [20]. Consider a
+simple transaction with three nodes A (Alice), B (Bob) and C
+(Carol) in Fig. 1 where A transfers a fund (0.1 BTC) to C
+through the intermediary B. As the first step, C computes the
+hash value on an arbitrarily chosen random number R and
+sends it to A. In the second step, A and B sign a smart contract
+which stipulates that if B can provide the correct R to A
+before a certain time (i.e., the lock time chosen by A and B),
+A will settle the contract by paying B 0.11 BTC. If the lock
+time have elapsed, then the above clause is null and void. The
+third step is that B and C sign the same contract as in step 2,
+except for the amount and lock time, where the lock time is
+negotiated by B and C. The transfer value is 0.1 BTC, and the
+remaining 0.01 BTC is the transaction fee to be paid to node
+B. In the fourth step, C reveals the random number R to B
+before the specified time, then B transmits the corresponding
+amount to C after verifying R. Finally, the same operation
+occurs between A and B and the transaction has been proc-
+essed successfully. It is noted that if C (resp. B) do not offer
+the correct R to B (resp. A), the transaction will fail.
+B. Overview of Routing Algorithm
+There has been a growing interest toward PCN routing. In
+what follows, we describe the recent progresses on the routing
+protocol design and the economic analysis of PCN routing.
+Protocol Design. For each payment channel, the associated
+two nodes are aware of the channel information. In this regard,
+SilentWhispers [21] selected the nodes with high connectivity
+in the network as landmarks to generate the complete transac-
+tion path by combining the paths of both parties to landmark.
+Roos et al. [22] proposed SpeedyMurmurs to find the path
+between nodes in a distributed environment using a greedy
+routing algorithm based on graph embedding. Hoenisch and
+Weber brought in On-Demand Distance Vector (AODV) rout-
+ing protocol from Mobile Ad Hoc Networks [35]. Mercan pro-
+posed a gateway selection algorithm to improve the
+transaction success rate which calculates the ratios of total
+inbound capacity to outbound capacity of each connected
+gateway and chooses the minimum among them [49].
+Flare [23] presented a new hybrid routing algorithm so as to
+find the available path as quick as possible in PCNs. Each
+node stores the information of its neighborhood and selects a
+set of beacon nodes randomly. When a user initiates a transac-
+tion, he first checks the destination among his neighboring
+nodes, and resorts to the beacon nodes if the path is not found.
+To cope with the capacity constraint, a series of recent stud-
+ies [15], [16], [26], [47] developed novel routing policies that
+turn an atomic payment into splittable smaller payments, and
+transfer them on multiple routes. The transfer, however,
+delays if any of the partial payments fail. To address this,
+Bagaria introduced Boomerang based on secret sharing and
+homomorphic one-way function, which allows reverting the
+transfer if the channel overdraws [51]. Rahimpour introduced
+Spear, a simple method with lower latency and less computa-
+tion than Boomerang [52]. Splitting routing can significantly
+increase the rate of payment successes, but there is no trivial
+way to integrate fees in such protocol. LRFP extended the
+existing routing protocol to solve the integration of fees in the
+local routing protocol [50].
+Economic Analysis. Cost efficient PCN routing has drawn
+considerable attentions since the senders seek to minimize their
+transaction fees charged by the payment channels. Engelmann
+et al. [33] proposed the first economic model of payment chan-
+nel routing and computed the minimum cost route accordingly.
+Along this line, Zhang et al. [12] investigated the cheapest path
+in PCNs subject to time and capacity constraints. Avarikioti
+et al. [24] and Ersoy et al. [25] also described the models of find-
+ing the cheapest path in PCNs. In addition, some works aim to
+maintain the security and long-term availability of channels.
+Ren et al. [14] presented a new charging mechanism to achieve
+reasonably short path lengths and overall balanced channel
+capacities. Revive [28] allowed a user to utilize any other of his
+channels for re-balancing a particular channel. Engelshoven
+et al. proposed a new charging function to avoid channel deple-
+tion in that the fee for payment increases linearly with the degree
+to which deteriorates the balance of a channel [48]. Awathare
+et al. proposed REBAL, a distributed re-balancing mechanism
+which re-routes transactions from intermediate nodes around an
+unidirectional channel rather than propagating the failure back
+to the source [46]. Malavolta et al. [29] proposed Fulgor and
+Rayo schemes, where the former ensures the intermediate nodes
+to transfer funds honestly via a non-interactive zero-knowledge
+building block and the latter guarantees at least one of the con-
+current transactions can be processed successfully. Yu et al.
+[27] designed a distributed algorithm to improve the payment
+success rate and reduce the system overhead. A deadlock in a
+payment network is a situation in which several simultaneous
+payments share edges in their paths in such a manner that none
+of the payments can go through. Werman et al. [30] solved the
+deadlock problem to improve the success rate of transaction by
+rearranging the transaction processing order.
+III. PROBLEM DESCRIPTION
+In this section, we describe the mathematical model of pay-
+ment channel networks (PCNs) and the motivation of being
+patient in PCNs by blockchain transactions.
+A. Temporal Network Model
+A payment channel network can be represented as a time-
+dependent directed graph Gt ¼ ðN ; E; C;W;BÞ, where N is
+Fig. 1. The example of HTLC mechanism.
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1897
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+the set of nodes and E is the set of edges. Each node ni 2 N
+represents a cryptocurrency account that has built one or more
+payment channel agreements with other nodes; each directed
+edge eij 2 E represents a payment channel from node ni to ni.
+The edge eij is associated with a 3-tuple ðcijðtÞ; wij; bijÞ,
+where the first is the maximum amount of cryptocurrency
+coins ni can pay to nj at time t and the second is the price per-
+unit of coin transfer charged by nj on this edge if it is a relay
+node. Let bij 2 B be the (flat-rate) base fee of using the chan-
+nel eij as the relay, regardless the amount of transaction size.
+We denote by Xk the kth transaction in the payment channel
+network that is expressed as a 4-tuple Xk ¼ ðnsðkÞ; nr
+ðkÞ; vk; tkÞ. The sender and the receiver of Xk are denoted by
+nsðkÞ and nrðkÞ, respectively. Here, vk is the payment value
+measured by the number of coins and tk is the time instant that
+the transaction takes place. One primary difference between
+the PCN and the traditional communication network is that a
+payment channel between ni and nj has a constant sum of bal-
+ances on bidirectional edges, while the balance on each
+directed edge can change. When a transaction from ni to nj
+has been processed successfully, the balance of edge eij
+decreases while that of edge eji increases. For any pair of
+nodes ns and nr in the transaction Xk, a feasible path is an
+end-to-end path on Gt whose edge balances are sufficient to
+transfer the transaction value.
+The business model of using payment channels is the fol-
+lowing. If the nodes ns and nr form a payment channel
+directly, there is no need for ns to pay for using this channel
+when nr is the receiver. If the transaction Xk is forwarded
+along a path PkðtÞ that starts at ns and ends at nr, the interme-
+diate nodes and channels should be paid for the coin transfer.
+For instance, consider the path PkðtÞ ¼ fn1; n2; n3; n4g. The
+node n1 will pay a certain amount of fees to n2 for using the
+channel e23, and n2 needs to pay to n3 for using the channel
+e34, but n3 does not pay to the receiver n4. Hence, the total
+routing fee that Xk needs to pay can be expressed as
+f ¼ ðw34 � vk þ b34Þ þ ½w23 � ðvk þ vkw34 þ b34Þ þ b23� [12],
+[35] [36]. Formally, the total routing fee on the Pk at graph Gt
+is given by:
+fðXk;GtÞ
+¼
+� Pk(t) = ? ;X
+eij2Pk
+8ni 6¼nsðkÞ
+ðwij � VkðijÞ þ bijÞ otherwise. (1)
+8>><>>:
+Here, VkðijÞ represents the actual amount that Xk needs to
+transfer through eij, including vk and the routing fees to be
+paid for subsequent edges. When the value of a transaction
+exceeds the edge balance, it can be sent to the public chain [15]
+that will incur a fixed amount of payment plus a much longer
+confirmation time. Without loss of generality, we deem the
+processing cost of a transaction as a constant � in the public
+chain that is higher than the routing fee in the PCN [41].
+In the hop-by-hop value transfer, the transaction fee need to
+be transmitted with the original transaction, which means
+fðXk;GtÞ þ vk is the actual value that nsðkÞ needs to pay at
+time t. For the intermediate edges on PkðtÞ, the balance must
+be no less than the value plus the total charge on the remaining
+channels on a route. The feasible flow paths should satisfy:
+VkðijÞ � cijðtÞ; 8eij 2 PkðtÞ;
+fðXk;GtÞ � �:
+(2)
+�
+We make a few commonly adopted assumptions to simplify
+our modeling efforts while complying with the real-world
+blockchain PCNs.
+Assumption 1: (Information Availability) Each node can
+obtain the channel balance and the edge prices of other pay-
+ment channels at the moment through probing the payment
+channel network, similar to [12], [13] and [23].
+Assumption 2: (Immediate Processing) The transaction
+over a payment channel network takes effect immediately if it
+is scheduled for processing, similar to [13], [34].
+Assumption 3: (Indivisible Transaction) A transaction can-
+not be split into multiple transactions of smaller values.
+In PCNs, some nodes are reluctant to reveal their balances
+and prices, and if so, they cannot become the public intermedi-
+ate nodes to forward the transactions. The splitting of transac-
+tions may involve the multi-path routing problem that is
+usually more complicated. We only consider indivisible trans-
+actions in this work, yet our problem and methodology are
+applicable to divisible transactions.
+B. Transaction Reordering
+The original purpose of constructing payment channel net-
+works is to speed up the processing of Bitcoin transactions.
+The state-of-the-art efforts are devoted to designing high-
+throughput payment channel systems without sacrificing cryp-
+tocurrency security [8]. As a basic incentive to maintain the
+PCN, the payment channels may charge the sender of the
+transaction a small amount of routing fee. As a consequence,
+the user is inclined to select a feasible path that yields the min-
+imum total routing fee [12].
+Given a sequence of transactions sorted by their arrival
+times, the graph Gt changes after each successful transfer. In
+this sequential processing order, choosing the minimum cost
+path for each transaction might be myopic because the graph
+is dynamic. A transaction may have a chance to find another
+path with even lower cost if it can “wait” for some time. We
+hereby illustrate that being patient is “egoistic” or “altruistic”.
+Fig. 2 and Fig. 3 shows the different routing fees that need
+to be paid for the same three transactions in different orders.
+The three transactions are X0 ¼ ðD;C; 3; 0Þ; X1 ¼ ðE;C; 1;
+1Þ; X2 ¼ ðE;D; 2; 2Þ. Without loss of generality, we set the
+base transaction fee as 1 unit and the charge rate of each edge
+as 50% transaction amount. This setting has no influence for
+the basic property of problem which we want to illustrate. The
+red path (in dashed lines) represents the cheapest path through,
+the green path (in dotted lines) represents the edges that
+change in the opposite direction. The number on the line indi-
+cates the balance of the channel at the current time. Fig. 2
+1898 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+shows the change in PCN topology when each transaction
+chooses to be processed as soon as it comes into being. For
+each transaction, the routing fee is fðX0; G0Þ ¼ �; fðX1;
+G1Þ ¼ 0; fðX2; G2Þ ¼ 5. If X1 chooses to be processed at
+time h1 > 2 andX0 chooses to be processed at time h0 > h1,
+the sequential processing order is ðX2; X1; X0Þ, the change in
+PCN topology is shown in Fig. 3. In this order,the routing fee
+are fðX0; Gh0Þ ¼ 0; fðX1; Gh1Þ ¼ 1:5 and fðX2; G2Þ ¼ 2.
+Egoistic Waiting. Egoistic waiting means that the waiting
+can reduce the user’s own routing cost. If X0 chooses not to
+wait, it must be processed in the public chain and the cost is �.
+By waiting for a short while,X0 can be processed afterX1 and
+X2. There is an available path due to the successful processing
+ofX1 andX2, and henceforth the routing cost ofX0 decreases.
+Altruistic Waiting. Altruistic waiting is defined as that the
+waiting of one user will cause its own routing cost to increase
+or remain unchanged, but other users’ routing cost may
+decrease, leading to a decrease in the total cost. If X1 is proc-
+essed first, the balance of E ! C is sufficient and the routing
+fee is 0. After waiting,X1 can only choose the path E ! B!
+C due to the preemption of X2. Then, the routing fee of X1
+increases to 1.5, and that of X2 decreases to 2 while the total
+cost of processingX1 andX2 is less.
+By reordering the transactions (other than first-come-first-
+serve (FCFS)), either some of the transactions can lower down
+their routing fees charged by the PCN, or these transactions as a
+whole can save a certain amount of routing fees. In order to take
+this advantage, there needs an incentive mechanism to encour-
+age the users to bemore patient.We hereby consider two scenar-
+ios, in which the former requires the intervention of the node(s)
+performing off-chain transactions, and the latter is completely
+compatible to the existing payment channel networks.
+1) Periodic Transaction Processing (PTP): The PCN con-
+figures a buffer to store the information of incoming transac-
+tions. It processes all the transactions in the buffer cyclically
+when the number of transactions exceeds a certain threshold
+or a fixed duration has been reached. An optimal reordering
+policy will be implemented to minimize the total transaction
+cost, and the total routing fee will be redistributed among
+these transactions. As the underlying principle, no transaction
+will receive a higher routing fee in the reordered processing
+than in the FCFS processing.
+2) Strategic Patience (SP): When a myopic user finds that
+the cheapest payment channel does not have the sufficient bal-
+ance to transfer his transaction value, he may resort to an
+expensive channel or the public chain. While a strategic user
+can predict how much time he can wait until the balance of the
+cheaper channel is greater than his transaction value, given the
+arrival patterns of transactions at both directions of the channel.
+IV. COALITION MECHANISM DESIGN
+In this section, we formulate a cooperative game and for-
+mally define the benefit distribution mechanism that is com-
+patible with the optimal transaction reordering principle.
+A. Cooperative Game in PCN
+Cooperative game (or coalition game narrowly) is a mathe-
+matical theory in revealing the behaviors of rational players in
+a cooperative setting. The players make agreements among
+themselves to form coalitions that affect their strategies and
+utilities, as opposed to the non-cooperative games. In what fol-
+lows, we formulate the benefit redistribution mechanism as a
+cooperative game, namely CG.
+� Player: A user who initiates a transaction is regarded as
+a player. If not mentioned explicitly, the transaction is
+equivalent to the user so that the set of players are
+expressed as X :¼ fX0; X1; . . . ; XN�1g with the arrival
+times tn � T , 8 0 � n � N � 1.
+� Coalitional Function: A function cðSÞ where S is an
+arbitrary non-empty subset of X.
+We denote cðSÞ as the coalitional function which measures
+the benefit produced by coalitions. The redistribution
+mechanism in the coalition is through Shapley value
+function.
+Definition 1 (Grand coalition): If every player chooses to
+join in a coalition, the coalition is called grand coalition.
+B. Worth of S
+We name a few interesting features about the calculation of
+the coalitional function cðSÞ in our game. First of all, cðSÞ is
+an outcome of the minimum cost routing problem that
+demands an appropriate algorithm to generate this value.
+Fig. 2. The process of X0 ¼ ðD;C; 3; 0Þ; X1 ¼ ðE;C; 1; 1Þ; X2 ¼ ðE;D; 2;
+2Þ, bij ¼ 1, wij ¼ 0:5 8eij 2 E. Fig. 3. The process of X2 ¼ ðE;D; 2; 2Þ; X1 ¼ ðE;C; 1; 1Þ; X0 ¼ ðD;C; 3;
+0Þ, bij ¼ 1, wij ¼ 0:5 8eij 2 E.
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1899
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+Second, the sequence number of processing this coalition as a
+whole needs to be decided due to that different processing
+sequences lead to different transaction fees. Third, the possible
+“free-riding” users route through new available paths created
+by coalition for free. We need to devise a set of rules to handle
+the above problems so as to make the coalition feasible and
+implementable.
+Rule 1: If a subset of transactions forms a coalition, their
+arrival times are modified to be aligned with the earliest trans-
+action in this coalition. The arrival time of a transaction out-
+side of the coalition remains unchanged. The processing
+priority of these transactions can be obtained by sorting the
+arrival times of the transactions.
+Rule 2: The execution rule of transactions inside the coali-
+tion is decided for the purpose of reducing their total transac-
+tion fees charged by the payment channels, and the path of
+each transaction is provided accordingly.
+Execution Order of the Coalition. The execution order of a
+coalition S 2 X is determined by that of the earliest transac-
+tion in S. Denote by hS the order of coalition S, and by hk the
+order ofXk in the original set of transactions. There are
+~tk ¼ tk; if Xk =2 S; (3Þ
+~tS ¼ argmin
+j
+ftjjXj 2 Sg; if Xk 2 S: (4)
+We reorder these transactions on the basis of ~tk and ~tS . Denote
+by hk the processing sequence of transactionXkðXk =2 SÞ after
+reordering. Denote by hS the processing sequence of coalition
+S after reordering.
+For instance, there exist four transactions X0, X1, X2 and
+X3 with the arrival time t0 < t1 < t2 < t3. When X1 and
+X3 form a coalition S, the processing order of S is determined
+by t1 so that the processing sequence of X0, XS and X2 satis-
+fies h0 < hS < h2. Hence, the coalition does not affect the
+processing of the transactions who arrive earlier than all the
+coalitional players.
+Execution Order Within the Coalition. In S, the sequence of
+players should be rearranged so as to minimize the total rout-
+ing fee. Consider the coalition S ¼ fX0; X1; . . . ; XK�1g, the
+PCN graph is redefined as Gk before processing the transaction
+Xk. The optimal routing for a particular Xk in the current
+topology of PCN is expressed below.
+min
+X
+ði;jÞ:eij2E
+fijðXkÞgijðXkÞ (5)
+s:t: gijðXkÞ :¼ 1; ifXk is routed along eij;
+0; else:
+�
+(6)
+X
+j2N
+gijðXkÞ �
+X
+j2N
+gjiðXkÞ ¼:
+1; ni ¼ nsðkÞ;
+�1; ni ¼ nrðkÞ;
+0; else:
+8<: (7)
+gijðXkÞVkðijÞ � cijðhkÞ; 8eij 2 E; (8)
+VkðijÞ ¼
+X
+h2N
+gjhðXkÞðVkðjhÞ þ fjhðXkÞÞ; (9)
+fjhðXkÞ ¼ gjhðXkÞðwjhVkðjhÞ þ bjhÞ; (10)
+X
+h2N
+ghrðXkÞVkðhrÞ ¼ vk; (11)
+fijðXkÞ ¼ 0; if ni ¼ nsðkÞ; (12)
+X
+ði;jÞ:eij2E
+fijðXkÞgijðXkÞ � �: (13)
+The objective is the sum of the routing fees on all the edges.
+The binary variable gijðXkÞ 2 ½0; 1� in (6) indicates the usage
+of edge eij for transaction Xk, and (7) represents the flow bal-
+ance conditions. For all vertices except ns and nr, there is
+only one incoming edge and one outgoing edge (i.e., that it
+should be a part of the path from ns to nr).
+The PCN routing model has two major differences from tra-
+ditional shortest-path models in networking. One is that each
+channel has a capacity constraint, and the balances of directed
+edges are alterable. The other is that the payment of a node
+should take into account the transaction fees charged by the
+downstream nodes on that path.
+In (8), the maximum amount of transaction values that can be
+processed is no more than the balance of the edge. (9)�(11)
+refer to the transaction fee calculations, i.e., fijðXkÞ represents
+the routing fee that Xk needs to pay to other nodes after edge
+eij. One can see that the transaction fee at a node depends on
+both the transaction value to be paid and the transaction fees
+charged on the rest of the path. Actually, the main constraints
+are about the selection of feasible paths, and our purpose is to
+Algorithm 1: PTP-SOLVER function.
+Input: Coalition, X ¼ fX0; X1; . . . ; Xng; Initial topology of PCN,
+G0 ¼ ðN ; E; C;W;BÞ;
+Output: fee: Set of transaction fee;
+Path: Set of path;
+G: Topology of PCN;
+1: Xlist ¼ fS1; S2; � � �g; ⊳ Si is the i
+th permutation of X;
+2: for all Si do
+3: G G0;
+4: fee ½�; �; . . . ; ��; ⊳ Maximum fee for each transaction
+is �;
+5: f;P; G0 ¼ SET � SOLVERðSi;G0Þ;
+6: if sumðfeeÞ > sum(f) then
+7: fee f;
+8: path P;
+9: G G0;
+10: end if
+11: if sum ðfeeÞ ¼ sum(f) then
+12: ðfee; path;GÞ  ðf;P; G0Þ with more successful transaction
+number;
+13: if successful number is same then
+14: ðfee; path;GÞ  ðf;P; G0Þ with more successful trans-
+action value;
+15: end if
+16: end if
+17: end for
+18: return fee; path;G;
+1900 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+find the cheapest one among them. If such a path leads to a
+higher routing cost than �, the public chain will be selected for
+the value transfer (13).
+Algorithm 1 is designed to calculate the minimum routing fee
+that the coalitional users need to pay. We need to permutate
+all the transactions in the coalition (line 1), calculate and com-
+pare the transaction fees required for each processing order
+(line 2-17). Lines 11-12 handle the corner case that different
+processing sequences yield the same amount of total transac-
+tion fees. We select the one with the largest number of transac-
+tions being processed successfully, and proceed to choose the
+one with the highest total transaction values (line 13-15).
+Algorithm 2 is used to calculate the minimum transaction fee
+of coalitional users in one processing order. For each transac-
+tion request, we can obtain the updated PCN topology, and the
+available minimum cost path in the current PCN topology.
+The new PCN topology is used as the input for the next trans-
+action request (line 5).
+Algorithm 3 calculates the cheapest path for a single trans-
+action and updates the PCN topology (5) based on the Dijkstra
+algorithm. Unlike the traditional routing problem, the amount
+of payment at the first node of a path is the highest, and
+becomes less and less along this path because the intermediate
+nodes will keep their own transaction fees. Therefore, directly
+using the existing minimum-cost path algorithms does not
+work properly. We reverse the payment direction and search
+for the minimum cost available path from the receiver to the
+sender (line 10-19) alternatively. Meanwhile, we need to
+update the channel balances of the PCN topology after each
+successful processing of a transaction.
+We can obtain the benefit of S
+cðSÞ ¼
+X
+Xk2S
+fðXk;GtkÞ � fðXk;GhS Þ (14)
+and a set of important properties about cðSÞ are shown below.
+� Cohesive: A coalitional game <X;c> with transferable
+payoff is cohesive if
+cðXÞ �
+Xn
+k¼1
+cðSkÞ
+for every partition fS1; . . . ; Sng of X.
+� Weak Superadditivity: In a cooperation game < X;c>,
+for any S and S1, S 	 X; S1 	 S, there must be
+cðS1Þ � cðSÞ. That is, the characteristic function c
+satisfies weak superadditivity.
+The total benefit of the coalition may increase because of
+the existence of altruistic waiting users. It is necessary for
+egoistic waiting users to share part of their benefit with altruis-
+tic waiting user to compensate them for their losses. But there
+are some egoistic waiting users who want to monopolize the
+benefit and do not join the coalition. This kind of players is
+called Free-riders. In the social sciences, the free-rider prob-
+lem is a type of market failure that occurs when those who
+benefit from resources, public goods (such as public roads or
+hospitals), or services of a communal nature do not pay for
+them or under-pay [45]. Free riders need to be prohibited
+because they may continue to access or use it although not
+paying for the good (either directly through fees or tolls or
+indirectly through taxes). We use an example to illustrate this
+problem and establish a constrain to avoid this kind of
+phenomenon.
+As Fig. 4 shows, there are three transactions, X0 ¼
+ðC;E; 1; 0Þ; X1 ¼ ðC;B; 3; 1Þ; X2 ¼ ðA;C; 6; 2Þ. To simplify,
+we set bij ¼ 0 and wij ¼ 0:5 for all channels. If each transac-
+tion chooses not to cooperate, the benefits of three transactions
+are 0,0,0 separately. If X2 and X0 choose to cooperate, they
+should be processed firstly according the priority mechanism
+and the processing order is X2; X0; X1. The benefits are � �
+Algorithm 2: SET-SOLVER function.
+Input: Transaction coalition S ¼ fXi;Xj; . . . ; Xkg; Initial topology
+of PCN G0 ¼ ðN ; E; C;W;BÞ;
+Output: Set of transaction fee f; Set of path P; Topology of PCN G;
+1: f  ? ;
+2: P  ? ;
+3: G G0;
+4: for allXj 2 Sido
+5: fj;Pj; G ¼ SINGLE � SOLVERðXj;GÞ;
+6: f  f [ fj;
+7: P  P [ Pj;
+8: end for
+9: return f;P; G;
+Algorithm 3: SINGLE-SOLVER algorithm.
+Input: Transaction X ¼ ðns; nr; vÞ; Current topology of PCN
+G ¼ ðN ; E; C;W;BÞ;
+Output: Transaction fee f; Path P; New topology G0;
+1: G0 ¼ ðN ; E; C;W;0 BÞ  G
+2: N  G:nodes; E  G:edges;
+3: R fnrg; S  N n nr;
+4: path ? ;
+5: fee ? ;
+6: for ni 2 N n nrdo
+7: feei  �; pathi  ½ni�, if eir =2 E;
+8: wsi  0, bsi  0, if esi 2 E;
+9: end for
+10: whileS 6¼ ? and fee was updated
+11: ni  argmin
+nk2R
+fee
+12: for nj 2 ni:in-neighbors do
+13: if feei þ wji � ðvþ feeiÞ þ bji < feej and
+ðvþ feeiÞ � cji then
+14: feej  feei þ wji � ðvþ feeiÞ þ bji;
+15: pathj  pathi [ nj;
+16: R R [ nj; S  S n nj;
+17: end if
+18: end for
+19: end while
+fee fees; path paths;
+20: foreij 2 path do
+21: cij  cij � ðvþ feejÞ;
+22: cji  cji þ ðvþ feejÞ;
+23: end for
+24: return f  fees;P  paths, G
+0  ðN ; E; C;W;0 BÞ;
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1901
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+0:5; �; 0 for X0; X1 and X2. X0 is egoistic waiting user and
+according the common sense, he should share some benefit
+with X2. X1 also benefit but he does not share his earning
+with X2 because of not joining in coalition. We call X1 Free-
+rider. X2 is the altruistic waiting user and he is not paid for
+his service to free-rider. We need to set up an effective mecha-
+nism to resist this phenomenon because free-rider problem
+will lead to the instability of the coalition.
+We address the free-rider problem by setting an additional
+restriction. All channels that update the balances as a result of
+coalition member transactions are stored. The path of the
+player who does not join in S is checked, and the cheaper path
+created by S is prohibited from being used by the free-riders.
+This solution can prevent the users in S from waiting but not
+getting the corresponding benefits. Intermediate nodes will be
+willing to abide by it consciously.
+C. Benefit Redistribution Via Shapley Value
+The reordering of the players may cause some of them pay-
+ing less routing fee and while some others paying more. In
+order to stimulate the players to form a grand coalition, the
+redistribution of the benefit is inevitable. It needs to be fair to
+all the players, and yields a unique payoff vector known as the
+value of the coalitional game [44].
+Definition 2: A benefit redistribution mechanism is an opera-
+tor f on a payment channel network hX;ci that allocates a cost
+vector fðX;cÞ ¼ ðf0;f1; . . . ;fN�1Þ inRN for all the players.
+We hereby design a benefit redistribution mechanism with
+the following desirable properties among the players.
+Property 1 (Rationality): If fiðSÞ 5 cðfXigÞ, it is the
+individual rationality ; If
+P
+Xi2SðfiðSÞÞ ¼ cðSÞ, it is the
+group rationality .
+Individual rationality [31] motivates the players to join the
+coalition and cooperate accordingly. Group rationality
+requires that the profit assigned equals the profit received
+from the coalition.
+Property 2 (Balanced Contribution): A value f satisfies the
+balanced contributions property if for every coalitional game
+with transferable benefit < X;c > , we have
+fiðXÞ � fiðXnfXjgÞ ¼ fjðXÞ � fjðXnfXigÞ;
+where Xi 2 X andXj 2 X.
+The property of balanced contributions addresses the fairness
+between any pair of transactions inX. If we start with a set of two
+transactions ðX;cÞ ¼ ðfX1;X2g;cÞ, the gain from cooperation
+iscðXÞ � cðX1Þ � cðX2Þ. Thus, the egalitarian solution is
+fiðX;cÞ ¼ cðfigÞ þ 1
+2
+cðXÞ � cðfX1gÞ � cðfX2gÞ½ �:
+Property 3 (Symmetry): If cðS [XiÞ ¼ cðS [XjÞ for all
+S 2 XnfXi;Xjg, then fiðSÞ ¼ fjðSÞ.
+The symmetry property requires that if two players contrib-
+ute the same to every subset of other players, they should
+receive the same amount of cost.
+Property 4 (Dummy): There is fðXkÞ ¼ cðfXkgÞ for a
+dummy player k in coalition S.
+In our game, if a player does not contribute to the reduction
+of routing fee, i.e. cðSÞ þ cðfXigÞ ¼ cðS [XiÞ, the payoff
+of this player of joining the coalition is identical to that of not
+joining.
+Property 5 (Additivity): For any two game (S;c1) and
+(S;c2) we have fiðc1 þ c2Þ ¼ fiðc1Þ þ fiðc2Þ for all i 2 S,
+where c1 þ c2 is the game defined by ðc1 þ c2ÞðSÞ ¼
+c1ðSÞ þ c2ðSÞ for every coalition S.
+The additivity property ensures that even if the charging
+rate of some edges changes, our redistribution mechanism is
+still available.
+Shapley value is the unique value that satisfies all five prop-
+erties. Then, it is defined as follows [43].
+Definition 3 (Marginal contribution): The marginal contri-
+bution of player i to any coalition S with i 2 S in the game
+hX;ci to be
+4iðSÞ ¼ cðSÞ � cðSnfigÞ:
+Definition 4 (Shapley Value): The Shapley value f is
+defined by the condition
+fiðSÞ ¼
+X
+S1
+S
+ðjSj � jS1jÞ!ðjS1j � 1Þ!
+jSj! 4i ðS1Þ;
+8Xi 2 S: (15)
+where jSj and jS1j represent the numbers of players in S
+and S1, respectively. Actually, Shapley value represents the
+expected marginal contribution over all orders of this player
+to the set of players who precede him.
+Lemma 1: If c satisfies the weak superadditivity property,
+the corresponding Shapley value satisfies the individual
+rationality.
+Proof: If c satisfies the weak superadditivity, that means:
+cðS [ iÞ � cðSÞ þ cðfigÞ; 8S 2 X; i 2 XnS:
+In consenquence, 4iðSÞ � cðfigÞ. According to (15),
+fiðSÞ satisfies individual rationality. &
+V. STOCHASTIC WAITING TIME
+In this section, we formulate the stochastic model of bal-
+ance dynamics on a simplified PCN and calculate the waiting
+time distribution of a strategic user.
+Fig. 4. The process of X2 ¼ ðA;C; 6; 2Þ; X0 ¼ ðC;E; 1; 0Þ; X1 ¼ ðC;B; 3;
+1Þ, bij ¼ 0, wij ¼ 0:5 8eij 2 E.
+1902 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+A. Stochastic Capacity Model
+We will show that an individual “patient” transaction can
+achieve a lower cost by waiting for the feasibility of a pay-
+ment channel when the balance of this channel is below the
+transaction value in the very beginning. Note that this type of
+patience does not demand the periodic transaction processing
+and the cost redistribution mechanisms. We consider a simpli-
+fied PCN with only two nodes forming a payment channel in
+Fig. 5 that can be easily generalized to the network with paral-
+lel payment channels. Node A (resp. node B) is in charge of
+processing the left-side (resp. right-side) transactions on edge
+eAB (resp. edge eBA). The successful transactions from A to B
+increase the balance cBA and decrease the balance cAB, and
+vice versa. When a transaction finds the balance cAB insuffi-
+cient, it can keep patient until cAB is larger than its transaction
+value. An interesting question is how much time a transaction
+needs to wait before successful processing, given the stochas-
+tic arrivals of other transactions on both sides of the channel.
+Balance Dynamics. The time axis is set to t ¼ 0 when a
+transaction arrives to node A and will be transferred to node B
+through edge eAB. If the initial balance u is no less than the
+transaction value v, it is processed immediately. Otherwise, it
+will wait for until cAB is greater than v. Without loss of gener-
+ality, we denote this transaction as the tagged transaction X̂.
+Denote by Ut the balance of edge eAB at time t and there exists
+Ut ¼ uþ
+XN2ðtÞ
+i¼0
+v2i �
+XN1ðtÞ
+i¼0
+v1i; (16)
+where v1i indicates the value of the i
+th transaction from A to B
+and v2i indicates that of the i
+th transaction from B to A. Here,
+N1ðtÞ and N2ðtÞ are the numbers of transactions on edge eAB
+and eBA by time t respectively. We make the following
+assumptions.
+� The arrival process of transactions on edge eAB is the
+Poisson process fN1ðtÞ : t � 0g with parameter �1, and
+that on edge eBA is the Poisson process fN2ðtÞ : t � 0g
+with parameter �2.
+� The transaction values on both directions, i.e. v1i and
+v2i, are independent and identically distributed (i.i.d)
+with the probability density function gð�Þ and expecta-
+tion m.
+The assumption of Poisson arrival is commonly adopted in
+decentralized payment systems [37]–[40], and the bilateral
+transactions are deemed to have the same distribution of val-
+ues but with different arrival rates [15]. Therefore, the evolu-
+tion of fUt; t � 0g is a compound Poisson process.
+The waiting time of the transaction X̂ is actually the dura-
+tion between 0 and the instant that the balance cAB is greater
+than v for the first time. Thus, the waiting time can be modeled
+as the first passage time of Ut to v in queuing theory. For-
+mally, we denote t̂ as the waiting time that has
+bt ¼ arg
+t
+min
+�
+t j u�
+XN1ðtÞ
+i¼0
+v1i þ
+XN2ðtÞ
+i¼0
+v2i � v
+�
+: (17)
+Given the stochastic arrival of transactions on the edges eAB
+and eBA, t̂ is a random variable by nature.
+Before calculating the distribution of t̂, we provide the pre-
+condition of waiting. The sum of cAB and cBA has been
+decided upon the construction of the payment channel so that
+the transaction bX cannot be processed in this channel if this
+sum is below v. We provide the following theorem with regard
+to the expectation and variance of the waiting time.
+Proposition 1: The expected waiting time E½bt� is calculated
+by
+E½t̂� ¼
+v�u
+ð�2��1Þm �2 > �1.
+1 otherwise.
+(
+(18)
+The variance of waiting time is calculated by
+Var½bt� ¼ ðv� uÞð�1 þ �2ÞEðv2Þ
+ð�2 � �1Þ3m3
+: (19)
+The detailed proof can be referred to [53] with slight modi-
+fications. The expectation and variance of waiting time are
+both found to increase monotonically with �1 and decrease
+monotonically with �2 by derivative. Therefore, the smaller
+the �1 or the larger �2 is, the shorter and more stable the wait-
+ing time there has.
+B. Computing Waiting Time Distribution
+The expected waiting time overlooks the stochastic behav-
+ior of transaction arrivals and random transaction values,
+which is not sufficient to quantify the characteristic of the
+waiting time. We are more interested in how the chance of the
+successful processing increases over the waiting time. Hereby
+we analyze the probability distribution of the waiting time.
+Denote by Fðvk; u; tÞ the probability of a transaction being
+processed by time t
+Fðvk; u; tÞ ¼ Prft̂ � tjU0 ¼ u; v ¼ vkg; (20)
+where u is the initial balance observed byX.
+Computing Fðvk; u; tÞ is a very challenging task. We use a
+timeline in Fig. 6 to illustrate the possible events that inspire
+our basic idea. One can observe that the first passage event
+must occur at the instant of processing a transaction on edge
+eBA. Then, we can compute ’ðr; nÞ, the probability that the
+first passage event takes place before or at the arrival of the
+nth transaction on edge eBA, where r ¼ vk � u. The calcula-
+tion of Fðvk; u; tÞ is thus transformed into the union of ’ðr; nÞ
+for all n mutually exclusive events that happen before time t.
+Fig. 5. A simple network for analyzing stochastic waiting time.
+Fig. 6. An example of transactions arrival.
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1903
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+During the inter-arrival time of ðn� 1Þth and nth transaction
+from B to A, we need to scrutinize the number of transaction
+arrivals on edge eAB and the distribution of their total value.
+Formally, we provide the following theorem on the distribu-
+tion of waiting time.
+Theorem 1: The distribution of the waiting time Fðvk; u; tÞ
+is expressed as an iterative equation:
+Fðvk; u; tÞ ¼
+X1
+n¼1
+X1
+j¼n
+e��2t
+ð�2tÞj
+j!
+ð’ðr; nÞ � ’ðr; n� 1ÞÞ; (21Þ
+’ðr; nÞ ¼
+X1
+m¼0
+pm
+Z 1
+0
+qndG
+m�ðzÞ þ ’ðr; 1Þ; (22Þ
+’ðr; 1Þ ¼
+X1
+m¼0
+pm
+Z 1
+0
+½1�Gðrþ zÞ�dðGm�ðzÞÞ; (23Þ
+qn ¼
+Z uþz
+0
+’ðuþ z� x; n� 1ÞdGðxÞ; (24Þ
+pm ¼ �m
+1 �2
+ð�1 þ �2Þmþ1
+; (25Þ
+r ¼ vk � u; (26)
+where GðxÞ is the probability distribution function of x,
+Gm� ðzÞ represents the convolution of GðzÞ bym times.
+Proof: Our proof is carried out in two steps.
+Step 1: Equivalence between Fðvk; u; tÞ and ’ðr; nÞ. Define
+UðmÞ the balance of edge eAB when there are m transaction
+arrivals on edge eBA. Define Tk the inter-arrival time of two con-
+secutive arrivals,Xk�1 andXk, on edge eAB. Then, the probabil-
+ity of the first passage event upon the arrival of Ym is given by:
+UðmÞ ¼
+Xm
+i¼0
+v2i �
+XN1ð
+Pm
+k¼1 TkÞ
+i¼0
+v1i; (27Þ
+’ðr; nÞ ¼ PrfUðmÞ � r;9m � ng: (28)
+The first passage event is the union of mutually exclusive
+events that the first passage happens at the nth transaction
+arrival on edge eBA. Accordingly, the waiting time distribution
+is expressed as
+Fðvk; u; tÞ ¼
+X1
+n¼1
+Pr
+(Xn
+j¼1
+Tj < tj�2
+)
+ð’ðr; nÞ � ’ðr; n� 1ÞÞ:
+(29)
+Since the arrival processes are Poisson, the number of trans-
+action arrivals on each edge is given by:
+PrfN1ðtÞ ¼ mg ¼ ð�1tÞme��1t
+m!
+; (30Þ
+PrfN2ðtÞ ¼ mg ¼ ð�2tÞme��2t
+m!
+: (31)
+The inter-arrival time of transactions obeys the memoryless
+exponential distribution so that we can write down the sum of
+n random variables in the form of Erlang distribution
+PrfTn � tj�g ¼ 1� e��t; (32Þ
+Pr
+(Xn
+i¼1
+Ti � tj�2
+)
+¼
+X1
+j¼n
+e��2t
+ð�2tÞj
+j!
+: (33)
+Step 2: Calculation of ’ðr; nÞ. According to the full proba-
+bility formula, we can obtain
+L ¼ fT1 ¼ t; N1ðtÞ ¼ y;
+Xy
+i¼1
+v1i ¼ z; v21 ¼ xg; (34)
+F1ðm;n; rÞ ¼ PrfUðmÞ � r; 9m � njLg:
+For simplify, F1ðm;n; rÞ can be rewritten as F1. It describes
+the probability that there is at least one moment when the bal-
+ance of eBA is greater than the value needed to transfer until
+the arrival of the nth transaction on edge eBA under condition
+L. L describes the condition during the time that the first event
+arrives from B to A.
+According to the law of total probability, ’ðr; nÞ can be
+described as
+’ðr; nÞ ¼ PrðN1ðtÞ ¼ yÞ
+Z 1
+0
+PrðT1 ¼ tÞ
+Z 1
+0
+Pr
+Xy
+i¼1
+v1i ¼ z
+ !
+Z 1
+0
+F1dðGðxÞÞdzdt
+¼
+X1
+y¼0
+ð�1tÞy
+y!
+e��1t
+Z 1
+0
+�2e
+��2tdt
+Z 1
+0
+Pr
+Xy
+i¼1
+v1i ¼ z
+ !
+Z 1
+0
+F1dðGðxÞÞdz
+¼
+X1
+y¼0
+�2�
+y
+1
+ð�1 þ �2Þyþ1
+Z 1
+0
+Z 1
+0
+F1dðGðxÞÞdðGy�ðzÞÞ; (35Þ
+where Gy�ðzÞ represents the convolution of GðzÞ by y
+times.
+Here, F1 is sensitive to the number n. If n ¼ 1, F1 repre-
+sents the probability that the passage event is bound to take
+place until the first transaction arrives from B to A under con-
+dition con, and if n > 1, F1 represents the probability that the
+passage event takes place at least once until the arrival of nth
+transactions of eBA. We next derive the iterative formula as
+below:
+� n ¼ 1:
+R1
+0 F1dðGðxÞÞ ¼
+R1
+rþz dðGðxÞÞ ¼ 1�Gðrþ zÞ;
+� n > 1:
+R1
+0 F1dðGðxÞÞ ¼ 1�Gðrþ zÞ þ R rþz0 ’ðrþ
+z� x; n� 1ÞdðGðxÞÞ.
+The detailed derivations are as follows under the condition
+fT1 ¼ t; N1ðtÞ ¼ y;
+Py
+i¼1 v1i ¼ z; v21 ¼ xg.
+� if x� z � r, Uð1Þ � r. We can obtain
+F1ð1; n; rÞ ¼ Prfx� z � rjcong
+¼ Prfx � rþ zjcong
+¼
+Z 1
+rþz
+dðGðxÞÞ ¼ 1�Gðrþ zÞ: (36Þ
+� if x� z < r, it means fF1ðk; n; rÞ; k > 1g. For
+F1ðk; n; rÞ, we can express it as
+1904 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+F1ðk; n; rÞ ¼ PrfUðkÞ � r; 9k � njcon; Uð1Þ < rg
+¼ Prf
+[ n
+k¼1UðkÞ � rjcon; x� z < rg
+¼ Prf
+[ n
+k¼2UðkÞ þ x� z � rjcon; x < zþ rg
+¼ Prf
+[ n�1
+k¼1Uðk� 1Þ � rþ z� xjcon; x < zþ rg
+¼ ’ðrþ z� x; n� 1Þ: (37Þ
+According to (27), F1ðk; n; rÞ can be written asZ 1
+0
+F1dðGðxÞÞ ¼ 1�Gðrþ zÞ
+þ
+Z rþz
+0
+’ðrþ z� x; n� 1ÞdðGðxÞÞ: (38Þ
+Therefore, we can get
+’ðr; nÞ ¼
+X1
+y¼0
+�2�
+y
+1
+ð�1 þ �2Þyþ1
+Z 1
+0
+½1�Gðrþ zÞþ
+Z rþz
+0
+’ðrþ z� x; n� 1ÞdðGðxÞÞ�dðGy� ðzÞÞ; (39Þ
+’ðr; 1Þ ¼
+X1
+y¼0
+�2�
+y
+1
+ð�1 þ �2Þyþ1
+Z 1
+0
+½1�Gðrþ zÞ�dðGy� ðzÞÞ: (40)
+Submitting the above two equations to (29), the probability
+distribution of waiting time is obtained. This ends the proof.
+VI. EXPERIMENTAL STUDY
+In this section, we evaluate the performance of PTP mecha-
+nism under different PCNs and validate the theoretical result
+of the waiting time under SP mechanism.
+A. Overall Result for PTP
+First, we will use a specific PCN graph to study the coalitio-
+nal mechanism. The initial topology of payment channel net-
+work is shown in Fig. 7. The integers represent the current
+balances. The charging rates of the channels are 0.1. The basic
+routing fees for all channels are set to 0 and � is set to 1. There
+are a set of transactions X ¼ fX0; X1; X2; X3g, where X0 ¼
+ðC;D; 1; 0Þ; X1 ¼ ðB;C; 1; 1Þ; X2 ¼ ðA;C; 2; 2Þ; X3 ¼ ðB;A;
+1; 3Þ. If each transaction chooses not to cooperate with others
+(transfers at their arrival times), the routing cost of each trans-
+action is fðX0;G0Þ ¼ �; fðX1;G1Þ ¼ 0; fðX2;G2Þ ¼ 0:42;
+fðX3;G3Þ ¼ 0 respectively. In this case, the benefit for each
+user is 0. If all the transactions choose to cooperate, the opti-
+mal order is X2; X1; X0; X3. The corresponding cost is
+fðX2;G0Þ ¼ 0:2; fðX1;G1Þ ¼ 0:1; fðX0;G2Þ ¼ 0; fðX3;G3Þ
+¼ 0. The benefit for grand coalition is cðXÞ ¼ 1:12. We can
+compute the benefits for the individual transaction.
+The first row of Table I shows the benefit of each transac-
+tion if no one chooses to cooperate, and the second row shows
+that if a grand coalition is formed, each user’s benefit will be
+distributed through Shapley value. After reordering, the rout-
+ing fee decreases by 78% and the success rate of the number
+of transactions increases by 25%.
+If two players choose to cooperate with each other, the bene-
+fits are shown in Table II. The benefits of the coalitions with
+three players are shown in Table III. The results show that the
+coalitional function and the re-distribution function completely
+satisfy the desired properties.
+B. Experimental Results of PTP.
+We thereby show the performances of the coalitional mech-
+anism under different network parameters. The transaction fee
+of trading on the public chain is much higher than that of trad-
+ing on the PCNs. Therefore, we first focus on how much and
+how many of transactions can be successfully processed in
+PCNs through our mechanism. The metrics are measured by
+the successful transaction ratio (i.e. the number of successful
+transactions in the PCN divided by the total number) and the
+successful value ratio (i.e. the amount of transaction value
+processed via the PCN divided by the total transaction value).
+Next, the transactions that can not be processed in PCNs will
+be released to the public chain. We will explore the total trans-
+action fees including the routing fees in PCNs and the transac-
+tion fees on public chain. We study the performance under
+different conditions, including different graph sizes and differ-
+ent number of transactions. Fifty random network topologies
+are generated. Fifty sets of transactions created under each
+network topology, and each set incorporates includes four
+transactions.
+The maximum and minimum successful number, success-
+ful value and total transaction fee of each set of transac-
+tions are obtained. We calculate the average results for all
+sets of transactions under all topologies as the final results.
+The improvement ratio in successful transaction ratio can
+be calculated through the difference between the maximum
+and the minimum number of successful transactions
+(amount of successful transaction value) in PCNs, divided
+by the minimum number of successful transactions (mini-
+mum amount of successful transaction value) in PCNs. The
+reduction ratio of transaction fee can be measured by the
+difference between the maximum and minimum transaction
+fees under different processing order divided the maximum
+transaction fee.
+Fig. 7. Topology of PCNs in PTP case.
+TABLE I
+BENEFIT RE-DISTRIBUTION OF FCFS AND COALITION
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1905
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+In each topology, the number of nodes is set to 100, the
+number of edges is set to 700, the capacity of channels is ran-
+domly selected in the range of 10 to 15 coins. We randomly
+select the transaction value in the range of 1 to 12 coins. The
+charging rate of each channel is chosen randomly from 0.1%
+to 0.5%. The base routing fee is 0 for all channels. The trans-
+action fee on public chain is 5 coins.
+The performance of PTP is related to the network density.
+We define the network density [42] of PCNs with j nodes and
+k edges as:
+r ¼ 2 � k
+jðj� 1Þ
+where the value of r ranges from 0 to 1. The higher the value
+is, the denser the network is.
+First, the improvement ratios of successful transactions in
+PCNs and the reduction ratios of transaction fees under differ-
+ent network densities are explored. Fig. 8 shows that when the
+number of nodes increases, the improvement ratios of success-
+ful transactions in PCNs show a downward trend in the
+numbers and the values. The improvement ratios are still more
+than 1% even the number of nodes increases to 200. At this
+point, the network density is extremely low, decreasing to
+0.02. The reduction ratios of transaction fees also exhibit a
+downward trend, but they are lower than the improvement
+ratios of the successful number under the same conditions.
+The reason is that although transactions processed on PCNs
+do not need to pay transaction fees processed on the public
+chain, they still need to pay routing fees in PCNs. Then, Fig. 9
+plots the performance of PTP under different number of edges
+when the number of nodes are same. The improvement ratios
+of successful transactions and reduction ratios of transaction
+fees both increase with the increase of the number of edges.
+We want to explore further whether the size or the density
+of PCN affects the performance of PTP mechanism. Fig. 8
+and Fig. 9 show the improvement ratio of the success rate
+under different network densities. We then scale the network
+sizes and fix the network densities. As observed in Fig. 10, the
+improvement ratios of successful transactions in PCNs and
+reduction ratios of transaction fees are relatively stable with
+the increase in the number of nodes when r ¼ 0:3. The result
+TABLE III
+THE BENEFIT OF INDIVIDUAL TRANSACTION IN A THREE-PLAYER COALITION
+Fig. 8. The performance of PTP under same edges w.r.t. number of nodes.
+Fig. 9. The performance of PTP w.r.t. number of edges.
+Fig. 10. The performance of PTP under same network density w.r.t. number
+of nodes.
+Fig. 11. The performance of PTP w.r.t. number of transactions.
+TABLE II
+THE BENEFIT OF INDIVIDUAL TRANSACTION IN A TWO-PLAYER COALITION
+1906 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+shows that the performance of PTP mechanism is relatively
+stable with the same density despite the node changes. These
+results validate that the performance of the PTP is related to
+the network density. The high network density indicates the
+better performance of the PTP.
+The number of transactions affects the performance of PTP
+mechanism. As depicted in Fig. 11, the improvement ratio of
+the successful transactions and the reduction ratio of transac-
+tion fees in PCNs increase with the number of transactions
+when the number of nodes is 100 and the number of channels
+is 5000. However, a lot of transactions means great processing
+time. Therefore, PTP will process all the transactions in the
+buffer cyclically when the number of transactions exceeds a
+certain threshold or a fixed duration has been reached.
+C. Experiment Results of Stochastic Waiting Time
+We assume that the transaction sizes obey the exponential
+distribution with the expectation m, the transaction from A to
+B is a Poisson process with rate �1, and from B to A is a Pois-
+son process with �2. We recall r is the difference between the
+required transaction value and the current balance of eAB.
+Figs. 12–14 show the simulation results and the calculation
+results of SP . In the three figures, the markers represent the
+simulation results, the lines represent the model results. The
+horizontal axis is the waiting time, and the vertical axis is the
+cumulative probability function of the waiting time. We simu-
+late and calculate to get the waiting time distribution under
+different setting of parameters which include r, m, �1 and �2.
+The simulation results match well with the theoretical results
+under different conditions.
+VII. CONCLUSION
+In this paper, we study the cost efficient PCN routing prob-
+lem in which the first-come-first-serve way of transaction
+processing may block inexpensive paths, thus forcing the late
+transactions to traverse more expensive paths or resort to on-
+chain settlements. Two novel approaches, periodic transaction
+processing (PTP) and strategic patience (SP), are proposed
+that require the PCN users to wait for the reordered processing
+of transactions. In the former, the order of dealing with trans-
+actions is determined to minimize their total cost. A Shapley
+value mechanism is proposed to redistribute the cost to all the
+users so as to incentive their willingness to participate. In the
+later, a transaction can wait for the accumulation of the bal-
+ance of the payment channel edge when the initial balance is
+insufficient upon its arrival. Under the general transaction
+value distribution and the assumption of Poisson arrivals, we
+present a stochastic model to capture the distribution of wait-
+ing time. Experimental results manifest that being a bit more
+patient can effectively reduce the cost of all the participated
+transactions in PTP and the stochastic model of the waiting
+time is accurate in SP.
+REFERENCES
+[1] S. Nakamoto, “Bitcoin: A peer-to-peer electronic cash system,” White
+Paper, 2008.
+[2] Z. Shae and J. J. P. Tsai, “On the design of a blockchain platform for
+clinical trial and precision medicine,” in Proc. IEEE 37th Int. Conf. Dis-
+trib. Comput. Syst., Atlanta, GA, USA, 2017, pp. 1972–1980.
+[3] K. Karlsson et al., “Vegvisir: A partition-tolerant blockchain for the
+Internet-of-Things,” in Proc. IEEE 38th Int. Conf. Distrib. Comput.
+Syst., Vienna, 2018, pp. 1150–1158.
+[4] Y. Huang, J. Zhang, J. Duan, B. Xiao, F. Ye, and Y. Yang, “Resource
+allocation and consensus on edge blockchain in pervasive edge comput-
+ing environments,” in Proc. IEEE 39th Int. Conf. Distrib. Comput. Syst.,
+Dallas, TX, USA, 2019, pp. 1476–1486.
+[5] [Online]. Available: https://bitcoin.org/en/bitcoin-core/
+[6] [Online]. Available: http://www.ethereum.org/
+[7] “Visa acceptance for retailers,” [Online]. Available: https://usa.visa.
+com/about-visa/visanet.html
+[8] J. Poon and T. Dryja, “The bitcoin lightning network: Scalable off-chain
+instant payments,”White Paper, 2016.
+[9] A. Singh, R. M. Parizi, M. Han, A. Dehghantanha, H. Karimipour, and
+K.-K. R. Choo, “Public blockchains scalability: An examination of
+sharding and segregated witness,” Blockchain Cybersecur., Trust Pri-
+vacy, vol. 79, pp. 203–232, 2020.
+[10] L. Luu, V. Narayanan, C. Zheng, K. Baweja, S. Gilbert, and P. Saxena,
+“A secure sharding protocol for open blockchains,” in Proc. ACM SIG-
+SAC Conf. Comput. Commun. Secur., Vienna, Austria, 2016, pp. 17–30.
+[11] Raiden Network, “What is the raiden network,” 2018. [Online]. Avail-
+able: https://messari.io/asset/raiden-network/profile
+[12] Y. Zhang, D. Yang, and G. Xue, “CheaPay: An optimal algorithm for
+fee minimization in blockchain-based payment channel networks,” in
+Proc. IEEE Int. Conf. Commun., Shanghai, China, 2019, pp. 1–6.
+Fig. 12. The CDF of waiting time: model vs simulation.
+Fig. 14. The CDF of waiting time: model vs simulation.
+Fig. 13. The CDF of waiting time: model vs simulation.
+BAI et al.: UNDERSTANDING THE BENEFIT OF BEING PATIENT IN PAYMENT CHANNEL NETWORKS 1907
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+[13] P. Wang, H. Xu, X. Jin, and T. Wang, “Flash: Efficient dynamic routing
+for offchain networks,” in Proc. Int. Conf. Emerg. Netw. Exp. Technol.,
+Orlando, Florida, 2019, pp. 370–381.
+[14] A. H. Jun Ren, L. Feng, S. A. Cheong, and R. S. Mong Goh, “Optimal
+fee structure for efficient lightning networks,” in Proc. IEEE Int. Conf.
+Parallel Distrib. Syst., Singapore, 2018, pp. 980–985.
+[15] S. Vibhaalakshmi et al., “High throughput cryptocurrency routing in
+payment channel networks,” in Proc. USENIX Symp. Netw. Syst. Des.
+Implementation, 2020, pp. 777–796.
+[16] D. Piatkivskyi and M. Nowostawski, “Split payments in payment
+networks,” Data Privacy Manage. Cryptocurrencies Blockchain Tech-
+nol., vol. 11025, pp. 67–75, 2018.
+[17] E. Rohrer, J.-F. Laß, and F. Tschorsch, “Towards a concurrent and dis-
+tributed route selection for payment channel networks,” Data Privacy
+Manage. Cryptocurrencies Blockchain Technol., vol. 10436, pp. 411–
+419, 2017.
+[18] S. M. Varma and S. T. Maguluri, “Throughput optimal routing in block-
+chain based payment systems,” IEEE Trans. Control Netw. Syst., vol. 8,
+no. 4, pp. 1859–1868, Dec. 2021.
+[19] [Online]. Available: https://en.bitcoin.it/wiki/Multi-signature
+[20] P. McCorry, M. M€oser, S. F. Shahandasti, and F. Hao, “Towards Bitcoin
+payment networks,” Inf. Secur. Privacy, vol. 9722, pp. 57–76, 2016.
+[21] G. Malavolta, P. Moreno-Sanchez, A. Kate, and M. Maffei, “Silent-
+Whispers: Enforcing security and privacy in decentralized credit
+networks,” presented at the Network and Distributed System Security
+Symposium, San Diego, CA, USA, 2017.
+[22] S. Roos, P. Moreno-Sanchez, A. Kate, and I. Goldberg, “Settling pay-
+ments fast and private: Efficient decentralized routing for path-based
+transactions,” Dec. 2017, arXiv:1709.05748.
+[23] P. Prihodko et al., “Flare: An approach to routing in lightning network,”
+White Paper, 2016.
+[24] Z. Avarikioti, L. Heimbach, Y. Wang, and R. Wattenhofer, “Ride the
+Lightning: The game theory of payment channels,” Financial Cryptogr.
+Data Secur., vol. 12059, pp. 264–283, 2020.
+[25] O. Ersoy, S. Roos, and Z. Erkin, “How to profit from payments channels,”
+Financial Cryptogr. Data Secur., vol. 12059, pp. 284–303, 2020.
+[26] O. Osuntokun, “AMP:Atomic multi-path payments over lightning,” 2018.
+[27] R. Yu, G. Xue, V. T. Kilari, D. Yang, and J. Tang, “CoinExpress: A fast
+payment routing mechanism in blockchain-based payment channel
+networks,” in Proc. Int. Conf. Comput. Commun. Netw., Hangzhou,
+China, 2018, pp. 1–9.
+[28] R. Khalil and A. Gervais, “Revive: Rebalancing off-blockchain payment
+networks,” in Proc. ACM SIGSAC Conf. Comput. Commun. Secur.,
+Dallas, TX, USA, 2017, pp. 439–453.
+[29] G. Malavolta, P. Moreno-Sanchez, A. Kate, M. Maffei, and S. Ravi,
+“Concurrency and privacy with payment-channel networks,” in Proc.
+ACM SIGSAC Conf. Comput. Commun. Secur., Dallas, TX, USA, 2017,
+pp. 455–471.
+[30] S. Werman and A. Zohar, “Avoiding deadlocks in payment channel
+networks,” Data Privacy Manage. Cryptocurrencies Blockchain Tech-
+nol., vol. 11025, pp. 175–187, 2018.
+[31] M. Sasan et al., “The Shapley value for a fair division of group discounts
+for coordinating cooling loads,” PLoS One, vol. 15, no. 1, 2020, Art. no.
+e0 227049.
+[32] E. Rohrer, J. Malliaris, and F. Tschorsch, “Discharged payment chan-
+nels: Quantifying the lightning network’s resilience to topology-based
+attacks,” in Proc. IEEE Eur. Symp. Secur. Privacy Workshops, Stock-
+holm, Sweden, 2019, pp. 347–356.
+[33] F. Engelmann, H. Kopp, F. Kargl, F. Glaser, and C. Weinhardt,
+“Towards an economic analysis of routing in payment channel
+networks,” in Proc. 1st Workshop Scalable Resilient Infrastructures Dis-
+trib. Ledgers, Las Vegas, NV, USA, 2017, pp. 1–6.
+[34] N. Khan and R. State, “Lightning network: A comparative review of
+transaction fees and data analysis,” Blockchain Appl., vol. 1010, pp. 11–
+18, 2020.
+[35] P. Hoenisch and I. Weber, “AODV–based routing for payment channel
+networks,” Blockchain – ICBC, vol. 10974, pp. 107–124, 2018.
+[36] F. Beres, I. A. Seres, and A. A. Benczur, “A cryptoeconomic traffic anal-
+ysis of Bitcoin’s lightning network,” Jul. 2020, arXiv:1911.09432.
+[37] C. N. Cordi, “Simulating high-throughput cryptocurrency payment
+channel networks,” Ph.D. thesis, 2017.
+[38] N. Papadis and L. Tassiulas, “State-dependent processing in payment chan-
+nel networks for throughput optimization,” Mar. 2021, arXiv:2103.17207.
+[39] X. Ding, L. Ren, Z. Sang, Z. Zhang, Y. Du, and P. Yan, “Routing opti-
+mization for high speed photon state-channel architecture,” Blockchain
+Technol. Appl., vol. 1176, pp. 231–241, 2020.
+[40] Y. Sali and A. Zohar, “Optimizing off-chain payment networks in
+cryptocurrencies,” Jul. 2020, arXiv:2007.09410.
+[41] [Online]. Available: https://ycharts.com/indicators/bitcoin_average_
+transaction_fee
+[42] F. Katherine, “Comparing social networks: Size, density, and local
+structure,” Adv. Methodol. Statist., vol. 3, no. 2, pp. 185–216, 2006.
+[43] W. Eyal., “The Shapley value,” Handbook Game Theory Econ. Appl.,
+vol. 3, no. 2, pp. 2025–2054, 2002.
+[44] M. J. Osborne and A. Rubinstein, A Course in Game Theory. Cam-
+bridge, MA, USA: MIT Press, 1994.
+[45] [Online]. Available: https://en.wikipedia.org/wiki/Free-rider-problem
+[46] N. Awathare, Suraj, V. J. Akash Ribeiro, and U. Bellur, “REBAL: Chan-
+nel balancing for payment channel networks,” in Proc. Int. Symp.
+Model., Anal., Simul. Comput. Telecommun. Syst., Houston, TX, USA,
+2021, pp. 1–8.
+[47] H. Xue, Q. Huang, and Y. Bao, “EPA-Route: Routing payment channel
+network with high success rate and low payment fees,” in Proc. Int.
+Conf. Distrib. Comput. Syst., DC, USA, 2021, pp. 227–237.
+[48] Y. Van Engelshoven and S. Roos, “The merchant: Avoiding payment
+channel depletion through incentives,” in Proc. IEEE Int. Conf. Decen-
+tralized Appl. Infrastructures, U.K., 2021, pp. 59–68.
+[49] S. Mercan, E. Erdin, and K. Akkaya, “Improving transaction success
+rate in cryptocurrency payment channel networks,” Comput. Commun.,
+vol. 166, pp. 196–207, Jan. 2021.
+[50] O. Neut, “LRFP: Extending local routing protocols in layer 2 networks
+with a secure fee model,” Bachelor thesis, 2021.
+[51] V. Bagaria, J. Neu, and D. Tse, “Boomerang: Redundancy improves
+latency and throughput in payment-channel networks,” in Financial
+Cryptography and Data Security, vol. 12059. Berlin, Germany: Springer,
+2020, pp. 304–324.
+[52] S. Rahimpour and M. Khabbazian, “Spear: Fast multi-path payment with
+redundancy,” in Proc. ACM Conf. Adv. Financial Technol., Arlington,
+VA, USA, 2021, pp. 183–191.
+[53] M. Gao, “Time analysis of the surplus reaching a given level firstly in
+the double compound possion risk model,” J. Quantitative Econ.,
+vol. 27, no. 1, pp. 81–84, 2010.
+Qianlan Bai is currently working toward the Ph.D.
+degree in computer sciencewith the ShanghaiKeyLab-
+oratory of Intelligent Information Processing, School of
+Computer Science, Fudan University, Shanghai, China.
+Her research interests include economic analysis and
+security analysis about blockchain.
+Yuedong Xu received the B.S. degree from Anhui
+University, Hefei, China, the M.S. degree from the
+Huazhong University of Science and Technology,
+Wuhan, China, and the Ph.D. degree from The Chi-
+nese University of Hong Kong, Hong Kong. He is
+currently a tenured Associate Professor with the
+School of Information Science and Technology,
+Fudan University, Shanghai, China. From 2009 to
+2012, he was a Postdoc with INRIA Sophia Antipo-
+lis, Biot, France, and Universite d’Avignon, Avignon,
+France. His research interests include performance
+evaluation, optimization, security, data analytics and economic analysis of
+communication networks, and mobile computing.
+Xin Wang was born in 1973. He received the B.S.
+degree in information theory and the M.S. degree in
+communication and electronic systems from Xidian
+University, Xi’an, China, in 1994 and 1997, respec-
+tively, and the Ph.D. degree in computer science
+from Shizuoka University, Shizuoka, Japan, in 2002.
+He is currently a Professor with Fudan University,
+Shanghai, China. His research interests include qual-
+ity of network service, next-generation network
+architecture, mobile internet, and network coding. He
+is a Distinguished Member of CCF.
+1908 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 9, NO. 3, MAY/JUNE 2022
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:37:32 UTC from IEEE Xplore.  Restrictions apply. 
+<<
+  /ASCII85EncodePages false
+  /AllowTransparency false
+  /AutoPositionEPSFiles true
+  /AutoRotatePages /None
+  /Binding /Left
+  /CalGrayProfile (Gray Gamma 2.2)
+  /CalRGBProfile (sRGB IEC61966-2.1)
+  /CalCMYKProfile (U.S. Web Coated \050SWOP\051 v2)
+  /sRGBProfile (sRGB IEC61966-2.1)
+  /CannotEmbedFontPolicy /Warning
+  /CompatibilityLevel 1.4
+  /CompressObjects /Off
+  /CompressPages true
+  /ConvertImagesToIndexed true
+  /PassThroughJPEGImages true
+  /CreateJobTicket false
+  /DefaultRenderingIntent /Default
+  /DetectBlends true
+  /DetectCurves 0.0000
+  /ColorConversionStrategy /sRGB
+  /DoThumbnails true
+  /EmbedAllFonts true
+  /EmbedOpenType false
+  /ParseICCProfilesInComments true
+  /EmbedJobOptions true
+  /DSCReportingLevel 0
+  /EmitDSCWarnings false
+  /EndPage -1
+  /ImageMemory 1048576
+  /LockDistillerParams true
+  /MaxSubsetPct 100
+  /Optimize true
+  /OPM 0
+  /ParseDSCComments false
+  /ParseDSCCommentsForDocInfo true
+  /PreserveCopyPage true
+  /PreserveDICMYKValues true
+  /PreserveEPSInfo false
+  /PreserveFlatness true
+  /PreserveHalftoneInfo true
+  /PreserveOPIComments false
+  /PreserveOverprintSettings true
+  /StartPage 1
+  /SubsetFonts false
+  /TransferFunctionInfo /Remove
+  /UCRandBGInfo /Preserve
+  /UsePrologue false
+  /ColorSettingsFile ()
+  /AlwaysEmbed [ true
+    /Algerian
+    /Arial-Black
+    /Arial-BlackItalic
+    /Arial-BoldItalicMT
+    /Arial-BoldMT
+    /Arial-ItalicMT
+    /ArialMT
+    /ArialNarrow
+    /ArialNarrow-Bold
+    /ArialNarrow-BoldItalic
+    /ArialNarrow-Italic
+    /ArialUnicodeMS
+    /BaskOldFace
+    /Batang
+    /Bauhaus93
+    /BellMT
+    /BellMTBold
+    /BellMTItalic
+    /BerlinSansFB-Bold
+    /BerlinSansFBDemi-Bold
+    /BerlinSansFB-Reg
+    /BernardMT-Condensed
+    /BodoniMTPosterCompressed
+    /BookAntiqua
+    /BookAntiqua-Bold
+    /BookAntiqua-BoldItalic
+    /BookAntiqua-Italic
+    /BookmanOldStyle
+    /BookmanOldStyle-Bold
+    /BookmanOldStyle-BoldItalic
+    /BookmanOldStyle-Italic
+    /BookshelfSymbolSeven
+    /BritannicBold
+    /Broadway
+    /BrushScriptMT
+    /CalifornianFB-Bold
+    /CalifornianFB-Italic
+    /CalifornianFB-Reg
+    /Centaur
+    /Century
+    /CenturyGothic
+    /CenturyGothic-Bold
+    /CenturyGothic-BoldItalic
+    /CenturyGothic-Italic
+    /CenturySchoolbook
+    /CenturySchoolbook-Bold
+    /CenturySchoolbook-BoldItalic
+    /CenturySchoolbook-Italic
+    /Chiller-Regular
+    /ColonnaMT
+    /ComicSansMS
+    /ComicSansMS-Bold
+    /CooperBlack
+    /CourierNewPS-BoldItalicMT
+    /CourierNewPS-BoldMT
+    /CourierNewPS-ItalicMT
+    /CourierNewPSMT
+    /EstrangeloEdessa
+    /FootlightMTLight
+    /FreestyleScript-Regular
+    /Garamond
+    /Garamond-Bold
+    /Garamond-Italic
+    /Georgia
+    /Georgia-Bold
+    /Georgia-BoldItalic
+    /Georgia-Italic
+    /Haettenschweiler
+    /HarlowSolid
+    /Harrington
+    /HighTowerText-Italic
+    /HighTowerText-Reg
+    /Impact
+    /InformalRoman-Regular
+    /Jokerman-Regular
+    /JuiceITC-Regular
+    /KristenITC-Regular
+    /KuenstlerScript-Black
+    /KuenstlerScript-Medium
+    /KuenstlerScript-TwoBold
+    /KunstlerScript
+    /LatinWide
+    /LetterGothicMT
+    /LetterGothicMT-Bold
+    /LetterGothicMT-BoldOblique
+    /LetterGothicMT-Oblique
+    /LucidaBright
+    /LucidaBright-Demi
+    /LucidaBright-DemiItalic
+    /LucidaBright-Italic
+    /LucidaCalligraphy-Italic
+    /LucidaConsole
+    /LucidaFax
+    /LucidaFax-Demi
+    /LucidaFax-DemiItalic
+    /LucidaFax-Italic
+    /LucidaHandwriting-Italic
+    /LucidaSansUnicode
+    /Magneto-Bold
+    /MaturaMTScriptCapitals
+    /MediciScriptLTStd
+    /MicrosoftSansSerif
+    /Mistral
+    /Modern-Regular
+    /MonotypeCorsiva
+    /MS-Mincho
+    /MSReferenceSansSerif
+    /MSReferenceSpecialty
+    /NiagaraEngraved-Reg
+    /NiagaraSolid-Reg
+    /NuptialScript
+    /OldEnglishTextMT
+    /Onyx
+    /PalatinoLinotype-Bold
+    /PalatinoLinotype-BoldItalic
+    /PalatinoLinotype-Italic
+    /PalatinoLinotype-Roman
+    /Parchment-Regular
+    /Playbill
+    /PMingLiU
+    /PoorRichard-Regular
+    /Ravie
+    /ShowcardGothic-Reg
+    /SimSun
+    /SnapITC-Regular
+    /Stencil
+    /SymbolMT
+    /Tahoma
+    /Tahoma-Bold
+    /TempusSansITC
+    /TimesNewRomanMT-ExtraBold
+    /TimesNewRomanMTStd
+    /TimesNewRomanMTStd-Bold
+    /TimesNewRomanMTStd-BoldCond
+    /TimesNewRomanMTStd-BoldIt
+    /TimesNewRomanMTStd-Cond
+    /TimesNewRomanMTStd-CondIt
+    /TimesNewRomanMTStd-Italic
+    /TimesNewRomanPS-BoldItalicMT
+    /TimesNewRomanPS-BoldMT
+    /TimesNewRomanPS-ItalicMT
+    /TimesNewRomanPSMT
+    /Times-Roman
+    /Trebuchet-BoldItalic
+    /TrebuchetMS
+    /TrebuchetMS-Bold
+    /TrebuchetMS-Italic
+    /Verdana
+    /Verdana-Bold
+    /Verdana-BoldItalic
+    /Verdana-Italic
+    /VinerHandITC
+    /Vivaldii
+    /VladimirScript
+    /Webdings
+    /Wingdings2
+    /Wingdings3
+    /Wingdings-Regular
+    /ZapfChanceryStd-Demi
+    /ZWAdobeF
+  ]
+  /NeverEmbed [ true
+  ]
+  /AntiAliasColorImages false
+  /CropColorImages true
+  /ColorImageMinResolution 150
+  /ColorImageMinResolutionPolicy /OK
+  /DownsampleColorImages true
+  /ColorImageDownsampleType /Bicubic
+  /ColorImageResolution 150
+  /ColorImageDepth -1
+  /ColorImageMinDownsampleDepth 1
+  /ColorImageDownsampleThreshold 1.50000
+  /EncodeColorImages true
+  /ColorImageFilter /DCTEncode
+  /AutoFilterColorImages false
+  /ColorImageAutoFilterStrategy /JPEG
+  /ColorACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /ColorImageDict <<
+    /QFactor 0.40
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000ColorACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000ColorImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasGrayImages false
+  /CropGrayImages true
+  /GrayImageMinResolution 150
+  /GrayImageMinResolutionPolicy /OK
+  /DownsampleGrayImages true
+  /GrayImageDownsampleType /Bicubic
+  /GrayImageResolution 300
+  /GrayImageDepth -1
+  /GrayImageMinDownsampleDepth 2
+  /GrayImageDownsampleThreshold 1.50000
+  /EncodeGrayImages true
+  /GrayImageFilter /DCTEncode
+  /AutoFilterGrayImages false
+  /GrayImageAutoFilterStrategy /JPEG
+  /GrayACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /GrayImageDict <<
+    /QFactor 0.40
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000GrayACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000GrayImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasMonoImages false
+  /CropMonoImages true
+  /MonoImageMinResolution 1200
+  /MonoImageMinResolutionPolicy /OK
+  /DownsampleMonoImages true
+  /MonoImageDownsampleType /Bicubic
+  /MonoImageResolution 600
+  /MonoImageDepth -1
+  /MonoImageDownsampleThreshold 1.50000
+  /EncodeMonoImages true
+  /MonoImageFilter /CCITTFaxEncode
+  /MonoImageDict <<
+    /K -1
+  >>
+  /AllowPSXObjects false
+  /CheckCompliance [
+    /None
+  ]
+  /PDFX1aCheck false
+  /PDFX3Check false
+  /PDFXCompliantPDFOnly false
+  /PDFXNoTrimBoxError true
+  /PDFXTrimBoxToMediaBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXSetBleedBoxToMediaBox true
+  /PDFXBleedBoxToTrimBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXOutputIntentProfile (None)
+  /PDFXOutputConditionIdentifier ()
+  /PDFXOutputCondition ()
+  /PDFXRegistryName ()
+  /PDFXTrapped /False
+  /CreateJDFFile false
+  /Description <<
+    /CHS <FEFF4f7f75288fd94e9b8bbe5b9a521b5efa7684002000410064006f006200650020005000440046002065876863900275284e8e55464e1a65876863768467e5770b548c62535370300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c676562535f00521b5efa768400200050004400460020658768633002>
+    /CHT <FEFF4f7f752890194e9b8a2d7f6e5efa7acb7684002000410064006f006200650020005000440046002065874ef69069752865bc666e901a554652d965874ef6768467e5770b548c52175370300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c4f86958b555f5df25efa7acb76840020005000440046002065874ef63002>
+    /DAN <FEFF004200720075006700200069006e0064007300740069006c006c0069006e006700650072006e0065002000740069006c0020006100740020006f007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400650072002c0020006400650072002000650067006e006500720020007300690067002000740069006c00200064006500740061006c006a006500720065007400200073006b00e60072006d007600690073006e0069006e00670020006f00670020007500640073006b007200690076006e0069006e006700200061006600200066006f0072007200650074006e0069006e006700730064006f006b0075006d0065006e007400650072002e0020004400650020006f007000720065007400740065006400650020005000440046002d0064006f006b0075006d0065006e0074006500720020006b0061006e002000e50062006e00650073002000690020004100630072006f00620061007400200065006c006c006500720020004100630072006f006200610074002000520065006100640065007200200035002e00300020006f00670020006e0079006500720065002e>
+    /DEU <FEFF00560065007200770065006e00640065006e0020005300690065002000640069006500730065002000450069006e007300740065006c006c0075006e00670065006e0020007a0075006d002000450072007300740065006c006c0065006e00200076006f006e002000410064006f006200650020005000440046002d0044006f006b0075006d0065006e00740065006e002c00200075006d002000650069006e00650020007a0075007600650072006c00e40073007300690067006500200041006e007a006500690067006500200075006e00640020004100750073006700610062006500200076006f006e00200047006500730063006800e40066007400730064006f006b0075006d0065006e00740065006e0020007a0075002000650072007a00690065006c0065006e002e00200044006900650020005000440046002d0044006f006b0075006d0065006e007400650020006b00f6006e006e0065006e0020006d006900740020004100630072006f00620061007400200075006e0064002000520065006100640065007200200035002e003000200075006e00640020006800f600680065007200200067006500f600660066006e00650074002000770065007200640065006e002e>
+    /ESP <FEFF005500740069006c0069006300650020006500730074006100200063006f006e0066006900670075007200610063006900f3006e0020007000610072006100200063007200650061007200200064006f00630075006d0065006e0074006f0073002000640065002000410064006f00620065002000500044004600200061006400650063007500610064006f007300200070006100720061002000760069007300750061006c0069007a00610063006900f3006e0020006500200069006d0070007200650073006900f3006e00200064006500200063006f006e006600690061006e007a006100200064006500200064006f00630075006d0065006e0074006f007300200063006f006d00650072006300690061006c00650073002e002000530065002000700075006500640065006e00200061006200720069007200200064006f00630075006d0065006e0074006f00730020005000440046002000630072006500610064006f007300200063006f006e0020004100630072006f006200610074002c002000410064006f00620065002000520065006100640065007200200035002e003000200079002000760065007200730069006f006e0065007300200070006f00730074006500720069006f007200650073002e>
+    /FRA <FEFF005500740069006c006900730065007a00200063006500730020006f007000740069006f006e00730020006100660069006e00200064006500200063007200e900650072002000640065007300200064006f00630075006d0065006e00740073002000410064006f006200650020005000440046002000700072006f00660065007300730069006f006e006e0065006c007300200066006900610062006c0065007300200070006f007500720020006c0061002000760069007300750061006c00690073006100740069006f006e0020006500740020006c00270069006d007000720065007300730069006f006e002e0020004c0065007300200064006f00630075006d0065006e00740073002000500044004600200063007200e900e90073002000700065007500760065006e0074002000ea0074007200650020006f007500760065007200740073002000640061006e00730020004100630072006f006200610074002c002000610069006e00730069002000710075002700410064006f00620065002000520065006100640065007200200035002e0030002000650074002000760065007200730069006f006e007300200075006c007400e90072006900650075007200650073002e>
+    /ITA (Utilizzare queste impostazioni per creare documenti Adobe PDF adatti per visualizzare e stampare documenti aziendali in modo affidabile. I documenti PDF creati possono essere aperti con Acrobat e Adobe Reader 5.0 e versioni successive.)
+    /JPN <FEFF30d330b830cd30b9658766f8306e8868793a304a3088307353705237306b90693057305f002000410064006f0062006500200050004400460020658766f8306e4f5c6210306b4f7f75283057307e305930023053306e8a2d5b9a30674f5c62103055308c305f0020005000440046002030d530a130a430eb306f3001004100630072006f0062006100740020304a30883073002000410064006f00620065002000520065006100640065007200200035002e003000204ee5964d3067958b304f30533068304c3067304d307e305930023053306e8a2d5b9a3067306f30d530a930f330c8306e57cb30818fbc307f3092884c3044307e30593002>
+    /KOR <FEFFc7740020c124c815c7440020c0acc6a9d558c5ec0020be44c988b2c8c2a40020bb38c11cb97c0020c548c815c801c73cb85c0020bcf4ace00020c778c1c4d558b2940020b3700020ac00c7a50020c801d569d55c002000410064006f0062006500200050004400460020bb38c11cb97c0020c791c131d569b2c8b2e4002e0020c774b807ac8c0020c791c131b41c00200050004400460020bb38c11cb2940020004100630072006f0062006100740020bc0f002000410064006f00620065002000520065006100640065007200200035002e00300020c774c0c1c5d0c11c0020c5f40020c2180020c788c2b5b2c8b2e4002e>
+    /NLD (Gebruik deze instellingen om Adobe PDF-documenten te maken waarmee zakelijke documenten betrouwbaar kunnen worden weergegeven en afgedrukt. De gemaakte PDF-documenten kunnen worden geopend met Acrobat en Adobe Reader 5.0 en hoger.)
+    /NOR <FEFF004200720075006b00200064006900730073006500200069006e006e007300740069006c006c0069006e00670065006e0065002000740069006c002000e50020006f0070007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e00740065007200200073006f006d002000650072002000650067006e0065007400200066006f00720020007000e5006c006900740065006c006900670020007600690073006e0069006e00670020006f00670020007500740073006b007200690066007400200061007600200066006f0072007200650074006e0069006e006700730064006f006b0075006d0065006e007400650072002e0020005000440046002d0064006f006b0075006d0065006e00740065006e00650020006b0061006e002000e50070006e00650073002000690020004100630072006f00620061007400200065006c006c00650072002000410064006f00620065002000520065006100640065007200200035002e003000200065006c006c00650072002e>
+    /PTB <FEFF005500740069006c0069007a006500200065007300730061007300200063006f006e00660069006700750072006100e700f50065007300200064006500200066006f0072006d00610020006100200063007200690061007200200064006f00630075006d0065006e0074006f0073002000410064006f00620065002000500044004600200061006400650071007500610064006f00730020007000610072006100200061002000760069007300750061006c0069007a006100e700e3006f002000650020006100200069006d0070007200650073007300e3006f00200063006f006e0066006900e1007600650069007300200064006500200064006f00630075006d0065006e0074006f007300200063006f006d0065007200630069006100690073002e0020004f007300200064006f00630075006d0065006e0074006f00730020005000440046002000630072006900610064006f007300200070006f00640065006d0020007300650072002000610062006500720074006f007300200063006f006d0020006f0020004100630072006f006200610074002000650020006f002000410064006f00620065002000520065006100640065007200200035002e0030002000650020007600650072007300f50065007300200070006f00730074006500720069006f007200650073002e>
+    /SUO <FEFF004b00e40079007400e40020006e00e40069007400e4002000610073006500740075006b007300690061002c0020006b0075006e0020006c0075006f0074002000410064006f0062006500200050004400460020002d0064006f006b0075006d0065006e007400740065006a0061002c0020006a006f0074006b006100200073006f0070006900760061007400200079007200690074007900730061007300690061006b00690072006a006f006a0065006e0020006c0075006f00740065007400740061007600610061006e0020006e00e400790074007400e4006d0069007300650065006e0020006a0061002000740075006c006f007300740061006d0069007300650065006e002e0020004c0075006f0064007500740020005000440046002d0064006f006b0075006d0065006e00740069007400200076006f0069006400610061006e0020006100760061007400610020004100630072006f0062006100740069006c006c00610020006a0061002000410064006f00620065002000520065006100640065007200200035002e0030003a006c006c00610020006a006100200075007500640065006d006d0069006c006c0061002e>
+    /SVE <FEFF0041006e007600e4006e00640020006400650020006800e4007200200069006e0073007400e4006c006c006e0069006e006700610072006e00610020006f006d002000640075002000760069006c006c00200073006b006100700061002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400200073006f006d00200070006100730073006100720020006600f60072002000740069006c006c006600f60072006c00690074006c006900670020007600690073006e0069006e00670020006f006300680020007500740073006b007200690066007400650072002000610076002000610066006600e4007200730064006f006b0075006d0065006e0074002e002000200053006b006100700061006400650020005000440046002d0064006f006b0075006d0065006e00740020006b0061006e002000f600700070006e00610073002000690020004100630072006f0062006100740020006f00630068002000410064006f00620065002000520065006100640065007200200035002e00300020006f00630068002000730065006e006100720065002e>
+    /ENU (Use these settings to create PDFs that match the "Suggested"  settings for PDF Specification 4.0)
+  >>
+>> setdistillerparams
+<<
+  /HWResolution [600 600]
+  /PageSize [612.000 792.000]
+>> setpagedevice

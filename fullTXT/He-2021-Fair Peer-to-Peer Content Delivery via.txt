@@ -1,0 +1,1205 @@
+Fair Peer-to-Peer Content Delivery via Blockchain
+Fair Peer-to-Peer Content Delivery
+via Blockchain
+Songlin He1, Yuan Lu2(B), Qiang Tang3, Guiling Wang1, and Chase Qishi Wu1
+1 New Jersey Institute of Technology, Newark, NJ 07102, USA
+{sh553,gwang,chase.wu}@njit.edu
+2 Institute of Software Chinese Academy of Sciences, Beijing, China
+luyuan@iscas.ac.cn
+3 The University of Sydney, Sydney, Australia
+qiang.tang@sydney.edu.au
+Abstract. In comparison with conventional content delivery networks,
+peer-to-peer (p2p) content delivery is promising to save cost and handle
+high peak-demand, and can also complement the decentralized storage
+networks such as Filecoin. However, reliable p2p delivery requires proper
+enforcement of delivery fairness, i.e., the deliverers should be rewarded
+according to their in-time delivery. Unfortunately, most existing studies
+on delivery fairness are based on non-cooperative game-theoretic assump-
+tions that are arguably unrealistic in the ad-hoc p2p setting.
+We for the first time put forth an expressive yet still minimalist secu-
+rity notion for desired fair p2p content delivery, and give two efficient
+solutions FairDownload and FairStream via the blockchain for p2p down-
+loading and p2p streaming scenarios, respectively. Our designs not only
+guarantee delivery fairness to ensure deliverers be paid (nearly) propor-
+tional to their in-time delivery but also ensure the content consumers
+and content providers are fairly treated. The fairness of each party can
+be guaranteed when the other two parties collude to arbitrarily misbe-
+have. Moreover, the systems are efficient in the sense of attaining nearly
+asymptotically optimal on-chain costs and deliverer communication.
+We implement the protocols and build the prototype systems atop
+the Ethereum Ropsten network. Extensive experiments done in LAN
+and WAN settings showcase their high practicality.
+Keywords: Content delivery · Fairness · P2P · Blockchain application
+1 Introduction
+The peer-to-peer (p2p) content delivery systems are permissionless decentral-
+ized services to seamlessly replicate contents to the consumers. Typically these
+systems encompass a large ad-hoc network of deliverers to overcome the band-
+width bottleneck of the original content providers. In contrast to conventional
+pre-planned content delivery networks such as Akamai [1], p2p content delivery
+can crowdsource unused bandwidth resources of tremendous Internet peers, thus
+c© Springer Nature Switzerland AG 2021
+E. Bertino et al. (Eds.): ESORICS 2021, LNCS 12972, pp. 348–369, 2021.
+https://doi.org/10.1007/978-3-030-88418-5_17
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-88418-5_17&domain=pdf
+https://doi.org/10.1007/978-3-030-88418-5_17
+Fair Peer-to-Peer Content Delivery via Blockchain 349
+having a wide array of benefits including robust service availability, bandwidth
+cost savings, and scalable peak-demand handling [2,3]. Recently, renewed atten-
+tions to p2p content delivery are gathered [2,19] due to the fast popularization
+of decentralized storage networks (DSNs) [5,17,34,41,42]. Indeed, most DSNs
+feature decentralized and robust content storage, but lack well-designed content
+delivery mechanisms catering for a prosperous content consumption market in
+the p2p setting, where the content shall not only be reliably stored but also must
+be always quickly retrievable despite potentially malicious participants [18].
+The primary challenge of designing a proper delivery mechanism for comple-
+menting DSNs is to realize the strict guarantee of “fairness” against adversar-
+ial peers. In particular, it has to promise well-deserved items (e.g., retrieval of
+desired contents, rewards to spent bandwidth, payment for providing valid con-
+tents) to all participants [14]. Otherwise, free-riding parties can abuse the sys-
+tem [15,30,35] and cause rational ones to escape, eventually resulting in possible
+system collapse [20]. We reason as follows to distinguish two types of quintessen-
+tial fairness, namely delivery fairness and exchange fairness, in the p2p content
+delivery setting where three parties, i.e., content provider, content deliverer and
+content consumer, are involved.
+Exchange Fairness is not Delivery Fairness. Exchange fairness [4,7,10,
+12,28,31], specifically for digital goods (such as signatures, videos), emphasizes
+that one party’s input shall keep confidential until it does learn the other party’s
+input. Unfortunately, in the p2p content delivery setting, merely considering it
+becomes insufficient, because a content deliverer would expect to receive rewards
+proportional to the bandwidth resources that it spends. Noticeably, exchange
+fairness fails to capture such new desiderata related to bandwidth cost, since it
+allows a deliverer to receive no reward at all after transferring a huge amount of
+encrypted data to the other party, which clearly breaks the deliverer’s expectation
+on being well-paid but does not violate exchange fairness at all.
+Consider FairSwap [12] as a concrete example: the deliverer first sends the
+encrypted content and semantically secure digest to the consumer, then waits
+for a message from the consumer (via blockchain) to confirm the receival of these
+ciphertexts, then the deliverer can reveal his encryption key on-chain; but, in case
+the consumer aborts, all bandwidth used to send ciphertexts is wasted, causing
+no reward for deliverer. A seemingly enticing way to mitigate the above attack
+could be splitting the content into n smaller chunks and run FairSwap for each
+chunk, but the on-chain cost would grow linearly in n, resulting in prohibitive
+on-chain costs for large-size content like movies. Adapting other fair exchange
+protocols for delivery fairness would encounter similar issues. Hence, the efficient
+construction satisfying delivery fairness remains unclear.
+Thus, to capture the special fairness required by deliverers, we formulate
+delivery fairness in Sect. 4, stating that deliverers can receive rewards (nearly)
+proportional to the contributed bandwidth for delivering data to the consumers.
+Insufficiencies of Existing “Delivery Fairness”. A range of literature [29,
+38–40] studied problems similar to delivery fairness in p2p delivery. However,
+to our knowledge, no one assures delivery fairness in the cryptographic sense
+350 S. He et al.
+as we seek to do. In particular, they [29,38–40] were studied in the non-
+cooperative game-theoretic settings where independent attackers free ride sponta-
+neously without communication of their strategies, and the attackers are rational
+with the intentions to maximize their own benefits. Therefore, it boldly ignores
+an adversary that intends to break the system. Unfortunately, such rational
+assumptions are particularly elusive to stand in ad-hoc p2p systems accessible
+by all malicious evils. The occurrences of massive real-world attacks in open sys-
+tems [13,32] hint us how vulnerable the earlier heavy assumptions can be and
+further weaken the confidence of applying the prior art to real-world p2p content
+delivery.
+Lifting for “Exchange Fairness” Between Provider and Consumer.
+Besides the natural delivery fairness, it is equally vital to ensure exchange fairness
+for providers and consumers in a basic context of p2p content delivery, especially
+with the end goal to complement DSNs and enable some content providers to sell
+contents to consumers with delegating costly delivery/storage to a p2p network.
+In particular, the content provider should be guaranteed to receive payments
+proportional to the amount of correct data learned by the consumer; vice versa,
+the consumer only has to pay if indeed receiving qualified content.
+Näıve attempts of tuning a fair exchange protocol [4,12,28,31] into p2p con-
+tent delivery can guarantee neither delivery fairness (as analyzed earlier) nor
+exchange fairness: simply running fair exchange protocols twice between the
+providers and the deliverers and between the deliverers and the consumers,
+respectively, would leak valuable contents, raising the threat of massive con-
+tent leakage. Even worse, this idea disincentivizes the deliverers as they have
+to pay for the whole content before making a life by delivering the content to
+consumers.
+Our Contributions. Overall, it remains an open problem to realize such strong
+fairness guarantees in p2p content delivery to protect all providers, deliverers,
+and consumers.1 We for the first time formalize such security intuitions into a
+well-defined cryptographic problem on fairness and present a couple of efficient
+blockchain-based protocols to solve it. In sum, our contributions are:
+– We formulate the problem of p2p content delivery with desired security goals,
+which capture the special fairness to ensure that each party (i.e., the content
+provider, deliverer, and consumer) is fairly treated even if the other parties
+arbitrarily collude or are corrupted.
+– We put forth a novel delivery fairness notion dubbed verifiable fair delivery
+(VFD) to quantify one party’s bandwidth contribution. With the instantia-
+tion of VFD, we propose the blockchain-enabled p2p content delivery protocol
+FairDownload, which allows: (i) the consumers can download, i.e., view-after-
+delivery, the content with minimum involvement of the provider; (ii) one-time
+1 More thorough discussions about the insufficiencies of some pertinent studies (includ-
+ing gradual-release based fair exchange [7,10], blockchain-based fair exchange/MPC
+[6,9,12,25,31], fair off-chain payment channels [11,33], and some known decentral-
+ized content delivery schemes [2,19]) are provided in the online full version [21].
+Fair Peer-to-Peer Content Delivery via Blockchain 351
+contract deployment and preparation while repeatable delivery of the same
+content to different consumers.
+To further reduce the latency in FairDownload and accommodate the stream-
+ing scenario where the consumers expect view-while-delivery, we propose
+another protocol called FairStream, such that every data chunk can be
+retrieved by consumers in O(1) communication rounds. Though FairStream
+requires more involvement of an on-line content provider, the provider’s online
+workload remains much smaller than delivering the whole content by itself.
+– Both FairDownload and FairStream attain only Õ(η + λ) on-chain computa-
+tional costs even in the worst case, which only relates to the small chunk size
+parameter η and the even smaller security parameter λ. Moreover, consid-
+ering the fact that λ � η, both protocols essentially realize asymptotically
+optimal deliverer communication complexity, as the deliverer only has to send
+O(η + λ) bits amortized for each η-bit chunk.
+– We also implement FairDownload and FairStream with making various non-
+trivial optimizations to reduce their critical on-chain cost.2 Extensive exper-
+iments in WAN and LAN settings showcase their real-world applicability.
+2 Preliminaries
+Notations. Let [n] denote {1, . . . , n}, [a, b] denote {a, . . . , b}, x||y denote con-
+catenating x and y, ←$ denote uniformly random sampling, and � denote the
+prefix relationship.
+Global ledger. It provides the primitive of cryptocurrency that can deal with
+“coin” transfers transparently. Specifically, each entry of the dictionary ledger[Pi]
+records the balance of the party Pi, and is global (which means it is accessible by
+all system participants including the adversary). Moreover, the global dictionary
+ledger can be a subroutine of the so-called smart contract to transact “coins” to
+a designated party when some conditions are met.
+Cryptographic Primitives. We consider: (i) a hash function H : {0, 1}∗ →
+{0, 1}λ modeled as a random oracle; (ii) a semantically secure (fixed-length)
+symmetric encryption scheme consisting of (SE.KGen,SEnc,SDec); (iii) an exis-
+tential unforgeability under chosen message attack (EU-CMA) secure digital sig-
+nature scheme consisting of (SIG.KGen,Sign,Verify); (iv) a Merkle tree scheme
+of (BuildMT,GenMTP,VerifyMTP); (v) a specific verifiable public key encryp-
+tion scheme VPKE consisting of (VPKE.KGen,VEnc,VDec,ProvePKE,VerifyPKE)
+allowing the decryptor to produce a proof besides the plaintext, thus attest-
+ing correct decryption in a zero-knowledge fashion, i.e., without leaking private
+key [8].
+3 Warm-Up: Verifiable Fair Delivery
+We first warm up and set forth a building block termed verifiable fair delivery
+(VFD), which enables an honest verifier to validate that a sender indeed transfers
+2 Code availability: https://github.com/Blockchain-World/FairThunder.git.
+https://github.com/Blockchain-World/FairThunder.git
+352 S. He et al.
+some amount of data to a receiver. It later acts as a key module in the fair
+p2p content delivery protocol (in Sect. 5). The high level idea of VFD lies in: a
+receiver needs to send back a signed “receipt” in order to acknowledge a sender’s
+bandwidth contribution and continuously receives the next data chunk. Consider
+the data chunks of same size η are transferred sequentially starting from the first
+chunk, the sender can always use the latest receipt containing the chunk index to
+prove to a verifier about the contribution. Intuitively the sender at most wastes
+bandwidth of transferring one chunk.
+Syntax. The VFD protocol is among an interactive poly-time Turing-machine
+(ITM) sender S, an ITM receiver R, and a non-interactive Turing-machine ver-
+ifier V, and follows the syntax:
+– Sender. S can be activated by an interface S.send() with inputting a sequence
+of n data chunks and their corresponding validation strings, denoted by
+((c1, σc1), . . . , (cn, σcn)), and there exists an efficient and global predicate
+Ψ(i, ci, σci) → {0, 1} to check whether ci is the i-th valid chunk due to σci ;
+once activated, S interacts with R and opens an interface S.prove() that can
+be invoked to generate a proof π indicating the number of sent chunks;
+– Receiver. R can be activated by an interface R.recv() with the input of the
+global predicate Ψ(·) to interact with S, and outputs a sequence of ((c1, σc1),
+. . . , (cn′ , σcn′ )), where n′ ∈ [n] and every (ci, σci) is valid due to Ψ(·);
+– Verifier. V takes as input the proof π generated by S.prove(), and outputs
+an integer ctr ∈ {0, · · · , n}.
+Security. The VFD protocol must satisfy the following security requirements:
+– Termination. If at least one of S and R is honest, the VFD protocol termi-
+nates within at most 2n rounds, where n is the number of content chunks.
+– Completeness. If S and R are both honest and activated, after 2n rounds,
+S is able to generate a proof π that can be verified by V to output ctr = n,
+while R can output ((c1, σc1), . . . , (cn, σcn)), which is same to S’s input.
+– Verifiable η delivery fairness. When one of S and R maliciously aborts,
+VFD shall satisfy the following delivery fairness requirements:
+• Verifiable delivery fairness against S∗. The honest receiver R will always
+receive the valid sequence (c1, σc1), . . . , (cctr, σcctr) if the corrupted S∗ can
+produce the proof π that enables V to output ctr.
+• Verifiable delivery fairness against R∗. The honest sender S can always
+generate a proof π, which enables V to output at least (ctr − 1) if the
+corrupted R∗ receives the valid sequence (c1, σc1), . . . , (cctr, σcctr). At most
+S wastes bandwidth for delivering one content chunk of η-bit size.
+VFD protocol ΠVFD. We consider the authenticated setting where the sender
+S and the receiver R have generated public-private key pairs (pkS , skS) and
+(pkR, skR), respectively, and they have announced the public keys to bind to
+themselves. Then, VFD with the global predicate Ψ(·) can be realized by ΠVFD
+Fair Peer-to-Peer Content Delivery via Blockchain 353
+hereunder among S, R and V against probabilistic poly-time (P.P.T.) and static
+adversary in the stand-alone setting3 with the synchronous network assumption:
+– Construction of S. The sender, after activated via S.send() with the input
+((c1, σc1), . . . , (cn, σcn)), pkS and pkR, starts a timer TS lasting two syn-
+chronous rounds, initializes a variable πS := null, and executes as follows:
+• For each i ∈ [n]: sends (deliver, i, ci, σci) to R, and waits for (receipt, i, σi
+R)
+from R. If TS expires before receiving the receipt, breaks the iteration;
+otherwise S verifies whether Verify(receipt||i||pkR||pkS , σi
+R, pkR) ≡ 1 or
+not, if true, resets TS , outputs πS := (i, σi
+R), and continues to run the
+next iteration (i.e., increasing i by one); if false, breaks the iteration;
+• Upon S.prove() is invoked, it returns πS as the VFD proof and halts.
+– Construction of R. The receiver, after activated via R.recv() with the input
+pkS and (pkR, skR), starts a timer TR lasting two synchronous rounds and
+operates as: for each j ∈ [n]: R waits for (deliver, j, cj , σcj ) from S and
+halts if TR expires before receiving the deliver message; otherwise R veri-
+fies whether Ψ(j, cj , σcj ) ≡ 1 or not; if true, resets TR, outputs (cj , σcj ), and
+sends (receipt, i, σi
+R) to S where σi
+R ← Sign(receipt||i||pkR||pkS , skR), halts if
+false. Note that Ψ(·) is efficient as it just performs a signature verification.
+– Construction of V. Upon the input πS , the verifier V parses it into (ctr, σctr
+R ),
+and checks whether Verify(receipt||ctr||pkR||pkS , σctr
+R , pkR) ≡ 1 or not; if true,
+it outputs ctr, or else outputs 0. Recall that Verify is to verify signatures.
+The following lemma states the security of the above VFD protocol, the
+detailed proof of which is presented in the online full version [21].
+Lemma 1. In the synchronous authenticated network and stand-alone setting,
+ΠVFD satisfies termination, completeness and the verifiable η delivery fairness
+against static P.P.T. adversary corrupting one of the sender and the receiver.
+4 Formalizing P2P Content Delivery
+4.1 System Model
+Participating Parties. We consider the following entities (i.e., interactive Tur-
+ing machines by cryptographic convention) in the context of p2p content delivery:
+– Content Provider P is an entity that owns the original content m composed
+of n chunks,4 satisfying a public known predicate φ(·),5 and P is willing to
+3 To defend against replay attack in concurrent sessions, it is trivial to let the authenti-
+cated messages include a session id sid field, which, for example, can be instantiated
+by the hash of the transferred data identifier rootm, the involved parties’ addresses
+and an increasing-only nonce, namely sid := H(rootm||V address||pkS ||pkR||nonce).
+4 Remark that the content m is dividable in the sense that each chunk is independent
+to other chunks, e.g., the chunk is a small 10-s video fragment.
+5 Throughout this paper, we consider φ is in the form of φ(m) = [root(BuildMT(m)) ≡
+rootm], where root is the Merkle tree root of m. In practice, it can be acquired from
+a semi-trusted third party, e.g., VirusTotal [23] or BitTorrent forum sites [28].
+354 S. He et al.
+sell to the users of interest. Also, P would like to delegate the delivery of m
+to a deliverer with promise to pay BP for each successfully delivered chunk.
+– Content Deliverer D contributes its idle bandwidth resources to deliver the
+content on behalf of the provider P and would receive the payment propor-
+tional to the amount of delivered data.
+– Content Consumer C is an entity that would pay BC for each chunk in the
+content m by interacting with P and D.
+Adversary A. We consider the adversary with the following standard abil-
+ities [24]: (i) Static corruptions: A can corrupt some parties only before the
+protocol executions; (ii) Computationally bounded: A is restricted to P.P.T. algo-
+rithms; (iii) Synchronous authenticated channel: it describes the ability of A on
+controlling communications. W.l.o.g., we consider a global clock in the system,
+and A can delay the messages up to a clock round [25,27].
+Arbiter Smart Contract G. The system is in a hybrid model with oracle access
+to an arbiter smart contract G, which is a stateful ideal functionality that leaks
+all its internal states to the adversary A and all parties, and can check some
+immutable conditions to transact “coins” over the cryptocurrency ledger, thus
+“mimicking” the contracts in real life transparently. In practice, the contract can
+be instantiated via real-world blockchains such as Ethereum [43]. Description of
+G in the paper follows the conventional pseudo-code notations in [27].
+4.2 Design Goals
+Syntax. A fair p2p content delivery protocol Π = (P,D, C) is a tuple of three
+P.P.T. interactive Turing machines (ITMs) consisting of two explicit phases:
+– Preparation phase. The provider P takes as input public parameters and the
+content m = (m1, . . . ,mn) ∈ {0, 1}η×n that satisfies φ(m) ≡ 1, where η is
+chunk size in bit and n is the number of chunks, and it outputs some auxiliary
+data, e.g., encryption keys; the deliverer D takes as input public parameters
+and outputs some auxiliary data, e.g., encrypted content; the consumer C
+does not involve in this phase. Note P deposits a budget of n · BP in ledger
+to incentivize D so it can minimize bandwidth usage in the next phase.
+– Delivery phase. The provider P and the deliverer D take as input their aux-
+iliary data obtained in the preparation phase, respectively, and they would
+receive the deserved payment; the consumer C takes as input public parame-
+ters and outputs the content m with φ(m) ≡ 1. Note C has a budget of n ·BC
+in ledger to “buy” the content m satisfying φ(m) ≡ 1, where BC > BP .
+Properties. Besides, the protocol shall guarantee the following properties.
+Completeness. For any content predicate φ(m) = [root(BuildMT(m)) ≡ rootm],
+conditioned on P,D and C are all honest, the protocol Π attains: (i) C obtains
+the content m satisfying φ(m) ≡ 1, and the balance of ledger[C] decreases by
+n · BC ; (ii) D receives the payment n · BP over the global ledger; (iii) P gets the
+payment n · (BC − BP), as it receives n · BC from C and pays n · BP to D.
+Fair Peer-to-Peer Content Delivery via Blockchain 355
+Fairness. The protocol Π should satisfy the following fairness requirements:
+– Consumer Fairness. The honest consumer C is ensured that: the ledger[C]
+decreases by 	 · BC only if C receives a sequence of chunks (m1, . . . ,m�) � m
+where φ(m) ≡ 1, i.e., C pays proportional to valid chunks it de facto receives.
+– Deliverer η-Fairness. The honest deliverer D is assured that: if D sent overall
+O(	 · η + 1) bits during the protocol, D should at least obtain the payment of
+(	 − 1) · BP . In other words, the unpaid delivery is bounded by O(η) bits.
+– Provider η-Fairness. The honest provider P is guaranteed that: if A can out-
+put η · 	 bits prefixed in the content m, P should at least receive (	−1) ·(BC −
+BP) net income. Intuitively, P is ensured that at most O(η)-bit content are
+revealed without being well paid.
+Confidentiality Against Deliverer. A malicious D∗ corrupted by A cannot
+output P’s original content in a delivery session even after receiving all protocol
+scripts and all internal states leaked by the contract. Note that confidentiality is
+not captured by fairness, as it is trivial to see that a protocol satisfying fairness
+might not have confidentiality: upon all payments are cleared and the consumer
+receives the whole content, the protocol lets the consumer send the content to
+the deliverer.
+Timeliness. When at least one of the parties P, D and C is honest (i.e., others
+are corrupted by A), the honest ones are guaranteed to halt in O(n) synchronous
+rounds where n is the number of content chunks. At completion or abortion of
+the protocol, the fairness and confidentiality properties are always guaranteed.
+Non-trivial Efficiency. We require the necessary efficiency to rule out possible
+trivial solutions: (i) the messages sent to G from honest parties are uniformly
+bounded by Õ(1) bits, which excludes a trivial way of directly delivering content
+via smart contract; (ii) in the delivery phase, the messages sent by honest P are
+uniformly bounded by n · λ bits, where λ is a small cryptographic parameter
+such that n · λ is much smaller than the content size |m|. This makes P to save
+bandwidth after preparation phase and excludes the idea of delivering by itself.
+Remarks About Definition. It is worth noticing that: (i) the predicate φ(·)
+is a public parameter; (ii) our fairness requirements have implied the case of
+corrupting one party of P, D and C instead of two since A can always let some
+corrupted one follow the original protocol; (iii) we do not consider the case that
+all parties are corrupted; (iv) the deliverer and the provider might lose well-
+deserved payment, but at most for one chunk, i.e., the level of unfairness is
+strictly bounded; (v) though we focus on the case of a single content deliverer,
+our formalism and design can be extended to capture multiple deliverers, e.g., by
+cutting the content into multiple pieces and each piece is delegated to a distinct
+deliverer, which forms a future extension; (vi) after the one-time preparation
+phase, the delivery phase becomes repeatable.
+In addition, one might wonder that a probably corrupted content provider
+fails in the middle of a transmission, causing that the consumer does not get the
+entire content but has to pay a lot. Nevertheless, this is not a serious worry in
+356 S. He et al.
+the peer-to-peer content delivery setting that aims to complement decentralized
+content storage networks, because there essentially are a large number of deliver-
+ers, and at least some of them can be honest. As such, if a consumer encounters
+failures in the middle of delivery, it can iteratively ask another deliverer to start
+a new session to fetch the remaining undelivered chunks. Moreover, our con-
+structions in Sect. 5 and Sect. 6 allow the consumers to fetch the content from
+any specific chunk instead of always starting from the first chunk, the expense
+of which would be nearly proportional to the actual number of retrieved chunks.
+5 FairDownload: Fair P2P Downloading
+5.1 FairDownload Overview
+At a high level, FairDownload is constructed around the module of verifiable fair
+delivery (VFD) and operates in Prepare, Deliver and Reveal phases, as illustrated
+in Fig. 1. The core ideas are: initially the provider P encrypts each chunk, signs
+the encrypted chunks and delegates to the deliverer D; the consumer C and D
+can run an instance of VFD, where the predicate Ψ(·) ensures each delivered
+chunk is correctly signed by P; the arbiter smart contract G ledger
+d (abbr. Gd)
+shown in Fig. 2 can invoke VFD verifier to check the VFD proof and realize
+whether D indeed delivers ctr chunks to C; P then presents to reveal the minimum
+(i.e., a short Õ(λ)-bit message) number of elements (via our proposed structured
+key derivation scheme composed of Algorithms 1, 2 and 4) on-chain, so that
+C can use a small string to recover the decryption keys for all ctr chunks; the
+revealed on-chain elements are encrypted by the consumer’s public key to ensure
+confidentiality against malicious D; In case of dispute, C can complain to the
+contract Gd via a short O(η + λ)-bit message to “prove” the error of decrypted
+chunk and get refund, the on-chain cost of verifying which is O(log n) at worst.
+Fig. 1. The execution flow of FairDownload protocol ΠFD.
+Fair Peer-to-Peer Content Delivery via Blockchain 357
+The Arbiter Contract Functionality Gledger
+d for P2P Downloading
+The arbiter contract Gd has access to the ledger, and it interacts with the provider P, the
+deliverer D, the consumer C and the adversary A. It locally stores the times of repeatable
+delivery θ, the number of content chunks n, the content digest rootm, the price BP , BC and
+Bpf , the number of delivered chunks ctr (initialized as 0), addresses pkP , pkD , pkC , vpkC ,
+revealed keys’ hash erkhash, state Σ and three timers Tround (implicitly), Tdeliver, and Tdispute.
+Phase 1: Prepare
+• On receive (start, pkP , rootm, θ, n,BP ,
+BC,Bpf) from P:
+- assert ledger[P] ≥ (θ · (n · BP + Bpf)) ∧
+Σ ≡ ∅
+- store pkP , rootm, θ, n,BP ,BC,Bpf
+- let ledger[P] := ledger[P]−
+θ · (n · BP + Bpf) and Σ := started
+- send (started, pkP , rootm, θ, n,BP ,
+BC,Bpf) to all entities
+• On receive (join, pkD) from D:
+- assert Σ ≡ started
+- store pkD and let Σ := joined
+- send (joined, pkD) to all entities
+• On receive (prepared) from D:
+- assert Σ ≡ joined, and let Σ := ready
+- send (ready) to all entities
+Phase 2: Deliver
+• On receive (consume, pkC , vpkC) from C:
+- assert θ > 0
+- assert ledger[C] ≥ n · BC ∧ Σ ≡ ready
+- store pkC , vpkC and let
+ledger[C] := ledger[C] − n · BC
+- start a timer Tdeliver and let
+Σ := initiated
+- send (initiated, pkC, vpkC) to all entities
+• On receive (delivered) from C or Tdeliver
+times out:
+- assert Σ ≡ initiated
+- send (getVFDProof) to D, and wait for
+two rounds to receive (receipt, i, σi
+C),
+then execute verifyVFDProof() to let
+ctr := i, and then assert 0 ≤ ctr ≤ n
+- let ledger[D] := ledger[D] + ctr · BP
+- let ledger[P] := ledger[P]+ (n − ctr) ·BP
+- store ctr, let Σ := revealing, and send
+(revealing, ctr) to all entities
+Phase 3: Reveal
+• On receive (revealKeys, erk) from P:
+- assert Σ ≡ revealing
+- store erk (essentially erk’s hash) and
+start a timer Tdispute
+- let Σ := revealed
+- send (revealed, erk) to all entities
+• Upon Tdispute times out:
+- assert Σ ≡ revealed and current time
+T ≥ Tdispute
+- ledger[P] := ledger[P] + ctr · BC + Bpf
+- ledger[C] := ledger[C] + (n − ctr) · BC
+- let Σ := sold and send (sold) to all
+entities
+Below is the dispute resolution
+• On receive (wrongRK) from C before
+Tdispute times out:
+- assert Σ ≡ revealed and current time
+T < Tdispute
+- if (ValidateRKeys(n, ctr, erk) ≡ false):
+* let ledger[C] := ledger[C]+n ·BC +Bpf
+* let Σ := not sold and send (not sold)
+to all entities
+• On receive (PoM, i, j, ci, σci
+, H(mi),
+πi
+MT, rk, erk, πVD) from C before Tdispute
+times out:
+- assert Σ ≡ revealed and current time
+T < Tdispute
+- invoke the ValidatePoM(i, j, ci, σci
+,
+H(mi), πi
+MT, rk, erk, πVD) subroutine,
+if true is returned:
+* let ledger[C] := ledger[C]+n ·BC +Bpf
+* let Σ := not sold and send (not sold)
+to all entities
+Reset to the ready state for repeatable
+delivery
+• On receive (reset) from P:
+- assert Σ ≡ sold or Σ ≡ not sold
+- set ctr, Tdeliver, Tdispute as 0
+- nullify pkC and vpkC
+- let θ := θ − 1, and Σ := ready
+- send (ready) to all entities
+Fig. 2. The arbiter contract functionality G ledger
+d for downloading. “Sending to all enti-
+ties” captures that the smart contract is transparent to the public.
+5.2 ΠFD: FairDownload Protocol
+Now we present the fair p2p downloading protocol ΠFD. The session id sid and
+the content digest rootm are omitted since they remain same in a delivery session.
+Phase I for Prepare. The parties P and D interact with Gd in this phase as:
+358 S. He et al.
+– The provider P with (pkP , skP) deploys contracts and starts6 ΠFD by sending
+(start, pkP , rootm, θ, n, BP ,BC ,Bpf) to Gd, where rootm is the content digest
+in the form of Merkle tree root, θ indicates how many times of repeatable
+delivery are allowed for this contract, n is the number of content chunks7,
+BP ,BC ,Bpf ∈ N are price parameters, and Bpf is the penalty fee8 in a delivery
+session to discrouage the misbehavior from P.
+– Upon Σ ≡ joined, the provider P would: (i) randomly sample a master key
+mk, run Algorithm1 to get the key derivation tree KT, and store mk and
+KT locally; (ii) use the n leaf nodes of KT to encrypt (m1, . . . ,mn) to get
+(c1, . . . , cn); (iii) then sign the encrypted chunks to obtain a sequence of
+ciphertext-signature pairs ((c1, σc1), . . . , (cn, σcn)); compute content’s Merkle
+tree MT and sign MT to obtain the signature σMT
+P ; locally store (MT, σMT
+P ) and
+then send (sell, ((c1, σc1), · · · , (cn, σcn))) to D off-chain; (iv) wait for (ready)
+from Gd to enter the next phase.
+– The deliverer D with (pkD, skD) would: (i) upon receiving the (started) mes-
+sage from Gd, send (join, pkD) to Gd; (ii) wait for the (sell) message from
+P, then verify each pair (ci, σci). If valid, send (prepared) to Gd, and store
+((c1, σc1), · · · , (cn, σcn)) locally, otherwise halt; (iii) wait for (ready) from Gd
+to enter the next phase.
+Upon the completion of the above execution, P owns a master key mk, the
+key derivation tree KT, and the Merkle tree MT, while D receives the delegated
+encrypted content chunks and is ready to deliver the content to consumers.
+Phase II for Deliver. The parties C, P, and D interact with Gd as follows:
+– The consumer C with (pkC , skC) and (vpkC , vskC) ← VPKE.KGen(1λ) would:
+(i) assert Σ ≡ ready, and send (consume, pkC , vpkC) to Gd; (ii) upon receiv-
+ing (mtree,MT, σMT
+P ) from P, verify the signature σMT
+P and check whether
+root(MT) ≡ rootm or not, if both hold, store MT and then activate the
+receiver R in the VFD module via R.recv() and instantiating the predicate
+Ψ(·) as Verify(i||ci, σci , pkP). Then C waits for the execution of VFD to obtain
+the delivered chunks ((c1, σc1), (c2, σc2), · · · ) and stores them; upon receiving
+all the n chunks, sends (delivered) to Gd; (iii) waits for the (revealing) message
+from Gd to enter the next phase.
+– The provider P would execute as follows: upon receiving (initiated) from Gd,
+asserts Σ ≡ initiated, sends (mtree,MT, σMT
+P ) to C, and enters the next phase.
+– The deliverer D executes as follows: (i) upon receiving (initiated) from Gd,
+asserts Σ ≡ initiated, and then activates the sender S in the VFD module
+via S.send() and instantiating the predicate Ψ(·) as Verify(i||ci, σci , pkP), and
+feeds the VFD module with input ((c1, σc1), . . . , (cn, σcn)); (ii) upon receiving
+(getVFDProof) from Gd, sends the latest receipt, namely (receipt, i, σi
+C) to Gd;
+(iii) waits for the (revealing) message from Gd to halt.
+6 P can retrieve the deposits of BP and Bpf back if no deliverers respond timely.
+7 W.l.o.g., we assume n = 2k for k ∈ Z for presentation simplicity.
+8 Bpf can be required proportional to (n × BC) in case P deliberately lowers it.
+Fair Peer-to-Peer Content Delivery via Blockchain 359
+Algorithm 1. GenSubKeys algorithm
+Input: n, mk
+Output: a (2n − 1)-array KT
+1: let KT be an array of length (2n − 1)
+2: KT[0] = H(mk)
+3: if n ≡ 1 then
+4: return KT
+5: if n > 1 then
+6: for i in [0, n − 2] do
+7: KT[2i + 1] = H(KT[i] || 0)
+8: KT[2i + 2] = H(KT[i] || 1)
+9: return KT
+Algorithm 2. RevealKeys algorithm
+Input: n, ctr, and mk
+Output: rk, an array containing the minimum
+number of elements in KT that suffices to
+recover the ctr keys from KT[n−1] to KT[n+
+ctr − 2]
+1: let rk and ind be empty arrays
+2: KT ← GenSubKeys(n, mk)
+3: if ctr ≡ 1 then
+4: rk appends (n − 1,KT[n − 1])
+5: return rk
+6: for i in [0, ctr − 1] do
+7: ind[i] = n − 1 + i
+8: while true do
+9: let t be an empty array
+10: for j in [0, �|ind|/2� − 1] do
+11: pl = (ind[2j] − 1)/2
+12: pr = (ind[2j + 1] − 2)/2
+� merge elements with the same parent
+node in KT
+13: if pl ≡ pr then
+14: t appends pl
+15: else
+16: t appends ind[2j]
+17: t appends ind[2j + 1]
+18: if |ind| is odd then
+19: t appends ind[|ind| − 1]
+20: if |ind| ≡ |t| then
+21: break
+22: ind = t
+23: for x in [0, |ind| − 1] do
+24: rk appends (ind[x],KT[ind[x]])
+25: return rk
+Algorithm 3. ValidateRKeys algorithm
+Input: n, ctr and erk
+Output: true or false indicating if the correct
+number (i.e., ctr) of keys can be recovered
+1: if n ≡ ctr and |erk| ≡ 1 and the position of
+erk[0] ≡ 0 then
+2: return true {root of KT}
+3: Initialize chunks index as a set of numbers
+{n − 1, · · · , n + ctr − 2}
+4: for each (i, ) in erk do
+5: di = log(n) − �log(i + 1)�
+6: li = i, ri = i
+7: if di ≡ 0 then
+8: chunks index removes i
+9: else
+10: while (di--) > 0 do
+11: li = 2li + 1
+12: ri = 2ri + 2
+13: chunks index removes the elements from
+li to ri
+14: if chunks index ≡ ∅ then
+15: return true
+16: return false
+Algorithm 4. RecoverKeys algorithm
+Input: n, ctr, and rk
+Output: a ctr-sized array ks
+1: let ks be an empty array
+2: for each (i,KT[i]) in rk do
+3: ni = 2(log n−�log(i+1)�)
+4: vi = GenSubKeys(ni, KT[i])
+5: ks appends vi[ni − 1 : 2ni − 2]
+6: return ks
+At the end of this phase, C receives the encrypted chunks (c1, c2, . . . ), and D
+obtains the payment for the bandwidth contribution of delivering chunks, and
+the contract updates and records the number of delivered chunks ctr.
+Phase III for Reveal. The parties P and C interact with Gd as:
+360 S. He et al.
+Algorithm 5. ValidatePoM algorithm
+Input: (i, j, ci, σci
+, H(mi), πi
+MT, rk, erk, πVD);
+also, (rootm, n, erkhash, pkP , vpkC) are stored
+in the contract and hence accessible
+Output: true or false
+1: assert j ∈ [0, |erk| − 1]
+2: assert H(erk) ≡ erkhash
+3: assert VerifyPKEvpkC (erk, rk, πVD) ≡ 1
+4: assert Verify(i||ci, σci
+, pkP) ≡ 1
+5: assert VerifyMTP(rootm, i, πi
+MT, H(mi)) ≡ 1
+6: ki = RecoverChunkKey(i, j, n, rk)
+7: assert ki �= ⊥
+8: m′
+i = SDec(ci, ki)
+9: assert H(m′
+i) �= H(mi)
+10: return false in case of any assertion error
+or true otherwise
+– The provider P executes as follows: asserts Σ ≡ revealing, executes Algo-
+rithm 2 to obtain revealed keys rk, encrypts rk using consumer’s vpkC to
+obtain erk, and then sends (revealKeys, erk) to Gd; waits for (sold) from Gd
+to halt.
+– The consumer C in this phase would first assert Σ ≡ revealing, and wait
+for (revealed, erk) from Gd to execute the following: (i) runs Algorithm3 to
+preliminarily check erk, if false, sends (wrongRK) to Gd and halts, or if true
+is returned, decrypts erk to obtain rk via vskC , and then runs Algorithm4 to
+recover chunk keys. Then C uses these keys to decrypt (c1, · · · , cctr) to obtain
+(m′
+1, · · · ,m′
+ctr); for each m′
+i, i ∈ [ctr], checks whether H(m′
+i) is the i-th leaf
+node in MT received from P in the Deliver phase. If all are consistent, C
+outputs (m′
+1, · · · ,m′
+ctr), and then waits for (sold) from Gd to halt. Otherwise,
+C can raise complaint by: choosing one inconsistent position (e.g., the i-th
+chunk), and then sending (PoM, i, j, ci, σci ,H(mi), πi
+MT, rk, erk, πVD) to Gd,
+where i is the index of the incorrect chunk to be proved; j is the index of the
+element in erk that can induce ki; ci and σci are the i-th encrypted chunk
+and its signature received in the Deliver phase; H(mi) is the value of the i-th
+leaf node in MT; πi
+MT is the Merkle proof for H(mi); rk is decryption result
+from erk; erk is the encrypted revealed key; πVD is the verifiable decryption
+proof attesting to the correctness of decrypting erk to rk.
+Subroutine for Dispute Resolve. For the sake of completeness, the
+ValidatePoM subroutine of the arbiter contract is detailed in Algorithm5, which
+is needed to handle the PoM message sent from consumer. In general, it verifies
+that the consumer sends the correctly decrypted elements in the key derivation
+tree KT, and computes the encryption key to a specific chunk (sent from the
+consumer) according to the KT tree elements, and then it decrypts the chunk
+and verifies it is essentially committed to the Merkle tree root. Its time com-
+plexity corresponds to on-chain cost and is O(log n), which minimizes the critical
+on-chain cost.
+Analyzing FairDownload. Theorem 1 characterizes the needed security and non-
+trivial efficiency guarantees of ΠFD. The proof is provided in the full version [21].
+Theorem 1. Conditioned on that the underlying cryptographic primitives
+are secure, the protocol FairDownload satisfies the completeness, fairness,
+Fair Peer-to-Peer Content Delivery via Blockchain 361
+Algorithm 6. RecoverChunkKey algorithm
+Input: (i, j, n, rk)
+Output: ki or ⊥
+1: (x, y) ← rk[j]
+{parse the j-th element in rk to get the key
+x and the value y}
+2: let k path be an empty stack
+3: ind = n + i − 2 {the index in KT}
+4: if ind < x then
+5: return ⊥
+6: if ind ≡ x then
+7: return y {ki = y}
+8: while ind > x do
+9: k path pushes 0 if ind is odd
+10: k path pushes 1 if ind is even
+11: ind = �(ind − 1)/2�
+12: let b = |k path|
+13: while (b--) > 0 do
+14: pop k path to get the value t
+15: ki = H(y||t)
+16: return ki
+confidentiality against deliverer, timeliness and non-trivial efficiency properties
+in the synchronous authenticated network, G ledger
+d -hybrid and stand-alone model.
+6 FairStream: Fair p2p Streaming
+6.1 FairStream Overview
+As shown in Fig. 3, FairStream works as Prepare, Stream, and Payout phases, at
+a high level. The core ideas are: during streaming, the consumer C retrieves an
+encrypted chunk from the deliverer D and a corresponding decryption key from
+the provider P, yielding O(1) communication rounds to obtain each chunk; any
+party may abort in a certain round due to, e.g., untimely response or invalid
+message; especially, C can complain during streaming to the arbiter contract
+G ledger
+s (abbr. Gs) illustrated in Fig. 4 and get compensated with a valid proof;
+the Stream phase finishes either any party aborts or the timer Treceive in contract
+expires; Later, D and P can claim the deserved payment by submitting the
+latest receipt signed by C before another timer Tfinish (naturally Tfinish > Treceive) in
+contract expires; the contract determines the ctr, namely the number of delivered
+chunks or revealed keys, using the larger index in P and D’s receipts. If no receipt
+is received from P or D before Tfinish expires, the index for that party is set as
+0. Such a design is critical to ensure fairness as analyzed in the full version [21].
+6.2 ΠFS: FairStream Protocol
+Phase I for Prepare. This phase executes the same as in the ΠFD protocol.
+Phase II for Stream. The parties C, D and P interact with Gs as follows:
+– The consumer C interested in the content with rootm would initialize a vari-
+able x := 1 and then: (i) asserts Σ ≡ ready, and sends (consume, pkC) to
+Gs; (ii) upon receiving (mtree,MT, σMT
+P ) from P, verifies the signature σMT
+P
+and root(MT) ≡ rootm, then stores the Merkle tree MT, or else halts; (iii) on
+receiving (deliver, i, ci, σci) from D, checks if i ≡ x∧Verify(i||ci, σci , pkP) ≡ 1,
+if hold, starts (for i ≡ 1) a timer TkeyResponse or resets (for 1 < i ≤ n) it,
+sends (keyReq, i, σi
+C) where σi
+C ← Sign(i||pkC , skC) to P. If failing to check
+362 S. He et al.
+Fig. 3. The overview of FairStream protocol ΠFS. The dispute may arise in a certain
+round in the Stream phase, and the messages (claimDelivery) and (claimRevealing) may
+be sent to the contract in a different order.
+or TkeyResponse times out, halts; (vi) upon receiving (reveal, i, ki, σki
+) from P
+before TkeyResponse times out, checks whether i ≡ x∧Verify(i||ki, σki
+, pkP) ≡ 1,
+if failed, halts. Otherwise, starts to validate the content chunk based on
+received ci and ki: decrypts ci to obtain m′
+i (m′
+i := SDecki
+(ci)) and then
+checks whether H(m′
+i) is consistent with the i-th leaf node in MT, if inconsis-
+tent, sends (PoM, i, ci, σci , ki, σki
+,H(mi), πi
+MT) to Gs. If it is consistent, sends
+the receipts (receipt, i, σi
+CD) to D and (receipt, i, σi
+CP) to P, where σi
+CD ←
+Sign(receipt||i||pkC ||pkD, skC) and σi
+CP ← Sign(receipt||i||pkC ||pkP , skC), and
+sets x := x + 1, and then waits for the next (deliver) message from D. Upon
+x is set to be n + 1, meaning that all chunks are received, sends (received) to
+Gs; (v) waits for the messages (received) from Gs to halt.
+– The deliverer D initializes a variable y := 1 and executes as: (i) upon receiv-
+ing (initiated, pkC) from Gs, sends (deliver, i, ci, σci), i = 1 to C and starts a
+timer TchunkReceipt; (ii) upon receiving (receipt, i, σi
+CD) from C before TchunkReceipt
+times out, checks whether Verify(receipt||i||pkC ||pkD, σi
+CD, pkC) ≡ 1 ∧ i ≡ y or
+not, if succeeds, continues with the next iteration: sets y := y + 1, sends
+(deliver, i, ci, σci), i = y to C, and resets TchunkReceipt; If fails or TchunkReceipt
+times out, enters the next phase.
+– The provider P initializes a variable z := 1 and executes as: (i) upon receiv-
+ing (initiated, pkC) from Gs: sends (mtree,MT, σMT
+P ) to C; (ii) upon receiving
+(keyReq, i, σi
+C) from C, checks whether i ≡ z ∧ Verify(i||pkC , σi
+C , pkC) ≡ 1, if
+succeeds, sends (reveal, i, ki, σki
+), where σki
+← Sign(i||ki, skP), to C and starts
+(for i ≡ 1) a timer TkeyReceipt or resets (for 1 < i ≤ n) it, otherwise enters the
+next phase; (iii) on receiving (receipt, i, σi
+CP) from C before TkeyReceipt expires,
+checks whether Verify(receipt||i||pkC ||pkP , σi
+CP , pkC) ≡ 1 ∧ i ≡ z, if hold, sets
+z := z + 1, otherwise enters the next phase if TkeyReceipt times out.
+Phase III for Payout. The parties P and D interact with Gs in this phase as:
+Fair Peer-to-Peer Content Delivery via Blockchain 363
+The Arbiter Contract Functionality Gledger
+s for p2p Streaming
+The contract Gs can access to ledger, and it interacts with P, D, C and the adversary A. It
+locally stores θ, n, rootm, BP , BC, Bpf , ctrD , ctrP , ctr (all ctrD, ctrP , ctr are initialized as 0),
+pkP , pkD , pkC , the penalty flag plt (initialized by false), the state Σ and three timers
+Tround (implicitly), Treceive, Tfinish.
+Phase 1: Prepare
+• This phase is the same as in Gd.
+Phase 2: Stream
+• On receive (consume, pkC) from C:
+- assert θ > 0
+- assert ledger[C] ≥ n · BC ∧ Σ ≡ ready
+- store pkC and let
+ledger[C] := ledger[C] − n · BC
+- start two timers Treceive, and Tfinish
+- let Σ := initiated and send
+(initiated, pkC) to all entities
+• On receive (received) from C before Treceive
+times out:
+- assert current time T < Treceive and
+Σ ≡ initiated
+- let Σ := received and send (received) to
+all entities
+• Upon Treceive times out:
+- assert current time T ≥ Treceive and
+Σ ≡ initiated
+- let Σ := received and send (received) to
+all entities
+Dispute resolution in this phase
+• On receive (PoM, i, ci, σci
+, ki, σki
+,
+H(mi), πi
+MT) from C before Treceive expires:
+- assert current time T < Treceive and
+Σ ≡ initiated
+- assert Verify(i||ci, σci
+, pkP) ≡ 1
+- assert Verify(i||ki, σki
+, pkP) ≡ 1
+- assert
+VerifyMTP(rootm, i, πi
+MT, H(mi)) ≡ 1
+- mi = SDec(ci, ki)
+- assert H(mi) = H(mi)
+- let plt := true
+- let Σ := received and send (received) to
+all entities
+Phase 3: Payout
+• On receive (claimDelivery, i, σi
+CD) from D:
+- assert current time T < Tfinish
+- assert i ≡ n or Σ ≡ received or
+Σ ≡ payingRevealing
+- assert ctr ≡ 0 and 0 < i ≤ n
+- assert Verify(receipt||i||pkC||pkD ,
+σi
+CD , pkC) ≡ 1
+- let ctrD := i, Σ := payingDelivery,
+and then send (payingDelivery) to all
+entities
+• On receive (claimRevealing, i, σi
+CP) from
+P:
+- assert current time T < Tfinish
+- assert i ≡ n or Σ ≡ received or
+Σ ≡ payingDelivery
+- assert ctr ≡ 0 and 0 < i ≤ n
+- assert Verify(receipt||i||pkC||pkP ,
+σi
+CP , pkC) ≡ 1
+- let ctrP := i, Σ := payingRevealing,
+and then send (payingRevealing) to
+all entities
+• Upon Tfinish times out:
+- assert current time T ≥ Tfinish
+- let ctr := max{ctrD , ctrP}
+- let ledger[D] := ledger[D] + ctr · BP
+- if plt:
+let ledger[P] := ledger[P]+
+(n − ctr) · BP + ctr · BC
+let ledger[C] := ledger[C]+
+(n − ctr) · BC + Bpf
+- else:
+let ledger[P] := ledger[P]+
+(n − ctr) · BP + ctr · BC + Bpf
+let ledger[C] := ledger[C]+
+(n − ctr) · BC
+- if ctr > 0:
+let Σ := sold and send (sold) to all
+entities
+- else let Σ := not sold and send
+(not sold) to all entities
+Reset to the ready state
+• On receive (reset) from P:
+- assert Σ ≡ sold or Σ ≡ not sold
+- set ctr, ctrD, ctrP , Treceive, Tfinish as 0
+- nullify pkC
+- let θ := θ − 1 and Σ := ready
+- send (ready) to all entities
+Fig. 4. The streaming-setting arbiter functionality G ledger
+s . “Sending to all entities”
+captures that the smart contract is transparent to the public.
+– The provider P executes as: (i) upon receiving (received) or (delivered) from
+Gs, or receiving the n-th receipt from C (i.e., z is set to be n + 1), sends
+(claimRevealing, i, σi
+CP) to Gs; (ii) waits for (revealed) from Gs to halt.
+– The deliverer D executes as: (i) upon receiving (received) or (revealed) from
+Gs, or receiving the n-th receipt from C (i.e., y is set to be n + 1), sends
+(claimDelivery, i, σi
+CD) to Gs; (ii) waits for (delivered) from Gs to halt.
+364 S. He et al.
+Analyzing FairStream. Theorem 2 characterizes the security of the protocol ΠFS.
+The proof details are given in the online version [21].
+Theorem 2. Conditioned that the underlying cryptographic primitives are
+secure, the protocol FairStream satisfies the completeness, fairness, confidential-
+ity against deliverer, timeliness, and non-trivial efficiency properties in the syn-
+chronous authenticated network, G ledger
+s -hybrid and stand-alone model.
+Extension for Delivering from Any Specific Chunk. The protocol
+FairStream (as well as FairDownload) can be easily tuned to transfer the con-
+tent from the middle instead of the beginning. Specifically, for the downloading
+setting, one can simply let the content provider reveal the elements that are able
+to recover a sub-tree of the key derivation tree KT for decrypting the transferred
+chunks. The complaint of incorrect decryption key follows the same procedure
+in Sect. 5. For the streaming setting, it is more straightforward as each chunk
+ciphertext and its decryption key are uniquely identified by the index and can
+be obtained in O(1) rounds by the consumer, who can immediately complain to
+contract in the presence of an incorrect decryption result.
+7 Implementation and Evaluations
+To shed some light on the feasibility of FairDownload and FairStream, we imple-
+ment, deploy and evaluate the protocols of ΠFD and ΠFS in the Ethereum Rop-
+sten network. The arbiter contracts are split into Optimistic (no dispute) and
+Pessimistic (additionally invoked when dispute occurs) modules. Note that the
+contracts deployment and the Prepare phase can be executed only once and used
+multiple times to facilitate the delivery of same content to different consumers.
+Therefore, these one-time costs can be amortized, and we mainly report the costs
+after the completeness of Prepare phase.
+In our implementations, the hash function is keccak256 and the signature is
+via ECDSA over secp256k1 curve. The encryption of each chunk mi with key
+ki is instantiated as: parse mi into t 32-byte blocks (mi,1, . . . , mi,t) and output
+ci = (mi,1 ⊕H(ki||1), . . . ,mi,t ⊕H(ki||t)). The decryption is same to the encryp-
+tion. Public key encryption is based on ElGamal: Let G = 〈g〉 to be G1 group over
+alt-bn128 curve [36] of prime order q, where g is group generator; the public key
+h = gk, where k ←$ Zq is the private key; VEnch(m) = (c1, c2) = (gr,m · gkr)
+represents encryption, where the message m is encoded into G with Koblitz’s
+method [26] and r ←$ Zq; the decryption VDeck((c1, c2)) = c2/ck
+1 . To lift ElGa-
+mal for verifiable decryption, we adopt Schnorr protocol [37] for Diffie-Hellman
+tuples with Fiat-Shamir transform [16]. Specifically, ProvePKEk((c1, c2)) works
+as: run VDeck((c1, c2)) to obtain m; let x ←$ Zq, and compute A = gx,
+B = cx
+1 , C = H(g||A||B||h||c1||c2||m), Z = x + kC, π = (A,B,Z), and output
+(m,π); VerifyPKEh((c1, c2),m, π) works as: parse π to obtain (A,B,Z), compute
+C ′ = H(g||A||B||h||c1||c2||m), and verify (gZ ≡ A · hC′
+) ∧ (mC′ · cZ
+1 ≡ B · cC′
+2 ),
+and output 1/0 to indicate whether the verification succeeds or fails.
+Fair Peer-to-Peer Content Delivery via Blockchain 365
+7.1 Evaluating FairDownload
+Table 1 presents the on-chain costs of ΠFD, i.e., the costs of all functions in
+the contract Gd. We adopt a gas price at 10 Gwei to ensure over half of the
+mining power in Ethereum would mine this transaction,9 and an exchange rate
+of 259.4 USD/Ether (the average market price10 of Ether from 01/01/2020 to
+11/03/2020). We stress that utilizing other cryptocurrencies such as Ethereum
+classic11 can substantially decrease the actual price of the protocol execution.
+The price and exchange rate also apply to the streaming setting.
+(a) on-chain costs (b) erk revealing costs
+Fig. 5. Experiment results for the ΠFD protocol.
+Optimistic Case. Without complaint ΠFD executes the functions in Deliver
+and Reveal phases, yielding a total cost of 1.032 USD for all involving parties.
+The on-chain cost is constant regardless of the content size and the chunk size,
+as shown in Fig. 5a. In worse cases, up to log(n) elements in the key derivation
+tree KT need to be revealed (where n is the size of content), and the on-chain
+cost of revealing these elements in KT is depicted in Fig. 5b.
+Table 1. Cost of ΠFD’s on-chain side Gd
+Phase Gd’s Function Caller Gas USD
+Deploy (Optimistic) P 2 936 458 7.617
+Deploy (Pessimistic) P 2 910 652 7.550
+Prepare
+start P 110 751 0.287
+join D 69 031 0.179
+prepared D 34 867 0.090
+Deliver
+consume C 117 357 0.304
+delivered C 57 935 0.150
+verifyVFDProof D 56 225 0.146
+Reveal
+revealKeys P 113 041 0.293
+payout Gd 53 822 0.139
+Dispute
+resolve
+wrongRK C 23 441 0.061
+PoM C 389 050 1.009
+Table 2. Cost of ΠFS’s on-chain side Gs
+Phase Gs’s Function Caller Gas USD
+Deploy (Optimistic) P 1 808 281 4.691
+Deploy (Pessimistic) P 1 023 414 2.655
+Prepare
+start P 131 061 0.340
+join D 54 131 0.140
+prepared D 34 935 0.091
+Stream
+consume C 95 779 0.248
+received C 39 857 0.103
+receiveTimeout Gs 39 839 0.103
+PoM C 90 018 0.234
+Payout
+claimDelivery D 67 910 0.176
+claimRevealing P 67 909 0.176
+finishTimeout Gs 88 599 0.230
+9 https://ethgasstation.info/.
+10 https://www.coindesk.com/price/ethereum/.
+11 https://ethereumclassic.org/.
+https://ethgasstation.info/
+https://www.coindesk.com/price/ethereum/
+https://ethereumclassic.org/
+366 S. He et al.
+Pessimistic Case. When some complaint arises by the consumer, the arbiter
+contract involves to resolve it. The cost of executing wrongRK function relates
+to the concrete values of n, ctr and |erk|, and in Table 2, the cost is evaluated on
+n ≡ ctr ≡ 512, and |erk| ≡ 1. The cost of PoM function validating misbehavior
+varies by the content chunk size η, as depicted in Fig. 5a pessimistic costs. The
+results demonstrate that the on-chain costs increase linearly in the chunk size.
+7.2 Evaluating FairStream
+Table 2 lists the costs of contract Gs to show the on-chain expense of the stream-
+ing protocol ΠFS.
+(a) Time cost of streaming
+512 content chunks in LAN
+(b) Time cost of streaming
+512 content chunks in WAN
+(c) Average time cost and
+the corresponding bitrate
+Fig. 6. The performance of FairStream protocol in the LAN and WAN.
+Optimistic Case. Without dispute, ΠFS executes the functions in Stream and
+Payout phases except the PoM function for verifying proof of misbehavior, yield-
+ing a total cost of 0.933 USD for all involved parties. The costs in this mode is
+constant regardless of the content size and chunk size.
+Pessimistic Case. With complaint, the total on-chain cost is 1.167 USD for
+all involved parties. The cost of the PoM function: (i) increases slightly in num-
+ber of chunks n, since it computes O(log n) hashes to verify the Merkle proof;
+(ii) increase linearly in the chunk size η for the chunk decryption, which follows
+a similar trend to Fig. 5a pessimistic costs but with lower costs as no verification
+of verifiable decryption proof is needed.
+Streaming Efficiency. Fig. 6a and b illustrate the efficiency of streaming 512
+chunks (via ΠFS) of various sizes in both LAN and WAN.12 Results indicate
+that: (i) obviously the time costs increase due to the growth of chunk size;
+(ii) the delivery process remains stable with only slight fluctuation, as reflected
+by the slope for each chunk size in Fig. 6a and b. Furthermore, Fig. 6c depicts
+the average latency for delivering each chunk (over the 512 chunks) and the
+corresponding bitrate. It shows that the bitrate can reach 10 Mbps even in the
+public network, which is potentially sufficient to support high-quality content
+streaming. E.g., the video bitrate for HD 1080 are at most 8 Mbps [22].
+12 The experimental configuration details are described in the full version [21].
+Fair Peer-to-Peer Content Delivery via Blockchain 367
+8 Conclusion
+We present the first two fair p2p content delivery protocols atop blockchains to
+support fair p2p downloading and fair p2p streaming, respectively. They enjoy
+strong fairness guarantees to protect any of the content provider, the content
+consumer, and the content deliverer from being ripped off by other colluding
+parties. Essentially, our new delivery fairness notion circumvents the limit of
+conventional exchange fairness, thus supporting to pay the delivers according to
+their bandwidth usages. Detailed complexity analysis and extensive experiments
+are conducted to demonstrate the high efficiency of our designs. Yet still, the
+area is largely unexplored and has a few immediate follow-ups, for example:
+(i) in order to realize maximized delivery performance, it is desirable to design
+a mechanism of adaptively choosing deliverers during each delivery task; (ii) it
+is also enticing to leverage the off-chain payment channels to handle possible
+micropayments and further reduce the on-chain cost.
+Acknowledgements. Yuan Lu is supported in part by the National Natural Science
+Foundation of China (No. 62102404). This work was also supported in part by NSF
+#1801492 and FHWA 693JJ320C000021. The authors would like to thank the anony-
+mous reviewer for their valuable comments and suggestions.
+References
+1. Akamai: Akamai (2021). https://www.akamai.com/
+2. Almashaqbeh, G.: CacheCash: a cryptocurrency-based decentralized content deliv-
+ery network. Ph.D. thesis, Columbia University (2019)
+3. Anjum, N., Karamshuk, D., Shikh-Bahaei, M., Sastry, N.: Survey on peer-assisted
+content delivery networks. Comput. Netw. 116, 79–95 (2017)
+4. Asokan, N., Shoup, V., Waidner, M.: Optimistic fair exchange of digital signatures.
+IEEE J. Sel. Areas Commun. 18, 593–610 (2000)
+5. Benet, J.: IPFS-content addressed, versioned, p2p file system. arXiv preprint
+arXiv:1407.3561 (2014)
+6. Bentov, I., Kumaresan, R.: How to use bitcoin to design fair protocols. In: Garay,
+J.A., Gennaro, R. (eds.) CRYPTO 2014. LNCS, vol. 8617, pp. 421–439. Springer,
+Heidelberg (2014). https://doi.org/10.1007/978-3-662-44381-1 24
+7. Blum, M.: How to exchange (secret) keys. In: Proceedings of the ACM STOC 1983,
+pp. 440–447 (1983)
+8. Camenisch, J., Shoup, V.: Practical verifiable encryption and decryption of discrete
+logarithms. In: Boneh, D. (ed.) CRYPTO 2003. LNCS, vol. 2729, pp. 126–144.
+Springer, Heidelberg (2003). https://doi.org/10.1007/978-3-540-45146-4 8
+9. Choudhuri, A.R., Green, M., Jain, A., Kaptchuk, G., Miers, I.: Fairness in an unfair
+world: fair multiparty computation from public bulletin boards. In: Proceedings of
+the ACM CCS, pp. 719–728 (2017)
+10. Damg̊ard, I.B.: Practical and provably secure release of a secret and exchange of
+signatures. J. Cryptol. 8, 201–222 (1995). https://doi.org/10.1007/BF00191356
+11. Dziembowski, S., Eckey, L., Faust, S., Malinowski, D.: Perun: virtual payment hubs
+over cryptocurrencies. In: Proceedings of the IEEE S&P 2019, pp. 106–123 (2019)
+https://www.akamai.com/
+http://arxiv.org/abs/1407.3561
+https://doi.org/10.1007/978-3-662-44381-1_24
+https://doi.org/10.1007/978-3-540-45146-4_8
+https://doi.org/10.1007/BF00191356
+368 S. He et al.
+12. Dziembowski, S., Eckey, L., Faust, S.: FairSwap: how to fairly exchange digital
+goods. In: Proceedings of the ACM CCS, pp. 967–984 (2018)
+13. ENISA: ENISA threat landscape 2020 -botnet (2020). https://www.enisa.europa.
+eu/publications/enisa-threat-landscape-2020-botnet
+14. Fan, B., Lui, J.C., Chiu, D.M.: The design trade-offs of BitTorrent-like file sharing
+protocols. IEEE/ACM Trans. Network. 17, 365–376 (2008)
+15. Feldman, M., Lai, K., Stoica, I., Chuang, J.: Robust incentive techniques for peer-
+to-peer networks. In: Proceedings of the ACM EC (2004)
+16. Fiat, A., Shamir, A.: How to prove yourself: practical solutions to identification and
+signature problems. In: Odlyzko, A.M. (ed.) CRYPTO 1986. LNCS, vol. 263, pp.
+186–194. Springer, Heidelberg (1987). https://doi.org/10.1007/3-540-47721-7 12
+17. Filecoin: Filecoin: a decentralized storage network. https://filecoin.io/filecoin.pdf
+18. Filecoin: Filecoin spec. (2020). https://spec.filecoin.io/
+19. Goyal, P., Netravali, R., Alizadeh, M., Balakrishnan, H.: Secure incentivization for
+decentralized content delivery. In: 2nd USENIX Workshop on Hot Topics in Edge
+Computing (2019)
+20. Hardin, G.: The tragedy of the commons. J. Nat. Resour. Policy Res. 1, 243–253
+(2009)
+21. He, S., Lu, Y., Tang, Q., Wang, G., Wu, C.Q.: Fair peer-to-peer content delivery
+via blockchain. arXiv preprint arXiv:2102.04685 (2021)
+22. IBM: Internet connection and recommended encoding settings. https://
+support.video.ibm.com/hc/en-us/articles/207852117-Internet-connection-and-
+recommended-encoding-settings
+23. Janin, S., Qin, K., Mamageishvili, A., Gervais, A.: FileBounty: fair data exchange.
+In: IEEE (EuroS&PW), pp. 357–366 (2020)
+24. Katz, J., Lindell, Y.: Introduction to Modern Cryptography. CRC Press (2014)
+25. Kiayias, A., Zhou, H.-S., Zikas, V.: Fair and robust multi-party computation using
+a global transaction ledger. In: Fischlin, M., Coron, J.-S. (eds.) EUROCRYPT
+2016. LNCS, vol. 9666, pp. 705–734. Springer, Heidelberg (2016). https://doi.org/
+10.1007/978-3-662-49896-5 25
+26. Koblitz, N.: Elliptic Curve Cryptosystems. Mathematics of Computation, pp. 203–
+209 (1987)
+27. Kosba, A., Miller, A., Shi, E., Wen, Z., Papamanthou, C.: Hawk: the blockchain
+model of cryptography and privacy-preserving smart contracts. In: Proceedings of
+the IEEE (S&P), pp. 839–858 (2016)
+28. Küpçü, A., Lysyanskaya, A.: Usable optimistic fair exchange. In: Pieprzyk, J. (ed.)
+CT-RSA 2010. LNCS, vol. 5985, pp. 252–267. Springer, Heidelberg (2010). https://
+doi.org/10.1007/978-3-642-11925-5 18
+29. Levin, D., LaCurts, K., Spring, N., Bhattacharjee, B.: Bittorrent is an auction: ana-
+lyzing and improving bittorrent’s incentives. ACM SIGCOMM Comput. Commun.
+Rev. 38, 243–254 (2008)
+30. Locher, T., Moore, P., Schmid, S., Wattenhofer, R.: Free riding in bittorrent is
+cheap. In: HotNets (2006)
+31. Maxwell, G.: The first successful zero-knowledge contingent payment (2016).
+https://bitcoincore.org/en/2016/02/26/zero-knowledge-contingent-payments-
+announcement/
+32. Mehar, M.I., et al.: Understanding a revolutionary and flawed grand experiment
+in blockchain: the DAO attack. J. Cases Inf. Technol. 21, 19–32 (2019)
+https://www.enisa.europa.eu/publications/enisa-threat-landscape-2020-botnet
+https://www.enisa.europa.eu/publications/enisa-threat-landscape-2020-botnet
+https://doi.org/10.1007/3-540-47721-7_12
+https://filecoin.io/filecoin.pdf
+https://spec.filecoin.io/
+http://arxiv.org/abs/2102.04685
+https://support.video.ibm.com/hc/en-us/articles/207852117-Internet-connection-and-recommended-encoding-settings
+https://support.video.ibm.com/hc/en-us/articles/207852117-Internet-connection-and-recommended-encoding-settings
+https://support.video.ibm.com/hc/en-us/articles/207852117-Internet-connection-and-recommended-encoding-settings
+https://doi.org/10.1007/978-3-662-49896-5_25
+https://doi.org/10.1007/978-3-662-49896-5_25
+https://doi.org/10.1007/978-3-642-11925-5_18
+https://doi.org/10.1007/978-3-642-11925-5_18
+https://bitcoincore.org/en/2016/02/26/zero-knowledge-contingent-payments-announcement/
+https://bitcoincore.org/en/2016/02/26/zero-knowledge-contingent-payments-announcement/
+Fair Peer-to-Peer Content Delivery via Blockchain 369
+33. Miller, A., Bentov, I., Bakshi, S., Kumaresan, R., McCorry, P.: Sprites and state
+channels: payment networks that go faster than lightning. In: Goldberg, I., Moore,
+T. (eds.) FC 2019. LNCS, vol. 11598, pp. 508–526. Springer, Cham (2019). https://
+doi.org/10.1007/978-3-030-32101-7 30
+34. Miller, A., Juels, A., Shi, E., Parno, B., Katz, J.: Permacoin: repurposing bitcoin
+work for data preservation. In: Proceedings of the IEEE S&P, pp. 475–490 (2014)
+35. Piatek, M., Isdal, T., Anderson, T., Krishnamurthy, A., Venkataramani, A.: Do
+incentives build robustness in bittorrent. In: Proceedings of the NSDI (2007)
+36. Reitwiessner, C.: EIP-196: precompiled contracts for addition and scalar multipli-
+cation on the elliptic curve alt bn128. Ethereum Improvement Proposals, No. 196
+(2017). https://eips.ethereum.org/EIPS/eip-196
+37. Schnorr, C.P.: Efficient identification and signatures for smart cards. In:
+Quisquater, J.-J., Vandewalle, J. (eds.) EUROCRYPT 1989. LNCS, vol. 434, pp.
+688–689. Springer, Heidelberg (1990). https://doi.org/10.1007/3-540-46885-4 68
+38. Sherman, A., Nieh, J., Stein, C.: FairTorrent: a deficit-based distributed algorithm
+to ensure fairness in peer-to-peer systems. IEEE/ACM TON 20, 1361–1374 (2012)
+39. Shin, K., Joe-Wong, C., Ha, S., Yi, Y., Rhee, I., Reeves, D.S.: T-chain: a gen-
+eral incentive scheme for cooperative computing. IEEE/ACM TON 25, 2122–2137
+(2017)
+40. Sirivianos, M., Park, J.H., Yang, X., Jarecki, S.: Dandelion: cooperative content
+distribution with robust incentives. In: Proceedings of the USENIX ATC (2007)
+41. StorJ: Storj (2018). https://storj.io/storj.pdf
+42. Swarm (2020). https://swarm.ethereum.org/
+43. Wood, G., et al.: Ethereum: a secure decentralised generalised transaction ledger.
+Ethereum project yellow paper, pp. 1–32 (2014)
+https://doi.org/10.1007/978-3-030-32101-7_30
+https://doi.org/10.1007/978-3-030-32101-7_30
+https://eips.ethereum.org/EIPS/eip-196
+https://doi.org/10.1007/3-540-46885-4_68
+https://storj.io/storj.pdf
+https://swarm.ethereum.org/
+	Fair Peer-to-Peer Content Delivery via Blockchain
+	1 Introduction
+	2 Preliminaries
+	3 Warm-Up: Verifiable Fair Delivery
+	4 Formalizing P2P Content Delivery
+	4.1 System Model
+	4.2 Design Goals
+	5 FairDownload: Fair P2P Downloading
+	5.1 FairDownload Overview
+	5.2 FD: FairDownload Protocol
+	6 FairStream: Fair p2p Streaming
+	6.1 FairStream Overview
+	6.2 FS: FairStream Protocol
+	7 Implementation and Evaluations
+	7.1 Evaluating FairDownload
+	7.2 Evaluating FairStream
+	8 Conclusion
+	References

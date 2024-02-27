@@ -1,0 +1,1720 @@
+Eliminating Sandwich Attacks with the Help of Game Theory
+Eliminating Sandwich Attacks with the Help of Game Theory
+Lioba Heimbach
+ETH Zürich
+Switzerland
+hlioba@ethz.ch
+Roger Wattenhofer
+ETH Zürich
+Switzerland
+wattenhofer@ethz.ch
+ABSTRACT
+Predatory trading bots lurking in Ethereum’s mempool present
+invisible taxation of traders on automated market makers (AMMs).
+AMM traders specify a slippage tolerance to indicate the maximum
+price movement they are willing to accept. This way, traders avoid
+automatic transaction failure in case of small price movements
+before their trade request executes. However, while a too-small
+slippage tolerance may lead to trade failures, a too-large slippage
+tolerance allows predatory trading bots to profit from sandwich
+attacks. These bots can extract the difference between the slippage
+tolerance and the actual price movement as profit.
+In this work, we introduce the sandwich game to analyze sand-
+wich attacks analytically from both the attacker and victim perspec-
+tives. Moreover, we provide a simple and highly effective algorithm
+that traders can use to set the slippage tolerance. We unveil that
+most broadcasted transactions can avoid sandwich attacks while
+simultaneously only experiencing a low risk of transaction failure.
+Thereby, we demonstrate that a constant auto-slippage cannot ad-
+just to varying trade sizes and pool characteristics. Our algorithm
+outperforms the constant auto-slippage suggested by the biggest
+AMM, Uniswap, in all performed tests. Specifically, our algorithm
+repeatedly demonstrates a cost reduction exceeding a factor of 100.
+CCS CONCEPTS
+• Security and privacy→Distributed systems security; •The-
+ory of computation → Algorithmic game theory.
+KEYWORDS
+blockchain, Ethereum, smart contract, decentralized finance, front-
+running, sandwich attack
+ACM Reference Format:
+Lioba Heimbach and Roger Wattenhofer. 2022. Eliminating Sandwich At-
+tacks with the Help of Game Theory. In Proceedings of the 2022 ACM Asia
+Conference on Computer and Communications Security (ASIA CCS ’22), May
+30–June 3, 2022, Nagasaki, Japan. ACM, New York, NY, USA, 15 pages.
+https://doi.org/10.1145/3488932.3517390
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan.
+© 2022 Association for Computing Machinery.
+ACM ISBN 978-1-4503-9140-5/22/05. . . $15.00
+https://doi.org/10.1145/3488932.3517390
+1 INTRODUCTION
+In 2008, Nakatomo [30] introduced Bitcoin, a fully decentralized
+currency based on cryptography. The introduction of smart con-
+tracts [34] further fueled the initial excitement surrounding cryp-
+tocurrencies. Yet, apart from a few niche applications, cryptocur-
+rencies mostly were alternative investment vehicles: you invest a
+dollar today and hope to have hundreds of dollars tomorrow. The
+emergence of decentralized finance (DeFi) set off a new wave of
+interest for cryptocurrencies. DeFi is the first widespread applica-
+tion of cryptocurrencies and utilizes smart contracts running on
+a blockchain, currently mainly Ethereum [34], to offer financial
+services without relying on intermediaries. Traditional finance, on
+the other hand, relies on financial intermediaries, such as banks,
+brokerages, and exchanges. Thus, traditional finance requires users
+to trust intermediaries with their assets, while in DeFi, users have
+full autonomy over their assets.
+Decentralized exchanges (DEXes) are a DeFi cornerstone. While
+centralized exchanges (CEXes) traditionally utilize the limit order
+book mechanism, matching individual sellers and buyers, traders do
+not need to bematched to a trading partner with opposite intentions
+in DEXes. Instead, trades on DEXes execute immediately upon
+inclusion in a block. When swapping two cryptocurrencies, the
+fluid exchange rate is determined algorithmically. Generally, the
+ratio and amount of the cryptocurrency pair, stored in the respective
+smart contract otherwise referred to as liquidity pool, control the
+exchange rate.
+We observe users starting to acknowledge the benefits of DEXs.
+The 24hr trading volume of Uniswap [14], the most popular DEX,
+topped Coinbase’s 24hr trading volume for the first time on 30
+August 2020 [1], and repeatedly since. Further, all DEXes, which
+also include SushiSwap [13], Curve [4], and dxdy [6], have more
+than $27 billion locked as of 10 November 2021 [5].
+Despite the undeniable rise in popularity of DeFi applications,
+the Ethereum peer-to-peer network is recently being characterized
+as a dark forest, with user transactions broadcast through the net-
+work being prey to predatory trading bots. The reason: the rise of
+DeFi on the Ethereum blockchain is testing some blockchain design
+principles. DeFi’s smart contracts are dependent on transaction-
+ordering. One example of an attack that exploits the dependency on
+transaction-ordering are the omnipresent sandwich attacks on DEX
+transactions. Sandwich attacks involve front- and back-running
+a victim transaction – presenting a tax on the victim’s trade by
+forcing the trade to execute at an unfavorable price and then tak-
+ing advantage of the created price difference. More than 84,000
+transactions were sandwiched on Uniswap in April 2021 alone [36].
+Between May 2020 and May 2021, sandwich attacks earned at least
+64,217 ETH [36] – presenting an invisible tax on trades.
+A year ago, the risk presented to bots performing sandwich at-
+tacks was to time the front- and back-running transactions shortly
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+153
+https://doi.org/10.1145/3488932.3517390
+https://doi.org/10.1145/3488932.3517390
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3488932.3517390&domain=pdf&date_stamp=2022-05-30
+before and after the victim’s transaction. However, with the recent
+widespread adoption of flashbots [9] by miners, sandwich attacks
+have become simpler than ever. Set out to light up the dark forest,
+front-running-as-a-service, as offered by flashbots, allows attackers
+to execute sandwich attacks on victim transactions in the mempool
+virtually risk-free. Flashbots allows anyone submit victim transac-
+tions from the mempool directly to the miner along with the attack
+– guaranteeing a successful attack.
+Thus far, the largest DEXes have not reacted to the risks sand-
+wich attacks present to their users. The interfaces of Uniswap and
+SushiSwap both auto-suggest a fixed slippage tolerance, the maxi-
+mum acceptable price movement, ignorant to all trade parameters.
+In this paper, we show that a fixed slippage tolerance is unable to
+perform well, i.e., prevent sandwich attacks and avoid unnecessary
+transaction failures due to natural price fluctuations, consistently.
+Further, both platforms only warn their users of the risk of being
+front-run when inputting an exorbitant slippage tolerance. Even
+more startling, when users choose slippage tolerances that we find
+to be sensible, the two platforms issue warnings. Thus, their sug-
+gestions and (missed) warnings ramp up both the loss of their users
+and the profits of attackers.
+1.1 Our Contributions
+Our contribution is two-fold:
+(1) We analyze sandwich attacks by introducing the sandwich
+game. The sandwich game formalizes the sandwich attack
+problem from both the trader’s and the bot’s perspectives.
+(2) We provide AMM traders with an algorithm, allowing them
+to circumvent both unnecessary trade failures and most
+sandwich attacks. In the evaluation, we show that our al-
+gorithm outperforms the auto-slippage suggested by the
+biggest AMMs, in some cases by a factor of 100 and more.
+2 BACKGROUND
+DeFi now offers many centralized finance services. DeFi financial
+services are smart contracts on the blockchain – the Ethereum
+blockchain hosts most services. DEXes are one momentous DeFi
+innovation to surface in recent years. However, DEXes present new
+challenges to blockchain design. While an order’s position in a
+block used to be inconsequential for simple financial transactions,
+a transaction’s relative position in a block is essential for many
+successful attacks. This section covers the preliminaries of sandwich
+attacks on DEXes.
+2.1 Ethereum Blockchain
+Ethereum is a public blockchain platform and the home to most
+DeFi applications, includingDEXes such as Uniswap and SushiSwap.
+Users send their transactions to the mempool: the waiting area for
+Ethereum transactions. Along with each transaction, users indicate
+the gas fee (Ethereum’s network transaction fee) they are willing to
+pay for their transaction. Transactions execute upon the inclusion
+in a block by a miner.
+Until recently, users were over-bidding each other for block
+inclusion, and miners received the entire gas fee, but this changed
+with Ethereum’s London Hard Fork update on 5 August 2021 [7].
+As part of the London Hard Fork, EIP-1559 launched and changed
+Ethereum transactions fees. EIP-1559 aims to make transaction fees
+predictable, dividing the fee into the base fee and the priority fee.
+Automatically set by the network according to the current network
+load, the base fee is required for block inclusion and burned by the
+protocol. The priority fee, on the other hand, is collected by the
+miners. Thus, with EIP-1559, anyone wishing to make an Ethereum
+transaction will at least pay the base fee.
+2.2 Automated Market Maker
+Most DEXes are automated market makers (AMMs). AMMs allow
+automatic trading of cryptocurrencies by an algorithm. Cryptocur-
+rencies are aggregated in liquidity pools to facilitate this auto-
+mated trading. A widespread adaptation of the AMM mechanism
+is Uniswap V2’s, which we will introduce in the following. Note,
+however, that there are currently two active Uniswap versions:
+Uniswap V2 and Uniswap V3. This paper discusses and applies to
+both versions.
+Uniswap allows the creation of liquidity pools between any cryp-
+tocurrency pair. Then, individual liquidity providers can deposit
+both cryptocurrencies at equal value in the respective pool. The
+liquidity aggregation allows traders to exchange the respective to-
+kens in the pool. A transaction fee is levied for every trade and
+distributed pro-rata amongst the pool’s liquidity providers.
+The AMM smart contract specifies the exchange rate offered
+to trades based on the number of tokens reserved in the liquidity
+pool. Uniswap utilizes a constant product market maker (CPMM),
+ensuring that product between the amounts of the two reserved
+pool currencies stays constant.We consider a liquidity pool between
+token 𝑋 and token 𝑌 , 𝑋 ⇌ 𝑌 . The respective reserves are 𝑥𝑡 and
+𝑦𝑡 at time 𝑡 . A trader wishing to exchange 𝛿𝑥 tokens 𝑋 at time 𝑡
+will receive 𝛿𝑦 tokens 𝑌 , where
+𝛿𝑦 = 𝑦𝑡 −
+𝑥𝑡 · 𝑦𝑡
+𝑥𝑡 + (1 − 𝑓 )𝛿𝑥
+=
+𝑦𝑡 (1 − 𝑓 )𝛿𝑥
+𝑥𝑡 + (1 − 𝑓 )𝛿𝑥
+, (1)
+and 𝑓 is the transaction fee [18]. The fee is charged on the input
+amount and is 0.3% in the case of Uniswap.
+Trades, however, are not executed immediately upon submis-
+sion but are first sent to the mempool. Upon inclusion in a block,
+the trade executes. The delay between submission and execution
+implies that the pool reserves during execution are unknown to
+the trader when submitting the swap. Thus, traders indicate their
+slippage tolerance – the maximum acceptable price movement.
+We note that at the time of this writing, the interfaces of most
+major DEXes [2, 4, 12, 13, 31] suggest an auto-slippage, i.e., the same
+slippage tolerance is suggested for all transactions, independent of
+the size and the pool.
+2.3 Sandwich Attacks
+The aforementioned slippage tolerance simultaneously gives rise
+to sandwich attacks: front- and back-running victim transactions.
+Predatory traders listen to transactions in the public mempool and
+attack those that present profit opportunities by manipulating the
+transaction ordering and ensuring that one of the attack’s transac-
+tions executes before the victim’s transaction (front-running) and
+one after the victim’s transaction (back-running).
+To understand how sandwich attacks present a profit opportunity
+to bots, consider a victim’s transaction trading 10 tokens 𝑋 for
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+154
+tokens 𝑌 with 1% slippage tolerance and 0.3% transaction fee in a
+pool holding 100 tokens 𝑋 and 100 tokens 𝑌 . The trader is expected
+to receive 9.066 tokens 𝑌 (Equation 1). However, after seeing the
+transaction in the mempool, a trading bot front-runs the victim by
+purchasing 0.524 tokens 𝑌 with 0.529 tokens 𝑋 . Thereby, the bot
+raises the price of token 𝑌 for the victim to the limit indicated by
+the slippage tolerance. The following victim’s trade subsequently
+only buys 8.975 tokens 𝑌 . Thus, the victim’s trade is executed at a
+higher price than expected – receiving exactly 1% fewer tokens 𝑌
+than anticipated. The price of 𝑌 is further increased by the victim’s
+transaction. Finally, the bot concludes the attack by selling 0.524
+tokens𝑌 at a higher price and receiving 0.635 tokens𝑋 . We observe
+that the bot’s profit from the sandwich attack is 0.106 tokens 𝑋 .
+Generally, the profitability of sandwich attacks increases with the
+victim’s transaction size and slippage tolerance.
+Before the introduction of flashbots, bots were challenged to
+time their attacks through strategically setting the gas price, the
+reward given to the miner for processing the transaction, such that
+a miner ordering the transactions according to gas price would
+sandwich the victim’s transactions with the bots attack. As most
+miners used to sort transactions according to gas price, bots were
+able to predict the order of transactions. However, there was no
+guarantee. Further, this resulted in high gas prices for bots as they
+were overbidding each other in what is commonly referred to as
+priority gas auctions (PGAs) – the competitive bidding up of gas
+fees to obtain early block positions.
+Since the adaptation of flashbots, it is now possible for bots to
+guarantee that their attack transactions will sandwich the victim’s
+transaction. Miners place bundles received from flashbots at the
+beginning of the block. Bots can submit the entire sandwich attack
+with the correct ordering to the miner by including the victim’s
+transaction, detected in the mempool, in the bundle.
+3 MODEL
+There are three types of players in the sandwich game: traders,
+predatory trading bots, and miners. Traders send a DEX transaction
+to the mempool, representing potential bait to predatory trading
+bots. Predatory trading bots listen to these incoming transactions
+and launch a sandwich attack if they consider it profitable: aiming
+to front- and back-run the trader’s transaction. Finally, miners select
+and order the transactions from the mempool in a block. From this
+point on, we will assume that the predatory trading bots are miners
+themselves or collude with miners – allowing them to strategically
+order their transactions around the trader’s transaction at no extra
+cost.
+3.1 Transaction Model
+We consider the liquidity pool between token 𝑋 and token 𝑌 , 𝑋 ⇌
+𝑌 , with respective reserves 𝑥0 and 𝑦0 at time 𝑡0. The current base
+fee for a Uniswap transaction is denoted by 𝑏. Note that while the
+base fee gives the minimum fee per gas, we utilize the minimum
+fee per Uniswap transaction in our analysis. This simplification
+is reasonable, as all individual Unisawp V2 transactions require
+approximately the same amount of gas. Thus, given the base fee
+per gas, we can compute the approximate base fee for a Uniswap
+transaction.
+A trade 𝑇𝑣 to exchange 𝛿𝑥 tokens 𝑋 entering the mempool at
+time 𝑡0 is identified as 𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0). Here, 𝑠 is the
+specified slippage tolerance and 𝑓 the transaction fee. The trade
+would output 𝛿𝑣𝑦 tokens 𝑌 if executed at time 𝑡0, where
+𝛿𝑣𝑦 = 𝑦0 −
+𝑥0 · 𝑦0
+𝑥0 + (1 − 𝑓 )𝛿𝑥
+=
+𝑦0 (1 − 𝑓 )𝛿𝑥
+𝑥0 + (1 − 𝑓 )𝛿𝑥
+.
+Time advances when a trade is executed in pool 𝑋 ⇌ 𝑌 , and as the
+transaction might not execute at time 𝑡0, 𝛿𝑣𝑦 is only an estimate.
+Assuming that the trade executed at time 𝑡1, the trader will receive
+˜𝛿𝑣𝑦 =
+𝑦1 (1 − 𝑓 )𝛿𝑥
+𝑥1 + (1 − 𝑓 )𝛿𝑥
+,
+tokens 𝑌 . Depending on the changes in the pool reserves between
+time 𝑡0 and 𝑡1, the trader might receive more or less tokens 𝑌 . In
+order to control how bad the exchange rate becomes for the traders,
+they specify a slippage tolerance 𝑠 . The trade will only execute at
+time 𝑡1, if
+˜𝛿𝑣𝑦 ≥ (1 − 𝑠)𝛿𝑣𝑦 .
+Otherwise, the trade will fail to execute. With the sandwich game,
+we analyze how traders optimally set the slippage tolerance to
+achieve a low expected trade cost.
+3.2 Attack Model
+The predatory trading bot listens to the inflowing transactions in
+the mempool. Upon noticing the trade 𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0)
+entering the mempool, the predatory trading bot computes the
+optimal input for the sandwich attack (𝛿𝑎𝑥 ) and assess whether
+the attack will be profitable. We assume optimal conditions for
+the predatory trading bot: access to unlimited funds, guaranteed
+transaction ordering, and only paying the base fee. Assuming that
+the predatory trading bot has access to unlimited funds is reasonable
+and represents the worst case for traders. Additionally, letting the
+miner be the predatory trading bot again represents the worst case
+for traders. Further, it allows the trading bot to only pay the base
+fee for its transactions and control transaction ordering. We further
+assume that the trading bot takes the front-running transaction’s
+output as the input of the back-running transaction.
+4 SANDWICH GAME
+We start by going through the general mechanism of the game. The
+victim submits a transaction 𝑇𝑣 wishing to exchange 𝛿𝑣𝑥 > 0 in
+pool 𝑋 ⇌ 𝑌 , with respective reserves 𝑥0 > 0 and 𝑦0 > 0. The pools
+transaction fee is 𝑓 (0 ≤ 𝑓 < 1) and the transaction’s slippage toler-
+ance is 𝑠 (0 < 𝑠 < 1). Transaction 𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0) enters
+the mempool at time 𝑡0. When submitting the trade, the victim
+expects 𝛿𝑣𝑦 tokens 𝑌 . 𝛿𝑣𝑦 corresponds to the number of tokens the
+victim would receive if no other trade is executed beforehand, i.e., if
+the reserves in the pool do not shift in the meantime (cf. Figure 1a).
+Thus,
+𝛿𝑣𝑦 =
+𝑦0 (1 − 𝑓 )𝛿𝑣𝑥
+𝑥0 + (1 − 𝑓 )𝛿𝑣𝑥
+.
+However, when a sandwich attack occurs, the predatory bot first
+executes a transaction 𝑇𝐴1
+exchanging 𝛿 in𝑎𝑥 > 0 tokens 𝑋 for 𝛿𝑎𝑦
+tokens 𝑌 , where
+𝛿𝑎𝑦 =
+𝑦0 (1 − 𝑓 )𝛿 in𝑎𝑥
+𝑥0 + (1 − 𝑓 )𝛿 in𝑎𝑥
+.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+155
+𝑥0𝑋
+𝑦0𝑌
+𝑥0𝑋
+𝑦0𝑌
+𝛿𝑣𝑥 𝛿𝑣𝑦
+𝑥2𝑋
+𝑦2𝑌
+(a) Illustration of an ordinary
+Uniswap transaction.
+𝑥0𝑋
+𝑦0𝑌
+𝛿 in𝑎𝑥 𝛿𝑎𝑦
+𝑥1𝑋
+𝑦1𝑌
+𝛿𝑣𝑥
+˜𝛿𝑣𝑦
+𝑥2𝑋
+𝑦2𝑌
+𝛿𝑎𝑦 𝛿out𝑎𝑥
+(b) Illustration of a sandwich at-
+tacked Uniswap transaction.
+Figure 1: Illustration of a sandwich attack. In Figure 1a the
+trade executes without being attacked, while the trade is
+front- and back-run in Figure 1b.
+Now the victims transaction executes at time 𝑡1, assuming that
+the slippage tolerance is not overshot, with unfavourable reserves
+𝑥1 = 𝑥0 + 𝛿 in𝑎𝑥 and 𝑦1 = (𝑥0𝑦0)/(𝑥0 + 𝛿 in𝑎𝑥 (1 − 𝑓 )). The victim only
+receives
+˜𝛿𝑣𝑦 =
+𝑦1 (1 − 𝑓 )𝛿𝑣𝑥
+𝑥1 + (1 − 𝑓 )𝛿𝑣𝑥
+=
+𝑥0𝑦0
+𝑥0𝛿
+in
+𝑎𝑥
+(1 − 𝑓 )𝛿𝑣𝑥
+𝑥0 + 𝛿 in𝑎𝑥 + (1 − 𝑓 )𝛿𝑣𝑥
+tokens 𝑌 , and ˜𝛿𝑣𝑦 < 𝛿𝑣𝑦 . To finish the attack, the bot exchanges
+𝛿𝑎𝑦 tokens 𝑌 at time 𝑡2 with pool reserves 𝑥2 = 𝑥1 + 𝛿𝑣𝑥 and
+𝑦2 = (𝑥1𝑦1)/(𝑥1 + 𝛿𝑣𝑥 (1 − 𝑓 )). In this final transaction 𝑇𝐴2
+, the bot
+receives
+𝛿out𝑎𝑥
+=
+𝑥2 (1 − 𝑓 )𝛿𝑎𝑦
+𝑦2 + (1 − 𝑓 )𝛿𝑎𝑦
+=
+(𝑥0 + 𝛿 in𝑎𝑥 + 𝛿𝑣𝑥 ) (1 − 𝑓 )𝛿𝑎𝑦
+(𝑥0+𝛿 in𝑎𝑥 )
+(
+𝑥
+0
+𝑦
+0
+𝑥
+0
++𝛿 in𝑎𝑥 (1−𝑓 )
+)
+(𝑥0+𝛿 in𝑎𝑥 )+𝛿𝑣𝑥 (1−𝑓 ) + (1 − 𝑓 )𝛿𝑎𝑦
+tokens 𝑋 . The bots profit 𝑃𝑎 is
+𝑃𝑎 = 𝛿out𝑎𝑥
+− 𝛿 in𝑎𝑥 − 2𝑏,
+where 𝑏 is the base fee in the currency 𝑋 . Note, that the base fee
+𝑏 ≥ 0 is fixed for a block and known.
+4.1 Adversary Perspective
+We start by finding the optimal strategy for a predatory trading
+bot and first find the best attack input 𝛿 in𝑎𝑥 : the input maximizing
+𝑃𝑎 = 𝛿out𝑎𝑥
+− 𝛿 in𝑎𝑥 − 2𝑏. For this, we consider an arbitrary victim
+transaction 𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0) in pool 𝑋 ⇌ 𝑌 . First, we
+consider the case, where 𝑠 is not set for the transaction, i.e. 𝑠 = 1.
+We show that bot can then analytically determine the the optimal
+sandwich attack size in Lemma 1.
+Lemma 1. We can analytically determine the trading bot’s optimal
+input, (𝛿𝑜𝑎𝑥 ) when the victim’s transaction 𝑇𝑣 indicates no slippage
+tolerance, i.e., 𝑠 = 1.
+Proof. To maximize 𝑃𝑎 , it is sufficient for the bot to maximize
+𝛿diff𝑎 = 𝛿out𝑎𝑥
+− 𝛿 in𝑎𝑥 . We start by finding the zero crossing of the
+derivative of 𝛿diff𝑎 with respect to 𝛿 in𝑎𝑥 .
+𝜕𝛿diff𝑎
+𝜕𝛿 in𝑎𝑥
+=
+𝑥0 (𝛿 in𝑎𝑥
+2
+𝑓 (𝛿𝑣𝑥 (1 − 𝑓 )2 − (2 − 𝑓 )𝑥0)(
+𝛿 in𝑎𝑥 (1 − 𝑓 )2 (𝛿 in𝑎𝑥 + 𝛿𝑣𝑥 − 𝛿𝑣𝑥 𝑓 ) + 𝛿 in𝑎𝑥 (2 − (2 − 𝑓 ) 𝑓 )𝑥0 + 𝑥2
+0
+)
+2
++
+2𝛿 in𝑎𝑥 𝑥0 (𝛿𝑣𝑥 (1 − 𝑓 )2 − (2 − 𝑓 ) 𝑓 · 𝑥0))(
+𝛿 in𝑎𝑥 (1 − 𝑓 )2 (𝛿 in𝑎𝑥 + 𝛿𝑣𝑥 − 𝛿𝑣𝑥 𝑓 ) + 𝛿 in𝑎𝑥 (2 − (2 − 𝑓 ) 𝑓 )𝑥0 + 𝑥2
+0
+)
+2
++
+𝑥2
+0
+(𝛿2𝑣𝑥 (1 − 𝑓 )3 + 𝛿𝑣𝑥 (2 − 𝑓 ) (1 − 𝑓 )2𝑥0 − (2 − 𝑓 ) 𝑓 𝑥2
+0
+)(
+𝛿 in𝑎𝑥 (1 − 𝑓 )2 (𝛿 in𝑎𝑥 + 𝛿𝑣𝑥 − 𝛿𝑣𝑥 𝑓 ) + 𝛿 in𝑎𝑥 (2 − (2 − 𝑓 ) 𝑓 )𝑥0 + 𝑥2
+0
+)
+2
+The single zero crossing of 𝜕𝛿diff𝑎 /𝜕𝛿 in𝑎𝑥 , such that 𝛿 in𝑎𝑥 > 0 is
+located at
+𝛿o𝑎𝑥 =
+(𝛿𝑣𝑥 (1 − 𝑓 )2𝑥0 − (2 − 𝑓 ) 𝑓 𝑥2
+0
+((2 − 𝑓 ) 𝑓 𝑥0 − 𝛿𝑣𝑥 (1 − 𝑓 )2 𝑓 )
++
+√
+𝛿2𝑣𝑥 (1 − 𝑓 )3𝑥0 (𝑥0 − (1 − 𝑓 )2 𝑓 (𝛿𝑣𝑥 + 𝑥0)))
+((2 − 𝑓 ) 𝑓 𝑥0 − 𝛿𝑣𝑥 (1 − 𝑓 )2 𝑓 )
+.
+As
+𝜕2𝛿diff𝑎
+𝜕𝛿 in𝑎𝑥
+2
+�����
+𝛿o𝑎𝑥
+< 0,
+𝛿𝑜𝑎𝑥 is the trading bot’s optimal input. □
+While one might expect that the input of the optimal attack 𝛿𝑎𝑥
+to be infinite, Lemma 1 shows that this is not the case. The optimal
+input amount is limited, as the bot performing the sandwich attack
+needs to pay the fee 𝑓 twice, which increases with the input amount.
+However, in most cases, traders will specify the slippage toler-
+ance 𝑠 , further limiting the maximum input size of the bots attack.
+In Lemma 2 we find the bot’s maximal input such that the trade
+executes and show that the bot can compute it analytically.
+Lemma 2. The bot’s maximal input (𝛿𝑠𝑎𝑥 ) for a transaction ex-
+changing 𝛿𝑥 tokens 𝑋 with slippage tolerance 𝑠 such that the victim’s
+trade still executes can be calculated analytically and is given in the
+proof.
+Proof. We consider a sandwich attack with initial input 𝛿𝑎𝑥 ,
+changing the pool reserves from 𝑥0 to 𝑥1 = 𝑥0 + 𝛿𝑎𝑥 tokens 𝑋 and
+from 𝑦0 to 𝑦1 = (𝑥0𝑦0)/(𝑥0 + 𝛿𝑎𝑥 ) tokens 𝑌 . The new output of the
+victim transaction, assuming that it goes through will be
+˜𝛿𝑣𝑦 =
+𝑦1 (1 − 𝑓 )𝛿𝑣𝑥
+𝑥1 + (1 − 𝑓 )𝛿𝑣𝑥
+=
+𝑥0𝑦0
+𝑥0+𝛿𝑎𝑥
+(1 − 𝑓 )𝛿𝑣𝑥
+𝑥0 + 𝛿𝑎𝑥 + (1 − 𝑓 )𝛿𝑣𝑥
+,
+and the victims transaction will go through, if
+˜𝛿𝑣𝑦 ≥ (1 − 𝑠)𝛿𝑣𝑦
+𝑥0𝑦0
+𝑥0+𝛿𝑎𝑥
+(1 − 𝑓 )𝛿𝑣𝑥
+𝑥0 + 𝛿𝑎𝑥 + (1 − 𝑓 )𝛿𝑣𝑥
+≥ (1 − 𝑠)
+𝑦0 (1 − 𝑓 )𝛿𝑣𝑥
+𝑥0 + (1 − 𝑓 )𝛿𝑣𝑥
+.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+156
+Thus, the bot’s maximal input (𝛿𝑠𝑎𝑥 ) increases the slippage incurred
+by the victim to its tolerance, i.e.,
+˜𝛿𝑣𝑦 = (1 − 𝑠)𝛿𝑣𝑦 . Solving for 𝛿𝑠𝑎𝑥 ,
+we find that the maximal input is
+𝛿𝑠𝑎𝑥 =
+√
+𝑛 (𝑥0,𝑓 ,𝛿𝑣𝑥 ,𝑠)
+1−𝑠 − 𝛿𝑣𝑥 (1 − 𝑓 )3 − (2 − 𝑓 ) (1 − 𝑓 )𝑥0
+2(1 − 𝑓 )2
+,
+where
+𝑛(𝑥0, 𝑓 , 𝛿𝑣𝑥 , 𝑠) =(1 − 𝑓 )2 (1 − 𝑠) (𝛿2𝑣𝑥 (1 − 𝑓 )4 (1 − 𝑠)
++ 2𝛿𝑣𝑥 (1 − 𝑓 )2 (2 − 𝑓 (1 − 𝑠))𝑥0
++ (4 − 𝑓 (4 − 𝑓 (1 − 𝑠)))𝑥2
+0
+. □
+Following from Lemma 1 and Lemma 2, we find that the bot’s
+optimal input is 𝛿 in𝑎𝑥 = min{𝛿𝑜𝑎𝑥 , 𝛿
+𝑠
+𝑎𝑥
+} in Theorem 1. In case the
+profit of the corresponding attack is negative, not profitable attack
+exitst and the bot does not execute any attack.
+Theorem 1. The bot’s optimal input is 𝛿 in𝑎𝑥 = min{𝛿𝑜𝑎𝑥 , 𝛿
+𝑠
+𝑎𝑥
+}.
+Proof. From Lemma 1 we know, that the there is a single maxi-
+mum 𝛿𝑜𝑎𝑥 , such that 𝛿 in𝑎𝑥 > 0. However, in case the victim’s trade
+does not execute for 𝛿 in𝑎𝑥 = 𝛿𝑜𝑎𝑥 , themaximumwill be at the endpoint
+of the permitted interval (𝛿𝑠𝑎𝑥 ). Thus, 𝛿
+in
+𝑎𝑥
+= min{𝛿𝑜𝑎𝑥 , 𝛿
+𝑠
+𝑎𝑥
+}. □
+In Figure 2, we show the effects of the slippage tolerance, trans-
+action fee, and trade size in relation to the pool size on a bots
+profit. Note that the simulation in Figure 2 disregards the base
+fee, which would remove the constant amount (2𝑏) from the profit.
+Figure 2a demonstrates that, as expected, a bot’s maximum profit
+is dependent on both the slippage tolerance and transaction size.
+For small transaction sizes, even transactions with high slippage
+tolerances are not attackable. Additionally, higher transaction fees
+allow higher slippage tolerances before the trades become attack-
+able. Thus, the constant auto-slippage, independent of transaction
+size and transaction fee, suggested by Uniswap and SushiSwap,
+appears counter-intuitive.
+Further, we show in Theorem 2 that the bot’s maximum profit
+cannot exceed the victim’s loss. We will rely on this result in Sec-
+tion 4.2 to allow for straightforward computations on the trader
+side. Seeing that the bot’s maximum profit can trail the victim’s loss,
+we wonder where the remaining profit is collected. By noticing that
+sandwich attacks increase the volume in the pool, we conclude that
+liquidity providers also profit through sandwich attacks.
+Theorem 2. The bot’s profit cannot exceed the victim’s loss.
+Proof. Without loss of generality, we assume both the transac-
+tion fee 𝑓 and the base fee𝑏 to be zero. Both would only decrease the
+bot’s profit. Note, that without transaction fees, the slippage toler-
+ancewill restrict the bot’s optimal input for all 𝑠 ≠ 1. Wewill start by
+analyzing the casewhere the victim trade𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0)
+sets the slippage tolerance 𝑠 ≠ 1, for 𝑓 the bot’s optimal input
+(Lemma 2) becomes
+𝛿 in𝑎𝑥 =
+1
+2
+(√
+(1 − 𝑠) (𝛿2𝑣𝑥 (1 − 𝑠) + 4𝛿𝑣𝑥 𝑥0 + 4𝑥2
+0
+)
+1 − 𝑠
+− 2𝑥0 − 𝛿𝑣𝑥
+)
+.
+The bot’s profit is then given by
+(a) Effects of slippage tolerance (𝑠) and transaction size in relation
+to pool size (𝛿𝑣𝑥 /𝑥0) on the bot’s maximal profit. We set 𝑓 = 0.003.
+(b) Effects of slippage tolerance (𝑠) and transaction fee (𝑓 ) on the
+bot’s maximal profit. We set 𝛿𝑣𝑥 /𝑥0 = 0.01.
+Figure 2: The effects of slippage tolerance (𝑠), transaction fee
+(𝑓 ), and transaction size in relation to pool size (𝛿𝑣𝑥 /𝑥0) on a
+predatory trading bot’s maximal profit for a victim’s trade
+𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0). We disregard the base fee, set 𝑥0 to
+5000000 𝑋 and give the profit in the currency 𝑋 .
+𝑃𝑎 =𝛿out𝑎𝑥
+− 𝛿 in𝑎𝑥 =
+𝛿𝑣𝑥 𝑠
+(
+𝛿𝑣𝑥 + 𝑥0
+)
+𝛿𝑣𝑥 𝑠 + 𝑥0
+,
+while the victims loss is given as
+𝐿𝑣 = 𝑠 · 𝛿𝑣𝑦
+𝑥2
+𝑦2
+= 𝑠 · 𝛿𝑣𝑥
+(
+𝛿𝑣𝑥 +
+√(
+𝛿2𝑣𝑥 + 4𝛿𝑣𝑥 𝑥0+4𝑥2
+0
+1−𝑠
+))2
+4𝑥0 (𝛿𝑣𝑥 + 𝑥0)
+.
+To obtain the loss 𝐿𝑣 , we multiply the victim’s loss in tokens
+𝑌 (𝑠 · 𝛿𝑣𝑦 ) by the price 𝑝𝑦→𝑥 at the time the victim’s losses were
+realized, such that it is in the same currency as the bot’s profit. To
+show that the profit cannot exceed the loss, we show 𝑃𝑎/𝐿𝑣 ≤ 1.
+𝑃𝑎/𝐿𝑣 =
+4𝑥0 (𝛿𝑣𝑥 + 𝑥0)2
+(𝛿𝑣𝑥 𝑠 + 𝑥0)
+(
+𝛿𝑣𝑥 +
+√(
+𝛿2𝑣𝑥 + 4𝛿𝑣𝑥 𝑥0+4𝑥2
+0
+1−𝑠
+))2
+≤
+4𝑥0 (𝛿𝑣𝑥 + 𝑥0)2
+(𝛿𝑣𝑥 𝑠 + 𝑥0)
+(
+𝛿𝑣𝑥 + (𝛿𝑣𝑥 + 2𝑥0)
+)
+2
+=
+𝑥0
+𝛿𝑣𝑥 𝑠 + 𝑥0
+≤ 1.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+157
+We turn the the case where 𝑠 = 1. The bot’s optimal input is then
+𝛿 in𝑎𝑥 → ∞ and we find the associated profit to be
+lim
+𝛿 in𝑎𝑥→∞
+𝑃𝑎 = lim
+𝛿 in𝑎𝑥→∞
+(𝛿out𝑎𝑥
+− 𝛿 in𝑎𝑥 )
+= lim
+𝛿 in𝑎𝑥→∞
+𝛿𝑣𝑥 𝛿
+in
+𝑎𝑥
+(𝛿𝑣𝑥 + 2𝑥0 + 𝛿 in𝑎𝑥 )
+𝛿𝑣𝑥 𝛿
+in
+𝑎𝑥 + (𝛿 in𝑎𝑥 + 𝑥0)2
++ 𝑥0)2 = 𝛿𝑣𝑥 .
+Further, for 𝛿 in𝑎𝑥 → ∞ the victims loss 𝐿𝑣 = 𝛿𝑣𝑥 , as lim𝛿 in𝑎𝑥→∞ 𝛿𝑣𝑦 =
+0. Thus, the bot’s gain cannot exceed the victim’s loss. □
+4.2 Trader Perspective
+Intending to minimize the victim’s expected transaction execu-
+tion cost, we turn to the victim’s perspective of the sandwich
+game. We again consider an arbitrary victim’s transaction 𝑇𝑣 =
+(𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0). First, we note that we consider the victim’s
+transaction unattackable for
+𝑠 · 𝛿𝑣𝑦 ≥ 2𝑏,
+as 𝑠 · 𝛿𝑣𝑦 an upper bound for the bot’s profit (cf. Theorem 2). Note
+that here the base fee for the transaction is given in currency 𝑌 .
+Thus, high slippage tolerances and trade sizes make victim trades
+attackable. Any 𝑠 ≤ 𝑠𝑎 , where
+𝑠𝑎 =
+2𝑏
+𝛿𝑣𝑦
+,
+ensure that no profitable sandwich attack for the victim’s transac-
+tion exists. However, by selecting a low slippage tolerance, potential
+victims risk their trade failing to execute due to the natural move-
+ments in the pool, from trades, or liquidity withdrawals. Therefore,
+it is unreasonable to set a low slippage tolerance to avoid a sand-
+wich attack when this low slippage tolerance is associated with
+high expected costs linked with resubmitting failed transactions.
+The costs of transaction failure consist of the cost of redoing the
+transaction and the cost associated with the price shift between
+the two blocks. We estimate the cost of redoing the transaction to
+be (𝑙 +𝑚)𝑏, where 𝑙 is the portion of the base fee used for a failed
+transaction, and𝑚 is the potential increase of the base fee in the
+next block. We set 𝑙 = 0.25, as the gas used by a failed Uniswap
+transaction is approximately a quarter of that of a successful trans-
+action [8]. Additionally, we set𝑚 = 0.125, as it is the maximum
+increase of the base fee within a block [11]. The expected cost of
+the associated price shift in the pool is denoted by E(𝑠 |𝑠 > 𝑠)𝛿𝑣𝑦 .
+More precisely, −E(𝑠 |𝑠 > 𝑠) is expected fractional price change
+given that the transaction failed (𝑠 > 𝑠). Here, 𝑠 is the block’s price
+slippage. Finally, we denote the probability of the transaction failing
+for slippage tolerance 𝑠 and trade size 𝛿𝑣𝑥 as 𝑝 (𝑠, 𝛿𝑣𝑥 ). Note, that
+𝑝 (𝑠, 𝛿𝑣𝑥 ) can be estimated reliably by looking at the recent history
+of the pool (cf. Section 5.2).
+Thus, an approximative upper bound for redoing the transaction
+is given as
+∞∑
+𝑖=1
+𝑝 (𝑠, 𝛿𝑣𝑥 )𝑖 ((𝑙 +𝑚)𝑏 + E(𝑠 |𝑠 > 𝑠)𝛿𝑣𝑦 )
+=
+𝑝 (𝑠, 𝛿𝑣𝑥 )
+1 − 𝑝 (𝑠, 𝛿𝑣𝑥 )
+((𝑙 +𝑚)𝑏 + E(𝑠 |𝑠 > 𝑠)𝛿𝑣𝑦 )
+Setting the slippage tolerance to 𝑠 < 𝑠𝑟 , where
+𝑠𝑟 =
+𝑝 (𝑠, 𝛿𝑣𝑥 )
+1 − 𝑝 (𝑠, 𝛿𝑣𝑥 )
+(
+(𝑙 +𝑚)𝑏
+𝛿𝑣𝑦
++ E(𝑠 |𝑠 > 𝑠)
+)
+,
+ensures that the estimated costs associated with the transaction
+failing to execute do not exceed the costs of a possible sandwich
+attack. Note, that finding 𝑠𝑟 is possible with a ternary search, as the
+left side of the equation decreases with 𝑠 , while the right side of
+the equation increases with 𝑠 .
+In case 𝑠𝑟 < 𝑠𝑎 , the potential victim can choose 𝑠 ∈ [𝑠𝑟 , 𝑠𝑎)
+to make sure that no profitable sandwich attack exists. We will
+always choose 𝑠 = 𝑠 = 𝑠𝑎 − Y, where Y → 0
++
+to minimise the
+costs of transaction failure. Simultaneously, the victim does not
+face an unreasonable high expected cost related to the transaction
+failing. On the other hand, if 𝑠𝑟 ≤ 𝑠𝑎 , the potential victim cannot
+easily set the slippage tolerance to avoid both sandwich attacks
+and the risk of having to pay the costs related to the transaction
+failing. However, as we find in Section 5.3, this generally only occurs
+for comparatively large transactions. In reality, these transactions
+are better divided into several smaller trades to reduce their price
+impact. Price impact is an unrelated effect a trader should consider
+before executing a trade.
+We conclude the analysis by presenting the algorithm utilized by
+the trader to choose the optimal slippage tolerance in Algorithm 1.
+Algorithm 1 Setting Slippage
+For transaction 𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0) in pool 𝑋 ⇌ 𝑌
+Calculate 𝑠𝑎 = 2𝑏
+𝛿𝑣𝑦
+and 𝑠𝑟 =
+𝑝 (𝑠,𝛿𝑣𝑥 )
+1−𝑝 (𝑠,𝛿𝑣𝑥 )
+(
+(𝑙+𝑚)𝑏
+𝛿𝑣𝑦
++ E(𝑠 |𝑠 > 𝑠)
+)
+for
+transaction 𝑇𝑣
+if 𝑠𝑟 < 𝑠𝑎 :
+set 𝑠 = 𝑠 = 𝑠𝑎 − Y, where Y → 0
++
+else:
+set 𝑠 = 𝑠𝑟
+Algorithm 1 can also be used to set the slippage tolerance in
+Uniswap V3. The implementation of Algorithm 1 will vary only
+slightly between Uniswap V2 and V3. The estimations of both the
+probability of the transaction failing for slippage tolerance 𝑠 and
+trade size 𝛿𝑣𝑥 (𝑝 (𝑠, 𝛿𝑣𝑥 )) and the expected fractional price change
+given that the transaction failed (−E(𝑠 |𝑠 > 𝑠)) are calculated with
+the specific liquidity distribution. For Uniswap V2 (cf. Section 5.2)
+the number of tokens reserved in the pool suffice for the prediction.
+5 EVALUATION
+We analyze past Uniswap data to compare the costs for traders using
+the slippage tolerance proposed by Uniswap and the sandwich game.
+The data description follows in the succeeding section.
+5.1 Data Description
+To collect data, we launch a go-ethereum client and export all
+transactions executed on Uniswap V2. We collect all Uniswap V2
+transactions recorded on Ethereum up to block 11709847 (on 23
+January 2021). In the following data analysis, we focus on 120,000
+blocks (from block 11589848 to block 11709847) in January 2021,
+a particularly active time for Uniswap V2 before the launch of
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+158
+USDC⇌WETH USDC⇌USDT WBTC⇌WETH DPI⇌WETH
+` 𝜎 ` 𝜎 ` 𝜎 ` 𝜎
+size [$]
+10 1.80 · 10−4 6.18 · 10−3 9.52 · 10−5 8.31 · 10−4 6.83 · 10−5 9.24 · 10−4 1.65 · 10−4 1.19 · 10−3
+100 1.81 · 10−4 6.35 · 10−3 9.52 · 10−5 8.31 · 10−4 6.83 · 10−5 9.25 · 10−4 1.65 · 10−4 1.19 · 10−3
+1000 1.82 · 10−4 6.45 · 10−3 9.52 · 10−5 8.30 · 10−4 6.87 · 10−5 1.07 · 10−3 1.65 · 10−4 1.19 · 10−3
+10000 1.84 · 10−4 7.07 · 10−3 9.51 · 10−5 8.48 · 10−4 7.19 · 10−5 4.57 · 10−3 1.66 · 10−4 1.23 · 10−3
+100000 1.85 · 10−4 7.67 · 10−3 9.42 · 10−5 1.15 · 10−3 8.08 · 10−5 1.68 · 10−2 1.63 · 10−4 1.39 · 10−3
+Table 1: Mean (`) absolute fractional price change (𝑟 ) and volatility (𝜎) of absolute fractional price change for four Uniswap
+pools: USDC⇌WETH, USDC⇌USDT, WBTC⇌WETH and DPI⇌WETH.
+Uniswap V3. Thus, the trade activity on Uniswap V2 at this time is
+uninfluenced by Uniswap V3.
+1
+We obtain the price of each cryp-
+tocurrency in a common currency, US$ in our case, from the pool
+reserves and Coinbase [3].
+In the following, we analyze data from eight Uniswap pools. The
+pools analyzed are USDC⇌WETH, USDC⇌USTD,WBTC⇌WETH,
+DPI⇌WETH, WBTC⇌USDC, UNI⇌USDC, LINK⇌WETH, and
+KIMCHI⇌WETH. We choose pools through a combination of size
+and type
+2
+to represent a representative sample of Uniswap pools.
+5.2 Slippage Prediction
+To understand the price changes between blocks, we start by ana-
+lyzing the fractional price change in all eight Uniswap pools over
+120,000 blocks in January 2021. The absolute fractional price change
+(𝑟 ) is given as:
+𝑟 =
+| ˜𝛿𝑣𝑦 − 𝛿𝑣𝑦 |
+𝛿𝑣𝑦
+= |𝑠 |.
+We see that the fractional price change is dependent on the trade
+size. Thus, we find the average absolute fractional price change
+and its volatility for five trade sizes ($10, $100, $1000, $10000, and
+$100000) in Table 1 for a selection of four pools. We note that we
+consider the anticipated trade output (𝛿𝑣𝑦 ) to be the trade size
+throughout the entire analysis. These trade sizes cover the majority
+of trades executed on Uniswap – Uniswap’s median trade size was
+$634 in 2020 [16].
+We notice immediately that the mean absolute fractional price
+change is small in all considered pools – contradicting the com-
+mon assumption that the price of cryptocurrencies fluctuates sig-
+nificantly, even between blocks. Instead, we find the price to be
+relatively constant between two blocks (around 13 seconds). Fur-
+ther, the average absolute price change is significantly less than
+the fractional slippage tolerance of 5 · 10−3 proposed by Uniswap
+across all four pools [15]. The difference is even more startling as
+slippage only concerns negative price changes.
+In the sandwich game, the trader estimates the required slippage
+tolerance 𝑠 such that the probability of the transaction failing is
+𝑝 (𝑠). To allow facile computation, we estimate the required slippage
+tolerance 𝑠𝑤
+𝑝 (𝑠) such that the probability of transaction failure is
+𝑝 (𝑠) to be the 𝑝 (𝑠)th percentile of the observed fractional price
+1
+We note that while the data precedes flashbots, flashbots, however, does not impact a
+pool’s price fluctuations but the success of sandwich attacks. As we assume optimal
+conditions for sandwich attacks anyways, this does not impact our analysis.
+2
+Type divides pools into normal pools, stable pools, and exotic pools. These categories
+were introduced by Uniswap [19].
+change in the past 𝑤 blocks. Here, 𝑤 is the window size used for
+the estimation. We then compute the accuracy of our estimation
+over 120,000 blocks and summarize the results in Table 2. There
+we show the mean (`) and the relative error ([) of the prediction
+of 𝑠𝑤
+𝑝 (𝑠) for a given the probability of transaction failure 𝑝 (𝑠) and
+window size𝑤 .
+While the approximation is largely inaccurate for the smallest
+window size (𝑤 = 200), it is accurate for all larger window sizes.
+Only for the largest tested slippage tolerance (cf. Table 2c) does the
+prediction become inaccurate. However, this stems from the proba-
+bility of transaction failure 𝑝 (𝑠) = 0.1 being large enough, such that
+in less than a fraction of 𝑝 (𝑠) blocks, the fractional price change
+is positive. Consequently, the estimation 𝑠𝑤
+𝑝 (𝑠) becomes zero. This
+is true for three of the tested pools: WBTC⇌USDC (cf. Figure 3f),
+USDC⇌USDT (cf. Figure 3d) and DPI⇌WETH (cf. Figure 3h), and
+caused by low volume in the pools. If no trade is executed in the
+pool during a block, the required slippage tolerance is inevitably
+zero. Only for the most active pool (USDC⇌WETH), does predic-
+tion 𝑠𝑤
+𝑝 (𝑠) remain accurate for 𝑝 (𝑠) = 0.1 (cf. Figure 3b). However, as
+these inaccuracies cause the slippage tolerance to be over-estimated
+rather than under-estimated, they do not cause unnecessary fail-
+ures. In the following, we will use𝑤 = 2000 as a window size for
+the estimation. The estimation does not become noticeably more
+accurate for larger window sizes, and using 𝑤 = 2000 allows the
+system to react to changes more quickly.
+5.3 Setting Slippage
+With the ability to predict the required slippage tolerance, we con-
+tinue by calculating the slippage tolerance’s lower bound, ensuring
+that the expected cost of transaction failure does not exceed the
+cost of a sandwich attack. We find this lower bound for trades of
+sizes: $10, $100, $1000, $10000, and $100000 using Algorithm 1 for
+each block in our data set. In the following evaluation, we set the
+base fee to $4. A base fee of $4 for a Uniswap V2 transaction is
+in line with current values [17]. We repeat our evaluation with
+different base fees ($2 and $8) in Appendix B. Over 120,000 blocks,
+we compute the lower bound for the slippage tolerance (𝑠𝑟 ) for the
+eight analyzed pools. As 𝑠𝑟 adapts to the current pool character-
+istics, we compute different values for every block. We visualize
+the results as a box plot for two trade sizes ($10 and $100000) in
+Figure 4.
+Note that even though the trade size differs by a factor of 10000,
+𝑠𝑟 only decreases by a factor of 10 (cf. Figures 4a and 4b). Further, we
+note that for both trade sizes, we observe a similar pattern between
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+159
+USDC⇌WETH USDC⇌USDT WBTC⇌WETH DPI⇌WETH
+` [ ` [ ` [ ` [
+window size
+200 −2.37 · 10−3 0.637 −8.04 · 10−4 0.512 −1.03 · 10−3 0.611 −1.65 · 10−3 0.656
+2000 −2.74 · 10−3 0.093 −8.95 · 10−4 0.065 −1.22 · 10−3 0.106 −2.03 · 10−3 0.078
+20000 −2.93 · 10−3 0.014 −9.27 · 10−4 0.014 −1.37 · 10−3 0.007 −2.13 · 10−3 0.045
+(a) 𝑝 (𝑠) = 0.01
+USDC⇌WETH USDC⇌USDT WBTC⇌WETH DPI⇌WETH
+` [ ` [ ` [ ` [
+window size
+200 −9.22 · 10−4 0.124 −9.05 · 10−5 0.024 −1.47 · 10−4 0.063 −2.61 · 10−4 0.063
+2000 −9.74 · 10−4 0.013 −7.76 · 10−5 0.021 −1.06 · 10−4 0.022 −1.90 · 10−4 0.025
+20000 −9.88 · 10−4 0.007 −8.39 · 10−5 0.019 −7.87 · 10−5 0.020 −1.52 · 10−4 0.018
+(b) 𝑝 (𝑠) = 0.05
+USDC⇌WETH USDC⇌USDT WBTC⇌WETH DPI⇌WETH
+` [ ` [ ` [ ` [
+window size
+200 −3.49 · 10−4 0.042 −7.35 · 10−6 0.335 −1.85 · 10−5 0.194 −4.36 · 10−5 0.213
+2000 −2.99 · 10−4 0.001 −1.24 · 10−6 0.314 −4.34 · 10−6 0.148 −2.18 · 10−5 0.186
+20000 −2.56 · 10−4 0.003 0.00 0.310 −1.04 · 10−6 0.114 −7.81 · 10−6 0.143
+(c) 𝑝 (𝑠) = 0.1
+Table 2: Average (`) and relative error ([) of slippage tolerance 𝑠 prediction using historical percentile for transaction failure
+probabilities 𝑝 (𝑠) ∈ [0.01, 0.05, 0.1] andwindow sizes𝑤 ∈ [200, 2000, 20000] for four Uniswap pools: USDC⇌WETH, USDC⇌USDT,
+WBTC⇌WETH and DPI⇌WETH.
+pools. 𝑠𝑟 tends to be smaller for pools with lower volume such
+as LINK⇌WETH and is largest for USDC⇌WETH, the biggest
+pool in terms of volume. This trend might be counter-intuitive
+initially, as we would expect prices of these, generally more exotic,
+cryptocurrencies in lower volume pools to fluctuate more. However,
+while this might be true for larger time frames, e.g., days, this
+is not true in the time-scale of blocks. Due to the low trading
+volume in the pools, there are many blocks without any trade
+execution. Thus, there are no price fluctuations between these
+blocks. We also see that 𝑠𝑟 differs within pools across time. For
+instance, we observe that 𝑠𝑟 varies by a factor of more than five for
+USDC⇌WETH for 𝛿𝑣𝑦 = $100000. Pools go through periods of both
+lower and higher volume. Therefore, it is natural that the expected
+fractional price change between two blocks also varies over time.
+Observing the difference of 𝑠𝑟 within and across pools indicates
+that the constant auto-slippage, as suggested by several AMMs,
+cannot be suitable for all trades. We will further underscore this
+point in the following with a comparison of the slippage tolerances
+computed by Algorithm 1 and Uniswap’s constant auto-slippage
+(cf. Figure 5).
+In Figure 5a we compare 𝑠𝑎 and 𝑠𝑟 . We find that the mean value of
+𝑠𝑟 does not exceed 𝑠𝑎 for all transaction sizes analyzed up to $10000.
+Note that when looking at the entire data set, 𝑠𝑟 never exceeds 𝑠𝑎 for
+these transaction sizes. Thus, for all these transactions, the slippage
+tolerance can easily be set to 𝑠 = 𝑠𝑎 − Y, Y → 0
++
+, to avoid being
+attacked and ensure that the costs related to potentially having to
+redo the transaction are small. Only for the largest transaction size
+does 𝑠𝑟 occasionally exceed 𝑠𝑎 . The mean value of 𝑠𝑟 exceeds 𝑠𝑎
+in half the pools and in Figure 4b we see that there is at least one
+block for all pools in which 𝑠𝑟 surpasses 𝑠𝑎 . Thus, when the trade
+size exceeds $100000, sandwich attacks are not (always) avoidable
+with our parameter configuration.
+We turn to Figure 5b, where we compare the slippage tolerance
+chosen by Algorithm 1 (𝑠) to the slippage tolerance recommended
+by Uniswap (𝑠u). We show in blue where 𝑠𝑢 is smaller than 𝑠 and in
+red where 𝑠𝑢 exceeds 𝑠 . For small trade sizes, 𝑠𝑢 is comparatively
+small. This unnecessarily small slippage tolerance is up to a factor of
+160 smaller than the slippage tolerance at which the trade becomes
+attackable (𝑠𝑎) and causes easily preventable transaction failures.
+We notice that independent of the transaction size, Uniswap’s in-
+terface warns users that their transaction may be front-run when
+setting the slippage tolerance slightly below 𝑠𝑎 for trades of size
+$10 and $100. As 𝑠𝑎 specifies the slippage tolerance at which trades
+become attackable, they cannot be front-run profitably. Thus, the
+warning is misleading and can cause to unnecessary transaction
+failures. We note that while 𝑠𝑎 depends on the current base fee,
+Uniswap’s warnings are fixed and independent of trade size, pool,
+and base fee. Thus, it suffices to test the Uniswap interface with
+realistic base fees.
+Simultaneously, for large trades, 𝑠u exceeds 𝑠 by up to a factor
+of more than 50, and thus opens greater parts of the transaction up
+for attacks than necessary. For example, when setting the slippage
+tolerance as indicated by our algorithm for trades of size $10000,
+Uniswap warns that the transaction may fail and suggests users
+use a higher slippage tolerance. While not necessarily incorrect,
+any transaction may fail, the warning might encourage users to
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+160
+(a) USDC⇌ETH (b) USDC⇌ETH
+(c) USDC⇌USDT (d) USDC⇌USDT
+(e) BTC⇌ETH (f) BTC⇌ETH
+(g) DPI⇌ETH (h) DPI⇌ETH
+Figure 3: Required slippage prediction
+(
+𝑠𝑤
+𝑝 (𝑠)
+)
+for transaction failure probabilities 𝑝 (𝑠) ∈ [0.01, 0.05, 0.1] and window sizes
+𝑤 ∈ [200, 2000, 20000] for four Uniswap pools: USDC⇌WETH, USDC⇌USDT, WBTC⇌WETH and DPI⇌WETH. We predict
+the required slippage tolerance over 120,000 blocks from block 11589848 to block 11709847.
+choose a higher slippage tolerance. Consequently, these users would
+encounter excess costs, as we will show in the subsequent section.
+5.4 Cost Comparison
+To conclude the analysis, we simulate trades of sizes $10, $100, $1000,
+$10000 and $100000 in every block between blocks 11589848 and
+11709847 across all eight pools. We simulate all trades both with the
+slippage tolerance as specified by Algorithm 1 and with the slippage
+tolerance suggested by Uniswap. We note that we consider a trade
+𝑇𝑣 = (𝛿𝑣𝑥 , 𝑠, 𝑓 , 𝑏, 𝑥0, 𝑦0, 𝑡0) to be attackable, whenever 𝑠𝛿𝑣𝑦 ≥ 2𝑏 in
+accordance with Theorem 2.
+We summarize the results of the simulation in Table 3, where we
+show the fractional cost incurred when using our algorithm and
+the cost incurred when using the slippage tolerance recommended
+by Uniswap. This cost consists of both of the cost incurred from
+sandwich attacks and of the costs involved in resubmitting failed
+transactions. We further provide the detailed results on the number
+of times transactions fail to execute and suffer sandwich attacks in
+Appendix A.
+Our algorithm is significantly more cost-effective than the sug-
+gestions from Uniswap for all analyzed trade sizes in all analyzed
+pools. We notice that across all pools, very small trades experi-
+ence no additional costs in our case but fail from time to time with
+Uniswap’s suggested slippage tolerance. As we saw in Figure 5b,
+the transactions fail as Uniswap’s constant slippage tolerance is
+unnecessarily low for small trade sizes and leads to easily avoidable
+trade failures. While trades of size $10 are never attacked nor fail
+when utilizing our algorithm for setting the slippage tolerance, a
+couple of transactions always fail when using Uniswap’s slippage
+tolerance suggestion – leading to an infinite cost reduction.
+While our protocol for setting the slippage tolerance still saves
+costs in comparison to the auto-slippage across all pools, we find
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+161
+(a) transaction size: 𝛿𝑣𝑦 = $10
+(b) transaction size: 𝛿𝑣𝑦 = $100000
+Figure 4: We compute the lower bound for the slippage
+tolerance (𝑠𝑟 ) (Algorithm 1) over 120,000 blocks from
+block 11589848 to block 11709847. 𝑠𝑟 adapts to current
+pool characteristics and we, thus, record different val-
+ues for every block which we show as a blue boxplot
+for pools: USDC⇌WETH, USDC⇌USTD, WBTC⇌WETH,
+DPI⇌WETH, WBTC⇌USDC, UNI⇌USDC, LINK⇌WETH,
+and KIMCHI⇌WETH.
+the smallest difference in costs for trades of size $1000. We infer
+that the auto-slippage selected by Uniswap appears reasonable for
+transactions of size $1000 when the base fee is $4. This finding
+is in line with our observations from Figure 5b, 𝑠𝑢 is closest to
+the slippage tolerance suggested by Algorithm 1 for trades of size
+$1000.
+Finally, for large trades ($10000 and $100000), our algorithm con-
+sistently demonstrates a high cost reduction of up to a factor of
+273. Looking at the results in further detail, we observe differing
+patterns for high volume pools such as USDC⇌WETH (cf. Table 3a)
+and WBTC⇌WETH (cf. Table 3b) and lower volume pools such
+as UNI⇌USDC (cf. Table 3e) and LINK⇌WETH (cf. Table 3f). In
+high volume pools, the difference between the costs experienced by
+trades using our algorithm and Uniswap’s auto-slippage decreases
+more starkly for large trades. Regardless of this decrease, the dif-
+ference remains significant across all pools. In comparatively low
+volume pools, the cost ratio does not decrease noticeably for large
+trades. Low volume leads to smaller inter-block price movements:
+allowing our algorithm to select lower slippage tolerances and avoid
+sandwich attacks. Precisely, while 80% of trades using our slippage
+tolerance algorithm were attacked for trades of size $100000 in the
+USDC⇌WETH (cf. Table 4a), less than 3% of trades were attacked
+in the low volume pool LINK⇌WETH (cf. Table 4f).
+Thus, we deduce that using a constant auto-slippage, as sug-
+gested by both Uniswap and SushiSwap, ignorant of the trade size
+and pool characteristics, imposes unreasonably high costs on trades.
+The inefficiency of the constant auto-slippage is highlighted by our
+(a) Comparison between the slippage tolerance at which trades be-
+come attackable (𝑠𝑎) and the mean of the lower bound for the slip-
+page tolerance such that the expected costs of transaction failure
+does not exceed the cost of a sandwich attack (𝑠𝑟 ). Values larger
+than 1 suggest that sandwich attacks can be avoided (𝑠 = 𝑠𝑎 in Algo-
+rithm 1), while values smaller than 1 indicate that sandwich attacks
+cannot be avoided easily (𝑠 = 𝑠𝑟 in Algorithm 1).
+(b) Comparison between the slippage tolerance chosen by Algo-
+rithm 1 (𝑠) and the auto-slippage suggested by Uniswap (𝑠𝑢 ). Values
+larger than 1 suggest that Uniswap auto-slippage is to low thereby
+leads to unnecessary trade failures. On the other hand, values larger
+than 1 indicate that the auto-slippage suggested by Uniswap is too
+high and unnecessary sandwich attacks occur.
+Figure 5: Slippage tolerance for pools: USDC⇌WETH,
+USDC⇌USTD, WBTC⇌WETH, DPI⇌WETH, WBTC⇌
+USDC, UNI⇌USDC, LINK⇌WETH, and KIMCHI⇌WETH
+and trade sizes: $10, $100, $1000, $10000 and $100000.
+algorithm repeatedly demonstrating a cost reduction of a three-
+figure factor. Further, we note that setting the slippage tolerance per
+our simple algorithm avoids sandwich attacks for all tested pools
+and transaction sizes smaller than $100000. This success shows that
+contrary to common assumptions, traders can mostly avoid being
+sandwich attacked by setting the slippage tolerance.
+To conclude, we infer that in pools with smaller inter-block price
+movements, the additional costs traders need to face from the trans-
+action ordering tax can be reduced significantly. In Uniswap V3,
+liquidity providers no longer automatically commit to providing
+liquidity for the entire price range but can choose to provide liquid-
+ity in a smaller price range [19]. As a consequence, their liquidity
+is up to 4000 times more capitally efficient [10]. Thus, we expect
+inter-block price movements to be even smaller, and our algorithm
+would allow traders to avoid the invisible tax even further.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+162
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,267 · 10−4 ∞
+100 0,000 3,545 · 10−5 ∞
+1000 3,555 · 10−6 1,633 · 10−5 4.5924
+10000 1,435 · 10−4 5,104 · 10−3 35.5718
+100000 3,179 · 10−4 5,014 · 10−3 15.7735
+(a) USDC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 7,441 · 10−5 ∞
+100 2,490 · 10−6 1,516 · 10−5 6.0858
+1000 5,830 · 10−6 9,230 · 10−6 1.5832
+10000 4,133 · 10−5 5,105 · 10−3 123.5364
+100000 6,576 · 10−5 5,015 · 10−3 76.2684
+(b) WBTC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,311 · 10−5 ∞
+100 0,000 1,336 · 10−5 ∞
+1000 2,086 · 10−6 6,382 · 10−6 3.0588
+10000 2,613 · 10−5 5,102 · 10−3 195.2647
+100000 4,151 · 10−5 5,012 · 10−3 120.7390
+(c) USDC⇌USDT
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,026 · 10−4 ∞
+100 0,000 1,343 · 10−4 ∞
+1000 3,475 · 10−5 6,747 · 10−5 1.9417
+10000 9,764 · 10−5 5,123 · 10−3 52.4730
+100000 1,619 · 10−4 5,033 · 10−3 31.0901
+(d) WBTC⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 3,207 · 10−4 ∞
+100 0,000 7,606 · 10−5 ∞
+1000 4,710 · 10−5 5,147 · 10−5 1.0929
+10000 5,080 · 10−5 5,133 · 10−3 101.0540
+100000 5,098 · 10−5 5,036 · 10−3 98.7995
+(e) UNI⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 5,707 · 10−5 ∞
+100 4,471 · 10−6 2,032 · 10−5 4.5450
+1000 1,659 · 10−5 1,664 · 10−5 1.0031
+10000 1,637 · 10−5 5,114 · 10−3 312.3494
+100000 1,834 · 10−5 5,024 · 10−3 273.9272
+(f) LINK⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,764 · 10−4 ∞
+100 2,468 · 10−6 4,688 · 10−5 18.9989
+1000 9,209 · 10−6 2,393 · 10−5 2.5988
+10000 7,234 · 10−5 5,159 · 10−3 71.3064
+100000 1,324 · 10−4 5,024 · 10−3 37.9494
+(g) DPI⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,764 · 10−4 ∞
+100 2,468 · 10−6 4,688 · 10−5 18.9989
+1000 9,209 · 10−6 2,393 · 10−5 2.5988
+10000 7,232 · 10−5 5,109 · 10−3 70.6393
+100000 1,320 · 10−4 5,019 · 10−3 38.0253
+(h) KIMCHI⇌WETH
+Table 3: Cost comparison when using our own algorithm to set the slippage tolerance vs. the slippage tolerance suggested
+by Uniswap. The fractional cost includes both the costs of being attacked as well as the costs associated with redoing the
+transactions. The simulation spans over 120,000 blocks, from block 11589848 to block 11709847, and the base fee is set to $4.
+6 RELATEDWORK
+The prevalence of front-running on centralized exchanges is a well-
+studied area [20, 22] and most types of front-running are outlawed
+in traditional markets [28, 29]. Still, there are legal trading strate-
+gies utilized by high-frequency trading (HTF) firms that front-run
+transactions for profit [26, 33].
+Onlywith the introduction of EthereumDApps has front-running
+become a pervasive issue on permissionless blockchains. Eskandir
+et al. [25] are the first to combine the scattered body of knowledge
+of front-running on permissionless blockchains at the time. Seeing
+the effects of front-running on AMM users and the limited actions
+taken by the AMMs themselves, we offer them a simple way of
+protecting themselves against such attacks.
+Daian et al. [24] present a study on price gas auctions (PGA), an-
+alyzing various types of predatory trading behaviors known from
+traditional finance and adapting to DeFi. They further introduce
+miner-extractable value (MEV) as a concept and empirically show
+its risks. MEV measures the profit miners can extract through ei-
+ther arbitrarily including or excluding transactions from blocks
+or re-ordering transactions within blocks. Subsequently, Qin et
+al. [32] quantify the transaction ordering tax and provide evidence
+of miners already extracting MEV. In contrast, we focus specifically
+on sandwich attacks from both the victims’ and bot’s perspectives
+by introducing the sandwich game.
+Zhou et al. [35] formalize the sandwich attack problem on AMM
+exchanges. They study the problem analytically and empirically
+from the attackers’ perspective and quantify when profitable at-
+tacks exist. We generalize the analytical sandwich attack problem
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+163
+and include the victim perspective – letting victims adjust the slip-
+page tolerance to avoid sandwich attacks. Our analysis reveals that
+contrary to popular belief, victims can mitigate sandwich attacks
+in most cases.
+A large-scale analysis of sandwich attacks is performed by Züst
+in [36]: quantifying the frequency and profitability of sandwich
+attacks and showing that the number of bots performing sandwich
+attacks is becoming increasingly efficient. While Züst suggests
+splitting up large trades as a mitigation strategy, we demonstrate
+that it is generally sufficient for DeFi users to adjust their slippage
+tolerance to protect against sandwich attacks.
+Several solutions to blockchain front-running have been intro-
+duced recently. With Tesseract, Bentov et al. [21] introduce an
+exchange that relies on trusted hardware to resit front-running.
+Aequitas is a premissioned consensus protocol to achieve order-
+fairness by Kelkar et al. [27]. Cachin et al. [23] strengthen the
+fairness notion achieved by Aequitas. In contrast to these works,
+we show that sandwich attacks are preventable without the need for
+trusted hardware or premissioned consensus. Further, our approach
+allows users to protect themselves immediately without having to
+wait for the DeFi ecosystem to evolve.
+7 CONCLUSION
+Sandwich attacks are a constant threat to the transactions of traders
+on AMMs. In this work, we generalized the sandwich attack prob-
+lem to include both traders and bots. Our model demonstrates that
+the constant auto-slippage suggested by most AMMs only performs
+well for a small set of trade parameters. Further, we highlight that,
+contrary to popular belief, traders can easily avoid most sandwich
+attacks. An adjustment of the slippage tolerance suffices in most
+cases and does not face an unnecessarily high risk of trade fail-
+ure due to an insufficiently small slippage tolerance. The simple
+algorithm we present can be utilized by traders to protect them-
+selves against sandwich attacks and outperforms the auto-slippage
+suggested by Uniswap in all tested settings – demonstrating a three-
+figure factor cost reduction. We foresee the possibility that some
+more conservative traders prefer accepting the transaction ordering
+tax instead of accepting the small risk of transaction failure. How-
+ever, this would open up the opportunity for AMMs themselves or
+a new DeFi service to guarantee a given (low) slippage tolerance to
+their users by amortizing the cost across a pool of users.
+While our simple approach is successful at avoiding sandwich
+attacks without incurring unnecessary costs and allows traders to
+protect themselves, it does not prevent other predatory trading
+behaviors leading to MEV. The development of an approach to
+prevent all predatory trading behaviors is, thus, an open question
+for future research.
+REFERENCES
+[1] 2020. DeFi explosion: Uniswap surpasses Coinbase Pro in daily vol-
+ume. https://cointelegraph.com/news/defi-explosion-uniswap-surpasses-
+coinbase-pro-in-daily-volume.
+[2] 2021. Balancer. https://app.balancer.fi/#/trade.
+[3] 2021. Coinbase. https://www.coinbase.com/.
+[4] 2021. Curve. https://curve.fi/.
+[5] 2021. DeFi Pulse. https://defipulse.com/.
+[6] 2021. dxdy. https://dydx.exchange/.
+[7] 2021. EIP-1559. https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.
+md.
+[8] 2021. Etherscan Transaction Details. https://etherscan.io/tx/
+0x08e0c04a0447bde695588b57630d5f62a94879af6bce796ac892810937cf8830.
+[9] 2021. flashbots. https://docs.flashbots.net/.
+[10] 2021. Introducing Uniswap V3. https://uniswap.org/blog/uniswap-v3.
+[11] 2021. The Investment Implications of Ethereum Improvement Pro-
+posal 1559. https://downloads.coindesk.com/research/EIP-1559-Ethereum-Fee-
+Market-Upgrade-Explained-1.pdf.
+[12] 2021. pancakeswap. https://pancakeswap.finance/.
+[13] 2021. Sushiswap. https://sushi.com/.
+[14] 2021. Uniswap. https://uniswap.org/.
+[15] 2021. Uniswap Interface. https://app.uniswap.org/#/swap.
+[16] 2021. Uniswap’s Year in Review: 2020. https://uniswap.org/blog/year-in-review.
+[17] 2021. Watch The Burn. https://watchtheburn.com/.
+[18] Hayden Adams, Noah Zinsmeister, and Dan Robinson. 2020. Uniswap v2 Core.
+(2020).
+[19] Hayden Adams, Noah Zinsmeister, Moody Salem, River Keefer, and Dan Robinson.
+2021. Uniswap v3 core. Technical Report. Tech. rep., Uniswap.
+[20] James J. Angel, Lawrence E. Harris, and Chester S. Spatt. 2011. Equity Trading in
+the 21st Century. The Quarterly Journal of Finance 01, 01 (2011), 1–53.
+[21] Iddo Bentov, Yan Ji, Fan Zhang, Lorenz Breidenbach, Philip Daian, and Ari Juels.
+2019. Tesseract: Real-Time Cryptocurrency Exchange Using Trusted Hardware.
+In Proceedings of the 2019 ACM SIGSAC Conference on Computer and Communica-
+tions Security (London, United Kingdom) (CCS ’19). Association for Computing
+Machinery, New York, NY, USA, 1521–1538.
+[22] Dan Bernhardt and Bart Taub. 2008. Front-running dynamics. Journal of Economic
+Theory 138, 1 (2008), 288–296.
+[23] Christian Cachin, Jovana Mićić, and Nathalie Steinhauer. 2021. Quick Order
+Fairness. arXiv preprint arXiv:2112.06615 (2021).
+[24] Philip Daian, Steven Goldfeder, Tyler Kell, Yunqi Li, Xueyuan Zhao, Iddo Bentov,
+Lorenz Breidenbach, and Ari Juels. 2020. Flash boys 2.0: Frontrunning in decen-
+tralized exchanges, miner extractable value, and consensus instability. In 2020
+IEEE Symposium on Security and Privacy (SP). IEEE, 910–927.
+[25] Shayan Eskandari, Mahsa Moosavi, and Jeremy Clark. 2019. SOK: Transparent
+dishonesty: front-running attacks on blockchain. In Financial Cryptography and
+Data Security (FC), St. Kitts, Saint Kitts and Nevis.
+[26] Larry Harris. 2013. What to Do about High-Frequency Trading. Financial Analysts
+Journal 69, 2 (2013), 6–9.
+[27] Mahimna Kelkar, Fan Zhang, Steven Goldfeder, and Ari Juels. 2020. Order-fairness
+for byzantine consensus. In Annual International Cryptology Conference. Springer,
+451–480.
+[28] Jerry W. Markham. 1988-1989. Front-Running - Insider Trading under the Com-
+modity Exchange Act. Catholic University Law Review 38 (1988-1989), 69.
+[29] Imad Moosa. 2015. The regulation of high-frequency trading: A pragmatic view.
+Journal of Banking Regulation 16, 1 (2015), 72–88.
+[30] Satoshi Nakamoto. 2008. Bitcoin: A peer-to-peer electronic cash system. Decen-
+tralized Business Review (2008), 21260.
+[31] Pintail. 2021. Uniswap: A Good Deal for Liquidity Providers?
+[32] Kaihua Qin, Liyi Zhou, and Arthur Gervais. 2021. Quantifying Blockchain Ex-
+tractable Value: How dark is the forest? arXiv preprint arXiv:2101.05511 (2021).
+[33] Gregory Scopino. 2014-2015. The (Questionable) Legality of High-Speed Pinging
+and Front Running in the Futures Market. Connecticut Law Review 47 (2014-2015),
+607.
+[34] GavinWood et al. 2014. Ethereum: A secure decentralised generalised transaction
+ledger. (2014).
+[35] Liyi Zhou, Kaihua Qin, Christof Ferreira Torres, Duc V Le, and Arthur Gervais.
+2021. High-frequency trading on decentralized on-chain exchanges. In 2021 IEEE
+Symposium on Security and Privacy (SP). IEEE, 428–445.
+[36] Patrick Züst. 2021. Analyzing and Preventing Sandwich Attacks in Ethereum.
+https://pub.tik.ee.ethz.ch/students/2021-FS/BA-2021-07.pdf.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+164
+https://cointelegraph.com/news/defi-explosion-uniswap-surpasses-coinbase-pro-in-daily-volume
+https://cointelegraph.com/news/defi-explosion-uniswap-surpasses-coinbase-pro-in-daily-volume
+https://app.balancer.fi/#/trade
+https://www.coinbase.com/
+https://curve.fi/
+https://defipulse.com/
+https://dydx.exchange/
+https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.md
+https://github.com/ethereum/EIPs/blob/master/EIPS/eip-1559.md
+https://etherscan.io/tx/0x08e0c04a0447bde695588b57630d5f62a94879af6bce796ac892810937cf8830
+https://etherscan.io/tx/0x08e0c04a0447bde695588b57630d5f62a94879af6bce796ac892810937cf8830
+https://docs.flashbots.net/
+https://uniswap.org/blog/uniswap-v3
+https://downloads.coindesk.com/research/EIP-1559-Ethereum-Fee-Market-Upgrade-Explained-1.pdf
+https://downloads.coindesk.com/research/EIP-1559-Ethereum-Fee-Market-Upgrade-Explained-1.pdf
+https://pancakeswap.finance/
+https://sushi.com/
+https://uniswap.org/
+https://app.uniswap.org/#/swap
+https://uniswap.org/blog/year-in-review
+https://watchtheburn.com/
+https://pub.tik.ee.ethz.ch/students/2021-FS/BA-2021-07.pdf
+A FAILED AND ATTACKED TRADES
+Table 4 compares the number of failed and attacked trades when
+using our slippage tolerance setting algorithm and Uniswap’s sug-
+gested slippage tolerance. It is apparent while the constant slippage
+tolerance used by Uniswap cannot be effective for both different
+trade patterns and pools. Our simple slippage tolerance algorithm,
+on the other hand, adjusts well to the varying conditions. We notice
+that Uniswap’s auto-slippage leads to a similar number of failed
+trades caused by an insufficient slippage tolerance for all tested
+trade sizes in a pool. Especially for smaller trade sizes, these failures
+are unnecessary, as we see when comparing the performance of
+the auto-slippage to that chosen by our slippage tolerance algo-
+rithm. For trade sizes up to a $1000, our algorithm can successfully
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 253 0.0000 1.0079 0 0
+100 0 253 0.0000 1.0079 0 0
+1000 36 253 1.0000 1.0079 0 0
+10000 6814 253 1.1611 1.0079 0 119747
+100000 14697 253 1.2232 1.0079 101371 119747
+(a) USDC⇌WETH
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 79 0.0000 1.0000 0 0
+100 3 79 1.0000 1.0000 0 0
+1000 21 79 1.0000 1.0000 0 0
+10000 1992 79 1.0658 1.0000 0 119921
+100000 5455 79 1.0948 1.0000 16026 119921
+(b) WBTC⇌WETH
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 93 0.0000 1.0000 0 0
+100 0 93 0.0000 1.0000 0 0
+1000 20 93 1.0000 1.0000 0 0
+10000 1336 93 1.0352 1.0000 0 119907
+100000 5964 92 1.1160 1.0000 1536 119908
+(c) USDC⇌USDT
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 881 0.0000 1.0114 0 0
+100 0 881 0.0000 1.0114 0 0
+1000 345 881 1.0087 1.0114 0 0
+10000 2450 880 1.0351 1.0114 0 119120
+100000 3189 858 1.0442 1.0105 57470 119142
+(d) WBTC⇌USDC
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 325 0.0000 1.0031 0 0
+100 0 324 0.0000 1.0031 0 0
+1000 252 325 1.0040 1.0031 0 0
+10000 482 317 1.0041 1.0032 0 119683
+100000 542 277 1.0037 1.0036 7872 119723
+(e) UNI⇌USDC
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 49 0.0000 1.0000 0 0
+100 5 49 1.0000 1.0000 0 0
+1000 48 49 1.0000 1.0000 0 0
+10000 52 49 1.0000 1.0000 0 119951
+100000 52 49 1.0000 1.0000 3080 119951
+(f) LINK⇌WETH
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 305 0.0000 1.0033 0 0
+100 3 305 1.0000 1.0033 0 0
+1000 56 305 1.0000 1.0033 0 0
+10000 2720 305 1.1162 1.0033 0 119695
+100000 6701 304 1.1310 1.0033 41511 119696
+(g) DPI⇌WETH
+failed trades average failed
+attempts
+attacked trades
+ours UNI ours UNI ours UNI
+size [$]
+10 0 183 0.0000 1.0055 0 0
+100 3 183 1.0000 1.0055 0 0
+1000 57 183 1.0000 1.0055 0 0
+10000 815 183 1.0049 1.0055 0 119817
+100000 2591 183 1.0243 1.0055 1706 119817
+(h) KIMCHI⇌WETH
+Table 4: Comparison between the number of failed and attacked trades when using our algorithm to set the slippage tolerance
+vs. the slippage tolerance suggested by Uniswap. The simulation spans between blocks 11589848 and 1170984. The base fee is
+set to $4.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+165
+avoid the vast majority of trade failures in all pools, and simultane-
+ously not a single trade suffers a sandwich attack. All large ($10000
+and $100000) trades with Uniswap’s auto-slippage are sandwich
+attacked or failed to execute. Our algorithm, on the other hand,
+avoids all sandwich attacks for trades up to size $1000, while at
+the same time only experiencing a few, at most 5.5% for trades of
+size $10000 in the USDC⇌WETH pool (cf. Table 4a), trade failures.
+For the largest trade size ($100000), our algorithm cannot avoid
+all sandwich attacks. Still, trades are only attacked very rarely in
+comparison to those that use Uniswap’s auto-slippage.
+B COST COMPARISON (𝑏 = $2 AND 𝑏 = $8)
+We repeat the simulation from Section 5.4 with a smaller base fee,
+i.e., 𝑏 = $2, and present the results in Table 5. The table shows
+the fractional cost incurred when trades use our algorithm and
+the cost incurred by trades using Uniswap’s auto-slippage. For the
+smaller base fee, our algorithm also saves significant amounts of
+money in comparison to the suggestions from Uniswap. Due to
+the lower base fee, smaller trades with Uniswap’s auto-slippage
+become attackable. Thus, while Uniswap’s auto-slippage appeared
+reasonable for trades of size $1000 for 𝑏 = $4, Uniswap’s auto-
+slippage is greatly outperformed our algorithm for trades of size
+$1000 for 𝑏 = $2.
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,267 · 10−4 ∞
+100 0,000 3,545 · 10−5 ∞
+1000 2,652 · 10−5 5,505 · 10−3 207.5644
+10000 1,754 · 10−4 5,054 · 10−3 28.8085
+100000 3,201 · 10−4 5,009 · 10−3 15.6483
+(a) USDC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 7,441 · 10−5 ∞
+100 4,562 · 10−6 1,516 · 10−5 3.3219
+1000 1,104 · 10−5 5,506 · 10−3 498.8522
+10000 4,659 · 10−5 5,055 · 10−3 108.5005
+100000 8,746 · 10−5 5,010 · 10−3 57.2870
+(b) WBTC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,311 · 10−5 ∞
+100 0,000 1,336 · 10−5 ∞
+1000 7,741 · 10−6 5,502 · 10−3 710.7457
+10000 3,257 · 10−5 5,052 · 10−3 155.1261
+100000 5,974 · 10−5 5,007 · 10−3 83.8038
+(c) USDC⇌USDT
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,026 · 10−4 ∞
+100 5,465 · 10−7 1,343 · 10−4 245.7445
+1000 7,548 · 10−5 5,527 · 10−3 73.2224
+10000 9,881 · 10−5 5,074 · 10−3 51.3471
+100000 1,909 · 10−4 5,028 · 10−3 26.3332
+(d) WBTC⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 3,207 · 10−4 ∞
+100 8,919 · 10−6 7,606 · 10−5 8.5274
+1000 5,142 · 10−5 5,537 · 10−3 107.6673
+10000 5,078 · 10−5 5,084 · 10−3 100.1143
+100000 7,058 · 10−5 5,031 · 10−3 71.2869
+(e) UNI⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 5,707 · 10−5 ∞
+100 1,152 · 10−5 2,032 · 10−5 1.7641
+1000 1,652 · 10−5 5,514 · 10−3 333.7329
+10000 1,635 · 10−5 5,064 · 10−3 309.7068
+100000 2,657 · 10−5 5,019 · 10−3 188.8764
+(f) LINK⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,764 · 10−4 ∞
+100 4,539 · 10−6 4,688 · 10−5 10.3277
+1000 3,002 · 10−5 5,510 · 10−3 183.5702
+10000 8,138 · 10−5 5,059 · 10−3 62.1630
+100000 1,562 · 10−4 5,014 · 10−3 32.0972
+(g) DPI⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 1,693 · 10−4 ∞
+100 4,562 · 10−6 3,134 · 10−5 6.8693
+1000 1,847 · 10−5 5,509 · 10−3 298.3095
+10000 2,915 · 10−5 5,059 · 10−3 173.5636
+100000 4,424 · 10−5 5,013 · 10−3 113.3132
+(h) KIMCHI⇌WETH
+Table 5: Cost comparison when using our own algorithm to set the slippage tolerance vs. the slippage tolerance suggested
+by Uniswap. The fractional cost includes both the costs of being attacked as well as the costs associated with redoing the
+transactions. The simulation spans between blocks 11589848 and 1170984. The base fee 𝑏 is set to $2.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+166
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,267 · 10−4 ∞
+100 0,000 3,545 · 10−5 ∞
+1000 7,779 · 10−7 1,633 · 10−5 20.9851
+10000 1,025 · 10−4 5,203 · 10−3 50.7475
+100000 2,583 · 10−4 5,024 · 10−3 19.4491
+(a) USDC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 7,441 · 10−5 ∞
+100 0,000 1,516 · 10−5 ∞
+1000 4,583 · 10−6 9,230 · 10−6 2.0138
+10000 3,048 · 10−5 5,205 · 10−3 170.7785
+100000 5,059 · 10−5 5,025 · 10−3 99.3369
+(b) WBTC⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,311 · 10−5 ∞
+100 0,000 1,336 · 10−5 ∞
+1000 4,817 · 10−7 6,382 · 10−6 13.2498
+10000 1,906 · 10−5 5,202 · 10−3 272.8749
+100000 3,806 · 10−5 5,022 · 10−3 131.9262
+(c) USDC⇌USDT
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 8,026 · 10−4 ∞
+100 0,000 1,343 · 10−4 ∞
+1000 2,567 · 10−6 6,747 · 10−5 26.2815
+10000 9,356 · 10−5 5,223 · 10−3 55.8192
+100000 1,253 · 10−4 5,043 · 10−3 40.2571
+(d) WBTC⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 3,207 · 10−4 ∞
+100 0,000 7,606 · 10−5 ∞
+1000 3,632 · 10−5 5,147 · 10−5 1.4172
+10000 5,070 · 10−5 5,233 · 10−3 103.2274
+100000 4,661 · 10−5 5,046 · 10−3 108.2632
+(e) UNI⇌USDC
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 5,707 · 10−5 ∞
+100 0,000 2,032 · 10−5 ∞
+1000 1,600 · 10−5 1,664 · 10−5 1.0402
+10000 1,642 · 10−5 5,214 · 10−3 317.6139
+100000 1,623 · 10−5 5,034 · 10−3 310.1651
+(f) LINK⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 2,764 · 10−4 ∞
+100 0,000 4,688 · 10−5 ∞
+1000 5,428 · 10−6 2,393 · 10−5 4.4089
+10000 5,853 · 10−5 5,208 · 10−3 88.9918
+100000 1,021 · 10−4 5,029 · 10−3 49.2509
+(g) DPI⇌WETH
+size [$] fractional
+cost ours
+fractional
+cost UNI
+ratio cost
+UNI/ours
+10 0,000 1,693 · 10−4 ∞
+100 0,000 3,134 · 10−5 ∞
+1000 5,781 · 10−6 1,754 · 10−5 3.0336
+10000 2,353 · 10−5 5,208 · 10−3 221.3346
+100000 3,041 · 10−5 5,028 · 10−3 165.3476
+(h) KIMCHI⇌WETH
+Table 6: Cost comparison when using our own algorithm to set the slippage tolerance vs. the slippage tolerance suggested
+by Uniswap. The fractional cost includes both the costs of being attacked as well as the costs associated with redoing the
+transactions. The simulation spans between blocks 11589848 and 1170984. The base fee 𝑏 is set to $8.
+Further, when also considering the simulation results with 𝑏 =
+$8 (cf. Table 6), we see that the general pattern stays the same.
+Independent of the precise base fee, our algorithm outperforms
+Uniswap’s auto-slippage. The auto-slippage is too low for smaller
+trades and consequently small trades fail unnecessarily. On the
+other hand, for larger trades Uniswap’s auto-slippage is too high
+and causes all trades to be attackable. It is clear that a constant
+auto-slippage cannot consistently perform well.
+Session 2A: Blockchain #1 ASIA CCS ’22, May 30–June 3, 2022, Nagasaki, Japan
+167
+	Abstract
+	1 Introduction
+	1.1 Our Contributions
+	2 Background
+	2.1 Ethereum Blockchain
+	2.2 Automated Market Maker
+	2.3 Sandwich Attacks
+	3 Model
+	3.1 Transaction Model
+	3.2 Attack Model
+	4 Sandwich Game
+	4.1 Adversary Perspective
+	4.2 Trader Perspective
+	5 Evaluation
+	5.1 Data Description
+	5.2 Slippage Prediction
+	5.3 Setting Slippage
+	5.4 Cost Comparison
+	6 Related Work
+	7 Conclusion
+	References
+	A Failed and Attacked Trades
+	B Cost Comparison

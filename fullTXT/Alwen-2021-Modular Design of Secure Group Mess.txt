@@ -1,0 +1,2673 @@
+Modular Design of Secure Group Messaging Protocols and the Security of MLS
+Modular Design of Secure Group Messaging Protocols and the
+Security of MLS
+Joël Alwen
+AWS Wickr
+alwenjo@amazon.com
+Sandro Coretti
+IOHK
+sandro.coretti@iohk.io
+Yevgeniy Dodis
+New York University
+dodis@cs.nyu.edu
+Yiannis Tselekounis
+University of Edinburgh
+y.tselekounis@ed.ac.uk
+ABSTRACT
+The Messaging Layer Security (MLS) project is an IETF effort aim-
+ing to establish an industry-wide standard for secure group messag-
+ing (SGM). Its development is supported by several major secure-
+messaging providers (with a combined user base in the billions)
+and a growing body of academic research.
+MLS has evolved over many iterations to become a complex,
+non-trivial, yet relatively ad-hoc cryptographic protocol. In an
+effort to tame its complexity and build confidence in its security,
+past analyses of MLS have restricted themselves to sub-protocols
+of MLS—most prominently a type of sub-protocol embodying so-
+called continuous group key agreement (CGKA). However, to date
+the task of proving or even defining the security of the full MLS
+protocol has been left open.
+In this work, we fill in this missing piece. First, we formally
+capture the security of SGM protocols by defining a corresponding
+security game, which is parametrized by a safety predicate that
+characterizes the exact level of security achieved by a construction.
+Then, we cast MLS as an SGM protocol, showing how to modularly
+build it from the following three main components (and some addi-
+tional standard cryptographic primitives) in a black-box fashion:
+(a) CGKA, (b) forward-secure group AEAD (FS-GAEAD), which is
+a new primitive and roughly corresponds to an “epoch” of group
+messaging, and (c) a so-called PRF-PRNG, which is a two-input
+hash function that is a pseudorandom function (resp. generator
+with input) in its first (resp. second) input. Crucially, the security
+predicate for the SGM security of MLS can be expressed purely as
+a function of the security predicates of the underlying primitives,
+which allows to swap out any of the components and immediately
+obtain a security statement for the resulting SGM construction.
+Furthermore, we provide instantiations of all component primi-
+tives, in particular of CGKA with MLS’s TreeKEM sub-protocol
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea.
+© 2021 Association for Computing Machinery.
+ACM ISBN 978-1-4503-8454-4/21/11. . . $15.00
+https://doi.org/10.1145/3460120.3484820
+(which we prove adaptively secure) and of FS-GAEAD with a novel
+construction (which has already been adopted by MLS).
+Along the way we introduce a collection of new techniques,
+primitives, and results with applications to other SGM protocols
+and beyond. For example, we extend the Generalized Selective De-
+cryption proof technique (which is central in CGKA literature) and
+prove adaptive security for another (practical) more secure CGKA
+protocol called RTreeKEM (Alwen et al., CRYPTO ’20). The modu-
+larity of our approach immediately yields a corollary characterizing
+the security of an SGM construction using RTreeKEM.
+CCS CONCEPTS
+• Security and privacy→ Cryptography.
+KEYWORDS
+Cryptographic protocols;Messaging Layer Security;MLS; TreeKEM;
+RTreeKEM; Secure Messaging; Forward Secrecy; Backward Secrecy
+ACM Reference Format:
+Joël Alwen, Sandro Coretti, Yevgeniy Dodis, and Yiannis Tselekounis. 2021.
+Modular Design of Secure Group Messaging Protocols and the Security of
+MLS. In Proceedings of the 2021 ACM SIGSAC Conference on Computer and
+Communications Security (CCS ’21), November 15–19, 2021, Virtual Event,
+Republic of Korea. ACM, New York, NY, USA, 21 pages. https://doi.org/10.
+1145/3460120.3484820
+ACKNOWLEDGMENTS
+This research is partially supported by gifts from VMware Labs and
+Google, NSF grants 1619158, 1319051, 1314568, and the “Quantum
+Computing for Modern Cryptography” project, funded by the UK
+Quantum Computing and Simulation Hub from the UKRI EPSRC
+grant EP/T001062/1.
+1 INTRODUCTION
+End-to-end encrypted asynchronous secure group messaging (SGM)
+is becoming one of the most widely used cryptographic applications
+with billions of daily users. To help solidify the foundations of this
+trend, the IETF is in the final stages of standardizing the Messaging
+Layer Security (MLS) SGM protocol [8]. The effort is being lead
+by industry (e.g. by Cloudflare, Cisco, Facebook, Google, Mozilla,
+Twitter, Wickr and Wire) with a lot of help from academia. Thus,
+MLS holds the potential to be widely deployed with in the coming
+years.
+Due to the expected feature set and the multi-faceted security
+goals, MLS is quite complex. Furthermore, the description of MLS is
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1463
+https://doi.org/10.1145/3460120.3484820
+https://doi.org/10.1145/3460120.3484820
+https://doi.org/10.1145/3460120.3484820
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3460120.3484820&domain=pdf&date_stamp=2021-11-13
+quite monolithic. In an effort to come to terms with the complexity
+(both of the construction and desired security notions) all work
+formally analyzing MLS has restricted itself in scope. Besides sim-
+plifying the PKI [1, 3] the trend has been to focus only on a subset of
+the complete protocol. In particular, the majority of work has con-
+sidered so-called continuous group key agreement (CGKA) [1, 3, 6].
+First introduced by Cohn-Gordon et al. [13] (under the name "Group
+Ratcheting"), a CGKA protocol is often motivated by the folklore
+belief that CGKA encapsulates the essence of building SGM (not
+unlike how KEMs capture the essence of PKE). Indeed, this folklore
+has motivated a host of new CGKA protocols designed to improve
+on the CGKA protocol implicit to MLS. Some constructions aim
+for stronger security properties [3, 5], others for a more flexible
+communication model [10, 23], while the construction in [1] is
+optimized for certain common SGM settings.
+CGKA abstracts the basic task of asynchronously maintaining
+secrets in a group with an evolving set of members. To this end,
+each time a member joins, leaves or updates their cryptographic
+state (in an effort to heal from past compromises and defend against
+future ones) a new epoch in the ongoing session is initiated. Each
+epoch is equipped with a symmetric group key that can be derived
+by all parties that are in the group during that epoch. The CGKA
+most often identified as underpinning MLS is a protocol called
+TreeKEM [7, 26]. Although, it has undergone at least 2 major iter-
+ations before reaching its current version [8] it remains, at most,
+a passively secure protocol, i.e., with no authenticity mechanisms
+included. Moreover, it provides weaker guarantees (for the group
+key) than is expected of the (encryption keys) in the full MLS proto-
+col. Thus, there are clearly further significant security mechanisms
+at work in MLS beyond the underlying passively secure CGKA, i.e.,
+the protocol requires additional components.
+Indeed, [6] extends the abstraction boundary around TreeKEM
+including more of the MLS protocol to obtain an actively secure
+CGKA which they dub ITK (for "Insider Secure TreeKEM"). Yet
+even ITK is only a CGKA and not an SGM protocol, and so here
+too there clearly remains a gulf between the full MLS protocol and
+what has actually been formally analyzed in [6].
+Two exceptions to the focus on CGKA are: [15], which focuses
+exclusively on how to optimize the bandwidth required to updated
+cryptographic state concurrent sessions with overlapping member-
+ship sets, and [11], which considers the key derivation paths within
+MLS. While the paths extend beyond the CGKA (even ITK) into
+parts of MLS specific to messaging (e.g., key/nonce derivation for
+message encryption) the work leaves much open when it comes to
+a holistic understanding of MLS’s security. For example, the work
+makes no statements at all about authenticity. So for example, it
+leaves out the relatively involved and interdependent mechanisms
+used by MLS to provide this property. Moreover, the work forgoes
+any formal modeling of network communication, leaving open the
+questions around how a network adversary can generally impact
+the security of a session by, say, arbitrarily manipulating packets
+in transit.
+Our contributions
+From a practice-oriented view point, the primary contribution in
+this work is a rigorous security proof showing that the basic instan-
+tiation of MLS is an SGM protocol. More generally, we validate the
+folklore claim that CGKA embodies the essence of SGM. In doing
+so, we make progress on several fronts in coming to terms with the
+complexity involved in describing MLS (and other SGM protocols)
+as well as defining (and proving) security for such protocols.
+Black-Box Construction. In more detail, we give a black-box con-
+struction of an SGM protocol from a passively secure CGKA and
+several other primitives. Instantiated appropriately, the construc-
+tion recovers the basic SGM protocol in MLS.
+1
+Besides passive
+CGKA, the construction also uses a new primitive called a For-
+ward Secure Group AEAD (FS-GAEAD). Intuitively, it combines
+a forward secure key schedule with an authenticated encryption
+with associated data (AEAD) scheme, to allow a group of sender’s
+sharing a single secret to send any number of AEAD encrypted
+messages with no further synchronization or communication such
+that any receiver can immediately decrypt any ciphertexts they re-
+ceive regardless of the order in which they are delivered. We further
+abstract the key schedule of an FS-GAEAD with a new primitive
+called a Forward Secure KDF (FS-KDF) which captures a generic
+forward-secure symmetric key schedule supporting the derivation
+of keys in any order. Due to its improved efficiency profile, our
+construction of an FS-KDF has since replaced the original FS-KDF
+in the MLS standard.
+History graphs. We introduce the first formal security notion for
+SGM.
+2
+Intuitively, it ensures correctness as well as privacy and au-
+thenticity in the form of post-compromise forward secrecy (PCFS) [3].
+That is, messages in a given epoch are both private and authenti-
+cated despite arbitrary state leakage of participants sufficiently in
+the past and future.
+In effort to manage the complexity inherent in such a definition
+we developed the history graph (HG) paradigm for defining security
+of asynchronous group protocols like MLS and CGKA protocols.
+The paradigm allows for an intuitive (even visual) understanding
+of an otherwise complicated notion by representing the (security-
+relevant) semantics of an execution as an annotated graph. This
+allows cleanly separating functionality and communication model
+from the security details being captured. Those details are formal-
+ized as a predicate defined over HG and a particular challenge
+message (or group key for CGKA). The output of the predicate
+indicates if we can expect the challenge to be secure given the exe-
+cution represented by the HG. This modular approach makes our
+SGM and CGKA definitions easy to adapt to, say, future versions of
+MLS. It also allows for more immediate comparison of the security
+enjoyed by different constructions of the same type.
+1
+That is, the part of MLS that allows parties to manage group membership, update their
+cryptographic states at will and send/recieve encrypted and authenticated messages.
+We do not analyze more advanced features such as importing/exporting secrets, meta-
+data hiding and so called "external commits" where an external party makes changes
+to the group state.
+2
+We note that, concurrently to our work, [9] introduced a security notion for SGM
+defined using formal verification tools which we discuss in the Related Work section
+below.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1464
+PKI. Another contribution to the analysis of MLS is a more accurate
+modeling of the PKI used by MLS. With the notable exceptions
+of [6, 15]), the PKI in the works of [1, 3] the analysis of (earlier
+versions of) TreeKEM is based on simplified PKI models that encode
+strong (but implicit) assumptions. For example, their PKI precludes
+the adversary from registering ephemeral keys even for recently
+corrupted parties. Instantiating this faithfully seems to require
+strong authenticity checks by the PKI that may not rely on any
+state that can be leaked during a compromise. In contrast, the PKI
+in our work can be realized under assumptions more compatible
+with E2E security. Concretely, our PKI can be realized if parties use
+an out-of-band mechanism to authenticate each other’s long-term
+keys while distributing ephemeral public keys via an untrusted key
+server. Reflecting the MLS standard, the out-of-band authentication
+mechanism is not made concrete but common instantiations include
+peer-to-peer key verification via 2D bracodes or (in the enterprise
+setting) certification authorities binding long term keys to a users
+identity.
+Security Proofs. Armed with our HG based security notions for SGM
+and passively secure CGKA we prove security for the black-box
+SGM protocol there by making progress not just in validating the
+design of MLS but also the more general folklore motivating the
+study of CGKA protocols. At a high level the proof follows the out-
+line of proof for the double-ratchet in [2]. However the similarities
+end there as we require new arguments and hybrids to instantiate
+this outline in light of the substantial differences between the two
+protocols and 1-on-1 vs. group settings they operate in.
+To recover MLS security we also show that TreeKEM (as implicit
+to the current version in Draft 11 of MLS) [8] is indeed a passively
+secure CGKA according to our definition. In particular, in compari-
+son to the TreeKEM analysis in [1], we more accurately model the
+PKI, capture transcript consistency and secure group management.
+Meanwhile, in comparison to the analysis in [3] we improve the
+PKI model and allow for a much more capable network adversary
+that can, e.g. deliver packets in different orders to different partici-
+pants; a potentially unrealistic restriction for real world adversaries
+that controls, say, the network connection of a user (let alone the
+delivery server used by the session).
+Beyond MLS and TreeKEMwe also prove that RTreeKEM [3] is a
+passively secure CGKA. For this we extend the generalized selective
+decryption (GSD) technique to account for encrypting keys using
+the so-called updatable public-key encryption (UPKE) [3], used by
+RTreeKEM. GSD lies at the heart of almost all adaptive security
+proofs for CGKA protocols. To the best of our knowledge, it remains
+the only technique for proving adaptive security with meaningful
+security loss (e.g. quadratic in the group size). In contrast, the proof
+of the ART CGKA protocol in [13] suffers from an exponential
+loss in group size. Extending GSD to allow for protocols using
+UPKE is likely to have applications beyond analyzing RTreeKEM as
+UPKE is a very natural drop in replacement for standard PKE but
+with improved forward security [20]. Indeed, recent results in [17]
+construct post-quantum secure UPKE with an aim towards building
+a PQ variant of MLS.
+Related work. The history graph paradigm was conceived early on
+in this project. In an effort to keep pace with the rapid development
+of MLS the paradigm was shared with other researchers before this
+work was published. Consequently, the paradigm has been used
+in subsequent work appearing before this one (that cite this one
+as the source of the paradigm) [5, 6].
+3
+Symbolic representations
+of an execution, equipped with safety predicates, have been used
+in [2, 14]. The GSD proof technique, introduced by Panjwani [25]
+and generalized by Jafargholi et al. [19], was first applied to CGKA
+protocols in [1].
+The most influential precursor to TreeKEM, the asynchronous
+ratchet tree (ART) protocol, was introduced byCohn-Gordon et al. [13],
+focusing on adaptive security (informally sketched) for static groups.
+It inspired the initial version of TreeKEM [26] which was updated
+to provide secure group management in [7] and finally to its current
+form in [8]. Meanwhile, ART uses an older technique called “Tree-
+based DH groups” [27, 28, 30] which is also used by [21] to build
+key agreement. However, TreeKEM and ART differ significantly
+from [21], as discussed in [3]. TreeKEM is also related to schemes
+for (symmetric-key) broadcast encryption [16, 18] and multicast
+encryption [12, 24, 30]. Cremers et al. [15] note MLS/TreeKEM’s dis-
+advantages w.r.t. PCS for multiple groups, and Weider [29] suggests
+Causal TreeKEM, a variant that requires less ordering of protocol
+messages. Finally, in concurrent work appearing recently, [9] ana-
+lyzed an older version of TreeKEM (from MLS Draft 7) using formal
+verification techniques.
+2 PRELIMINARIES
+Notation. Weuse associative arrays whichmap arbitrary key strings
+to item strings. For array 𝐴 we use “.” to denote all entries. In
+particular, we (implicitly) declare variable 𝐴 to be a (1-dimensional)
+array and set all of its entries empty string by writing 𝐴[.] ← Y.
+Similarly, we declare a new 2-dimensional array 𝐵 with empty
+entries by 𝐵[., .]← Y. We use the shorthand 𝐵[𝑥, .]← 𝐴 to denote
+that ∀𝑦 with 𝐴[𝑦] ̸= Y we set 𝐵[𝑥,𝑦] ← 𝐴[𝑦]. For subset 𝑌 ′ ⊆
+𝑌 the term 𝑌 ′ ⊆ 𝐴 returns true iff 𝐴 contains all elements in
+𝑌 ′; that is ∀𝑦 ∈ 𝑌 ′ ∃𝑥 : 𝐴[𝑥] = 𝑦. For vector x = (𝑥1, . . . , 𝑥𝑑 )
+with all components 𝑥𝑖 ∈ 𝑋 we write 𝐴[x] to denote the vector
+(𝐴[𝑥1], . . . , 𝐴[𝑥𝑑 ]). We denote the empty list with [.] and the length
+of a list 𝐿 by |𝐿 |. The following special keywords are used to simplify
+the exposition of the security games: req is followed by a condition;
+if the condition is not satisfied, the oracle/procedure containing the
+keyword is exited and all actions by it are undone. let is followed
+by a variable and a condition. After evaluating the expression the
+variable is assigned with the value that satisfies the condition, if
+such value exists, and ⊥ otherwise. chk is followed by a condition;
+if the condition is not satisfied, the oracle/procedure containing the
+keyword returns false, otherwise the next instruction is executed.
+3 FORMAL DEFINITION OF SECURE GROUP
+MESSAGING
+In this section we formally define secure group messaging (SGM).
+Specifically, the formal syntax of SGM schemes is introduced in
+Section 3.1, and Section 3.2 introduces the security game for SGM
+schemes.
+3
+While not ideal, we felt this approach was necessary given the strong incentive to
+make progress on MLS’s analysis prior to it being to widely deployed.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1465
+3.1 Syntax
+This section introduces the formal syntax of an SGM scheme. Parties
+are identified by unique party IDs ID chosen from an arbitrary fixed
+set. In the following, 𝑠 and 𝑠 ′ denote the internal state of the SGM
+scheme before and after an operation, respectively. An SGM scheme
+SGM consists of 15 algorithms grouped into the categories above:
+• For initialization:
+– 𝑠 ← Init(ID): takes as input a party ID ID and generates
+the initial state.
+• For interaction with the PKI:
+– (𝑠 ′, spk)← Gen-SK(𝑠): generates new signature key pair
+and outputs the public key;
+– 𝑠 ′ ← Rem-SK(𝑠, spk): removes the key pair corresponding
+to spk from the state;
+– 𝑠 ′ ← Get-SK(𝑠, ID′, spk′): stores signature public key spk′
+for party ID′;
+– (𝑠 ′, kb)← Gen-KB(𝑠, spk): generates new key bundle (aka
+initial key material), signed with spk;
+– (𝑠 ′, ok) ← Get-KB(𝑠, ID′, kb′): stores key bundle kb′ for
+party ID′ — can reject kb′ by outputting ok = false.
+Key bundles have the format kb = (wpk, spk, sig), where
+sig is a signature of wpk under spk, and wpk is so-called
+welcome key material, which can be used to encrypt secret
+information for joining group members.
+• For group creation:
+– 𝑠 ′ ← Create(𝑠, spk,wpk): creates group with self, where
+the party uses key pair corresponding to spk to sign in
+this group, while control messages for which the recipient
+is the group creator, will be encrypted under keys in wpk.
+• For proposals:
+– (𝑠 ′, 𝑃 ) ← Add(𝑠, ID′): generates a proposal to add party
+ID′;
+– (𝑠 ′, 𝑃 )← Remove(𝑠, ID′): generates a proposal to remove
+party ID′;
+– (𝑠 ′, 𝑃 ) ← Update(𝑠, spk): generates a proposal for self to
+update the personal key material; the new signing verifi-
+cation key will be spk;
+– (𝑠 ′, PI)← Proc-PM(𝑠, 𝑃 ): adds proposal 𝑃 to the state and
+outputs information PI about 𝑃 .
+• For commits:
+– (𝑠 ′, 𝐸,W,𝑇 )← Commit(𝑠, P): creates a commit correspond-
+ing to a vector P of proposals and outputs an epoch ID
+𝐸, an array of welcome messages W (where W[ID] is the
+welcomemessage for newly added party ID), and a commit
+message 𝑇 (for existing group members);
+– (𝑠 ′,GI)← Proc-CM(𝑠,𝑇 ): used by existing groupmembers
+to process a commit message 𝑇 and reach a new epoch;
+outputs updated group information GI (where GI = ⊥ if𝑇
+is considered invalid);
+– (𝑠 ′,GI) ← Proc-WM(𝑠,𝑊 ): used by newly added group
+members to process welcome message𝑊 and join a group;
+outputs group information GI (where GI = ⊥ if𝑊 is con-
+sidered invalid).
+• For sending and receiving messages:
+– (𝑠 ′, 𝑒)← Send(𝑠, 𝑎,𝑚): generates a ciphertext 𝑒 encrypting
+plaintext𝑚 and authenticating AD 𝑎;
+– (𝑠 ′, 𝐸, S, 𝑖,𝑚)← Rcv(𝑠, 𝑎, 𝑒): decrypts ciphertext 𝑒 to plain-
+text𝑚 and verifies AD 𝑎; also outputs a triple (𝐸, S, 𝑖) con-
+sisting of epoch ID 𝐸, sender ID S, and message index
+𝑖 .
+3.2 Security
+3.2.1 Bookkeeping. The complexity of the SGM security definition
+stems from the bookkeeping required to determine which messages
+are safe to challenge and when the attacker is allowed to inject. The
+security game keeps track of all the relevant execution data with
+the help of a so-called history graph. The recorded data informs
+three safety predicates (each pertaining to privacy, authenticity,
+or both) used to determine whether a given execution was legal.
+These predicates are kept generic and considered parameters of the
+security definition.
+History graphs. A history graph is a directed tree whose nodes
+correspond to the group state in the various epochs of an execution:
+The root of the tree is a special node 𝑣root that corresponds to the
+state of not being part of a group. The children of the root node
+are 𝑣create-nodes, which correspond to the creation of groups.
+4
+The
+remaining nodes all correspond to the group state after a partic-
+ular commit operation. Two nodes 𝑣 and 𝑣 ′ are connected by an
+edge (𝑣, 𝑣 ′) if the commit operation leading to 𝑣 ′ was created in 𝑣 .
+Concretely, a history graph node consists of the following values:
+𝑣 = (vid, orig, data, pid), where vid is the node’s (unique) ID, orig
+is the party that caused the node’s creation, i.e., orig is either the
+group creator or the committer, data is additional data, and pid is
+the vector of (IDs of) proposals (see below) that were included in
+the commit. The history graph is accessed by the security-game
+oracles via the “HG object” HG, which provides information via
+several methods (explained later as they are needed). The (ID vid
+of the) node corresponding to a party ID’s current state is stored
+by the array V-Pt[ID].
+Proposals. Similarly to HG and the history graph, the object Props
+keeps track of proposals. The information recorded about each pro-
+posal is a vector 𝑝 = (pid, vid, op, orig, data), where pid is the pro-
+posal’s (unique) ID, vid is the (ID of) the HG node corresponding to
+the epoch in which the proposal was created, op ∈ {add, rem, upd}
+is the type of proposal, orig is the party that issued the proposal, and
+data is additional data. Similarly to the HG object, Props will also
+export several useful methods (also explained later) to the oracles
+of the security game.
+4
+The security game allows multiple groups to be created (when multiple parties simul-
+taneously create a group). However, in order to remain in the single-group setting,
+the attacker is required to pick a single one of these groups as the “canonical group.”
+Parties may only join the canonical group.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1466
+PKI bookkeeping. Just as epochs and proposals are kept track of
+symbolically, so are welcome keys and signature keys. Specifically,
+each welcome key has a (unique) welcome-key ID wkid, and each
+signature key has a (unique) signature-key ID skid. The arrays
+WK-ID[·] and SK-ID[·] map wkid and skid values to the ID of the
+party that owns the corresponding secret keys; the arraysWK-PK[·]
+and SK-PK[·] mapwkid and skid values to the corresponding public
+keys. Moreover, the array WK-SK[·] remembers the binding of
+welcome keys to signature keys; these bindings are created by key
+bundles: when wpk with wkid is signed under spk with skid in a
+key bundle, the game sets WK-SK[wkid]← skid.
+The arrayCL-KB[·, ·] keeps track of the contact list for each party.
+Specifically, CL-KB[ID, ID′] is a queue of pairs (wkid, skid) of (IDs
+of) initial key material that ID would use if it were to add ID′ to
+the group.
+Stored and leaked values. In order to stay on top of the information
+attacker A accumulates via state compromise, the security game
+maintains the following arrays/sets. Stored values:V-St[ID] contains
+pairs (vid, flag) of (i) (IDs of) the epochs for which ID currently
+stores information and (ii) a flag recordingwhether said information
+can be used to infer information about subsequent states. This array
+is organized as a queue with maximum capacity 𝑟 , where 𝑟 is a
+parameter of the definition and of SGM protocols: it stands for the
+maximum number of “open” epochs a party keeps at any point in
+time.
+5 P-St[ID] contains the (IDs of) the proposals currently stored
+by ID.WK-St[·] and SK-St[·] contain the (IDs of) the welcome and
+signing keys, respectively, currently stored by ID. Leaked values:
+V-Lk is a set that contains triples (vid, ID). Each such tuple means
+that the attacker learned the state of ID in epoch vid, that for that
+state flag = true, which implies that leaked information can be used
+to infer information about subsequent epochs.WK-Lk and SK-Lk
+contain the (IDs of) the welcome and signing keys, respectively,
+for which the attacker has learned the secret keys. AM-Lk records
+application messages for which the attacker has learned the key
+material.
+Deletions, and lack thereof. The SGM definition also requires that
+parties who fail to delete old values can not use them to their
+advantage after they are removed from the group. Correspondingly,
+the arrayDel keeps track of which parties are deleting values as they
+are supposed to (those withDel[ID] = true) and which ones are not.
+Formally, a party withDel[ID] = falsewill simply move such values
+to a special “trash tape,” instead of deleting them; the contents of the
+trash tape will be revealed to A upon state leakage. Consequently,
+there are several “trash arrays” that keep track of what is stored
+on the trash tape of each party: V-Tr (for undeleted information
+about epochs), AM-Tr (for undeleted information about application
+messages),WK-Tr (for undeleted information about welcome keys),
+and SK-Tr (for undeleted information about signature keys).
+Challenges. The array Chall[vid] stores, for each vid, pairs (S, 𝑖),
+indicating that the 𝑖th message from S in epoch vid was a challenge
+message.
+5
+The intuition behind the flag is that only the information stored about newest epoch
+should allow the attacker (upon state leakage) to compute key material for subsequent
+epochs (which is unavoidable). Information corresponding to older epochs, which
+are only kept open to receive delayed application messages, should not lend itself to
+compromise the security of subsequent epochs.
+Epoch IDs. The receiving algorithm Rcv must correctly output a
+“sequence number” for each message received. A natural way to
+identify application messages is by the triple of epoch ID, sender,
+and index (as above). However, the SGM scheme cannot be expected
+to output epoch identifiers vid used by the security game. Instead,
+the scheme gets to label the epochs itself whenever a commit is cre-
+ated by outputting an epoch ID 𝐸. Algorithm Rcvwill use the same 𝐸
+to refer to messages sent in the corresponding epoch. The security
+game stores the 𝐸 used by the SGM scheme in array Ep-ID[vid].
+Bad randomness. The game keeps track of which update proposals
+and commits were created with randomness known to the attacker
+with the help of the Boolean array BR[·]. This information must be
+recorded because such proposals/commits will not contribute to
+PCS.
+In the oracles below that correspond to randomized SGM algo-
+rithms, the attacker gets to possibly supply the random coins 𝑟
+used by the affected party. Whenever A does not wish to specify
+said coins, it sets 𝑟 = ⊥, in which case uniformly random coins
+(unknown to A) are used.
+// General
+𝑏 ← {0, 1}
+idCtr++
+∀ID : 𝑠[ID]← Init(ID)
+// Communication
+CM[·, ·]← 𝜖
+WM[·, ·]← 𝜖
+PM[·, ·]← 𝜖
+AM[·, ·, ·, ·]← 𝜖
+// History Graph
+vidroot ← HG.init
+V-Pt[·]← vidroot
+V-St[·]← [(vidroot, false)]
+V-Tr[·]← ∅
+V-Lk← ∅
+P-St[·]← ∅
+Ep-ID[·]← 𝜖
+// App. Messages
+AM-Tr[·]← ∅
+AM-Lk← ∅
+// Miscellaneous
+Chall[·]← ∅
+Del[·]← true
+BR[·]← false
+// PKI
+CL-KB[·, ·]← 𝜖
+WK-SK[·]← 𝜖
+WK-ID[·]← 𝜖
+WK-PK[·]← 𝜖
+WK-St[·]← ∅
+WK-Tr← ∅
+WK-Lk← ∅
+SK-ID[·]← 𝜖
+SK-PK[·]← 𝜖
+SK-St[·]← ∅
+SK-Tr← ∅
+SK-Lk← ∅
+Figure 1: Initialization of the security game for secure group-
+messaging schemes.
+3.2.2 Initialization. At the onset of the execution, the SGM secu-
+rity game initializes (cf. Figure 1) all of the bookkeeping variables
+listed above. Additionally, it randomly chooses the challenge bit
+𝑏, initializes a counter idCtr that serves to provide IDs for epochs
+(vid), for proposals (pid), for welcome keys (wkid), as well as for
+signature keys (skid), and sets up communication arrays (explained
+where they are used) dedicated to control and application messages.
+The initialization also initializes the state of all possible parties
+by running the Init algorithm and storing the result in the state
+array 𝑠[·].6
+Finally, the first node of the history graph is created via a call
+to the HG.init method. This causes HG to create the root node
+𝑣root = (.vid ← idCtr++, .orig ← ⊥, .data ← ⊥, .pid ← ⊥) and
+return vidroot = 𝑣root .vid.
+6
+Of course, this is really done on an on-demand basis.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1467
+3.2.3 Oracles. All adversary oracles described below proceed ac-
+cording to the same pattern: (a) verifying the validity of the oracle
+call, (b) retrieving values needed for (c), (c) running the correspond-
+ing SGM algorithm, and (d) updating the bookkeeping. Validity
+checks (a) are described informally in the text below; a formal de-
+scription is provided in Section D of the Appendix. Note that, most
+of the time, (b) and (c) are straight-forward and are not mentioned
+in the descriptions. To improve readability, lines (c) are highlighted.
+// ID generates new sig. key
+gen-new-SigK(ID)
+(𝑠[ID], spk)← Gen-SK(𝑠[ID])
+skid← idCtr++
+SK-ID[skid]← ID
+SK-PK[skid]← spk
+SK-St[ID] +← skid
+return (skid, spk)
+// ID removes sig. key
+rem-SigK(ID, skid)
+req SK-ID[skid] = ID
+req skid ∈ SK-St[ID]
+req skid /∈ HG.SKsUsed(ID)
+spk← SK-PK[skid]
+𝑠[ID]← Rem-SK(𝑠[ID], spk)
+if ¬Del[ID]
+SK-Tr[ID] +← skid
+SK-St[ID] −← skid
+// ID stores sig. key of ID′
+get-SK(ID, ID′, skid)
+req SK-ID[skid] = ID′
+spk← SK-PK[skid]
+𝑠[ID]← Get-SK(𝑠[ID], ID′, spk)
+SK-St[ID] +← skid
+// ID generates new key bundle
+gen-new-KB(ID, skid)
+req SK-ID[skid] = ID
+req skid ∈ SK-St[ID]
+spk← SK-PK[skid]
+(𝑠[ID], kb)← Gen-KB(𝑠[ID], spk)
+(wpk, ., .)← kb
+wkid← idCtr++
+WK-ID[wkid]← ID
+WK-PK[wkid]← wpk
+WK-St[ID] +← wkid
+WK-SK[wkid] +← skid
+return (wkid, kb)
+Figure 2: PKI-related oracles of the security game for secure
+group-messaging schemes. The compatibility functions are de-
+scribed in the accompanying text; a formal description is pro-
+vided in Section D.
+3.2.4 PKI Oracles. The PKI oracles offer the following functionality
+to attacker A:
+• New signature keys: Have a party ID create a new signature
+key pair. This essentially boils down to ID running algorithm
+Gen-SK, which outputs a signature public key spk. The SGM
+game then generates an skid for spk and updates arrays
+SK-ID, SK-PK, and SK-St correspondingly.
+• Remove signature keys: Have a party ID delete a signature
+public key spk, identified by the corresponding skid. In order
+for a call to this oracle to be legal, skidmust correspond to an
+spk (a) currently stored by ID and (b) not used by ID in either
+the current epoch or any pending proposals or epochs.
+7
+The
+oracle simply runs Rem-SK on spk and subsequently updates
+arrays SK-ID, SK-PK, and SK-St to reflect the removal of
+spk. Additionally, if ID does not delete old values, i.e., if
+Del[ID] = false, skid is added to SK-Tr[ID].
+• Store new signature key: This oracle lets the attacker instruct
+a party ID to store signature public key, identified by its skid,
+of a party ID′. The oracle ensures that SK-ID[skid] = ID′,
+7
+Pending epochs are child epochs of V-Pt[ID]; they are explained in more detail later
+on.
+i.e., that skid was really created by ID′. This models the fact
+that the bindings between signature keys and identities are
+incorruptible.
+• Generate new key bundle: The attacker can make a party ID
+create a new key bundle and store it on the PKI server. To
+that end,A specifies the skid of the signature public key spk
+that is supposed to be used inside the key bundle. The call is
+only valid if the key pair corresponding to skid is currently
+stored by ID.
+The oracle runs Gen-KB on spk. The first component of the
+newly generated key bundle is a new welcome key wpk.
+Thus, the security game generates a new wkid associated
+with wpk and updates arrays WK-ID, WK-PK, and WK-St
+accordingly. The oracle also binds wkid to skid.
+• Store new key bundle: This oracle lets the attacker instruct a
+party ID to store a key bundle kb = (wpk, spk, sig) belonging
+to another party ID′. Two conditions must be satisfied for
+the oracle call to be valid:
+(1) The signature public key spk must belong to ID′, i.e.,
+spk = SK-PK[skid] for some skid with SK-ID[skid] = ID′.
+This models the fact that the long-term secrets binding
+signature public keys to identities are incorruptible.
+(2) The public key spk must be stored by ID.
+If the oracle call is valid, algorithm Get-KB is run on ID′ and
+kb. If the secret key corresponding to spk has not been leaked,
+i.e., skid /∈ SK-Lk, thenGet-KBmust only accept the key bun-
+dle if wpk exists and is bound to spk, i.e., WK-SK[wkid] =
+skid. IfGet-KB outputs ok, skid /∈ SK-Lk, butWK-SK[wkid] ̸=
+skid, then the adversary has attempted to create a forgery
+against the signing key with ID skid, and if it is success-
+ful, it wins the game. If wpk is adversarially generated (i.e.,
+wkid = ⊥), the game generates a new wkid for wpk, updates
+WK-PK accordingly, and immediately marks wkid as leaked.
+Finally, ID’s (symbolic) contact list is updated, by adding the
+pair (wkid, skid) to the end of queue CL-KB[ID, ID′].
+3.2.5 Main oracles. The main oracles of the SGM game are split
+into four figures: oracles related to (i) group creation and propos-
+als (Figure 3), (ii) commits (Figure 4), (iii) sending, receiving and
+corruptions (Figure 5). The validity of all oracle calls is checked
+by the corresponding compatibility functions (cf. Section D in the
+Appendix.).
+Group creation. The attacker can instruct a party ID to create a
+new group by calling the group-creation oracle (Figure 3); such a
+call must also specify the skid of the signature key under which ID
+initially signs their messages, as well as the wkid of the welcome
+key material. A call to the group creation oracle is valid if (i) ID is
+not in a group yet, (ii) skid, wkid, are currently stored by ID, and
+(iii) wkid is signed under skid.
+The bookkeeping is updated as follows: A call is made to the
+HG.create(ID, skid) method. This causes HG to create a node 𝑣 =
+(.vid ← idCtr++, .orig ← ID, .data ← skid, .pid ← ⊥) as a child
+of 𝑣root and return vid = 𝑣 .vid. Then, the bad-randomness array
+is filled (depending on whether A specified coins 𝑟 or not), ID’s
+pointer is set to vid, and V-St[ID] is set to a queue containing
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1468
+only (vid, true), where the second component records that from
+the information ID currently stores about vid, one can compute
+information about (future) child states of vid.
+// ID creates group; signs with skid
+create-group(ID, skid,wkid, 𝑟 )
+req *compat-create(ID, skid,wkid)
+𝑠[ID]← Create(𝑠[ID], SK-PK[skid],WK-PK[wkid]; 𝑟 )
+vid← HG.create(ID, skid)
+BR[vid]← 𝑟 ̸= ⊥
+V-Pt[ID]← vid
+V-St[ID]← [(vid, true)]
+return vid
+// ID proposes to add ID′
+prop-add-user(ID, ID′)
+req *compat-prop(add, ID, ID′,⊥)
+(𝑠[ID], 𝑃 )← Add(𝑠[ID], ID′)
+(wkid′, skid′)← CL-KB[ID, ID′].deq
+pid← Props.new(add, ID, (ID′,wkid′, skid′))
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// ID proposes to remove ID′
+prop-rem-user(ID, ID′)
+req *compat-prop(rem, ID, ID′,⊥)
+(𝑠[ID], 𝑃 )← Remove(𝑠[ID], ID′)
+pid← Props.new(rem, ID, ID′)
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// ID proposes update
+prop-up-user(ID, skid, 𝑟 )
+req *compat-prop(upd, ID,⊥, skid)
+(𝑠[ID], 𝑃 )← Update(𝑠[ID], SK-PK[skid]; 𝑟 )
+pid← Props.new(upd, ID, skid)
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// Proposal pid delivered to ID
+dlv-PM(ID, pid)
+req *compat-dlv-PM(ID, pid)
+(𝑠[ID], PI)← Proc-PM(𝑠[ID], PM[pid])
+if ¬Props.checkPI(pid, PI)
+win
+P-St[ID] +← pid
+// Proposal 𝑃 ′ injected to ID
+inj-PM(ID, 𝑃 ′)
+req *compat-inj-PM(ID, 𝑃 ′)
+(𝑠[ID], PI)← Proc-PM(𝑠[ID], 𝑃 ′)
+vid← V-Pt[ID]
+IDO ← PI.orig
+req ¬(*auth-compr(vid)
+∧ *SK-compr(vid, IDO))
+if PI ̸= ⊥
+win
+Figure 3: Group-creation and proposal-related oracles of the
+security game for secure group-messaging schemes. The com-
+patibility functions are described in the accompanying text; a
+formal description is provided in Section D of the Appendix.
+Creating proposals. The oracles prop-{add, rem,up}-user (Fig-
+ure 3) allow the attacker to instruct a party ID to issue add/re-
+move/update proposals. Calls to these proposal oracles are valid if
+ID is a group member and:
+• (add proposals) the target ID′ is not a group member already
+and ID has initial key material for ID′ stored;
+• (remove proposals) the target ID′ is a group member;
+• (update proposals) the skidwith which ID is supposed to sign
+is currently stored by ID.
+Note that the last bullet means that if a party wishes to change its
+active signature key, they must have generated one and registered
+it with the PKI before issuing the corresponding proposal.
+Bookkeeping is updated by callingProps.new(op, ID, data), which
+records proposal data 𝑝 = (.pid← idCtr++, .vid← V-Pt[ID], .op←
+op, .orig ← ID, .data ← data), where op ∈ {add, rem, upd} is
+the proposal type and where data stores (add proposals) data =
+(ID′,wkid′, skid′), where (wkid′, skid′) is the head of the contact
+list CL-KB[ID, ID′]; (remove proposals) data = ID′; (update pro-
+posals) data = skid. Furthermore, the proposal message 𝑃 output
+by corresponding proposal algorithm (Add, Remove, or Update) is
+stored in the communication array PM for proposal messages.
+Delivering and injecting proposals. There are two oracles for getting
+a proposal to a party ID (Figure 3): The first one, dlv-PM, is for
+honest proposal delivery. The attacker specifies a pid—which must
+belong to the epoch ID is currently in—and the corresponding
+proposal is fed to the SGM algorithm Proc-PM. Proc-PM is required
+to output proposal information PI, which is checked by function
+Props.checkPI. Function checkPI ensures that PI correctly identifies
+the type, the originator, as well as the data of the proposal.
+8
+The
+last action performed by the oracle is to update P-St[ID] to include
+pid, indicating that ID now stores the new proposal.
+The second oracle, inj-PM, is used byA to inject proposals to a
+party ID. More precisely, A is allowed to submit proposals 𝑃 ′ that
+(a) either belong to an epoch different from vid := V-Pt[ID] or (b)
+are completely made up (i.e., there exists no pidwith PM[pid] = 𝑃 ′).
+A call to this second oracle is only allowed if the adversary is not
+currently able to forge messages for epoch vid. This is the case if
+either the key material used to authenticate in vid is compromised
+(*auth-compr(vid)) or if the signing key used by the supposed
+originator IDO of the proposal (as determined by the output of
+Proc-PM) is compromised (*SK-compr(vid, IDO)). The functions
+*auth-compr and *SK-compr are two of the safety predicatesmen-
+tioned above.
+Creating commits. The commit-related oracles (Figure 4) deal with
+commits and delivery of commit and welcome messages.
+In order to have a party ID create a commit based on a set of
+proposals (with IDs) pid, the attacker calls the commit oracle. The
+specified pid must be a subset of all proposals currently stored
+by ID, and all proposals must belong to ID’s current epoch. In
+addition, a (rather permissive) sensibility check is run on the vector
+of proposal specified by pid: the proposals are processed in the
+given order (changing the group roster accordingly), and for each
+proposal it is checked whether the originator would be in the group
+and, additionally, whether (add proposal) the target would be in the
+group; (remove proposal) the target would not be in the group.
+Subsequently, the SGM algorithm Commit is run on the given
+set of proposals, which results in an epoch ID 𝐸, a vector of wel-
+come messages W, and a commit message 𝑇 being output. Book-
+keeping calls HG.commit(ID, pid), which creates a new HG node
+8
+Of course, checkPI checks that PI contains the actual welcome and signature keys
+(and not wkid and skid).
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1469
+𝑣 = (.vid ← idCtr++, .orig ← ID, .data ← ⊥, .pid ← pid), as a
+child of ID’s current epoch V-Pt[ID] and returns vid = 𝑣 .vid. Then,
+the bad-randomness array is filled (depending on whether A spec-
+ified coins 𝑟 or not), and 𝐸 is stored in array Ep-ID. Finally, the
+commit messages (for current group members) are stored in array
+CM, and the welcome messages (for new group members) in WM.
+// ID commits proposals pid
+commit(ID, pid, 𝑟 )
+req *compat-commit(ID, pid)
+(𝑠[ID], 𝐸,W,𝑇 )← Commit(𝑠[ID], PM[pid]; 𝑟 )
+vid← HG.commit(ID, pid)
+BR[vid]← 𝑟 ̸= ⊥
+Ep-ID[vid]← 𝐸
+for ID′ ∈ HG.roster(V-Pt[ID])
+CM[ID′, vid]← 𝑇
+for ID′ ∈ Props.addedIDs(pid)
+WM[ID′, vid]←W[ID′]
+return vid
+// Control msg. delivered to ID
+dlv-CM(ID, vid)
+req *compat-dlv-CM(ID, vid)
+𝑇 ← CM[ID, vid]
+(𝑠[ID],GI)← Proc-CM(𝑠[ID],𝑇 )
+if ¬HG.checkGI(vid,GI)
+win
+if HG.isRemoved(ID, vid)
+V-Pt[ID]← vidroot
+else
+V-Pt[ID]← vid
+𝑖[ID]← 0
+P-St[ID]← ∅
+if Del[ID]
+V-St[ID].last.flag← false
+else
+V-Tr[ID] +← V-St[ID].first
+V-St[ID].enq((V-Pt[ID], true))
+// Control msg. 𝑇 ′ injected to ID
+inj-CM(ID,𝑇 ′)
+req *compat-inj-CM(ID,𝑇 ′)
+(𝑠[ID],GI)← Proc-CM(𝑠[ID],𝑇 ′)
+vid← V-Pt[ID]
+IDO ← GI.orig
+req ¬(*auth-compr(vid)
+∧ *SK-compr(vid, IDO))
+if GI ̸= ⊥
+win
+// Welcome msg. delivered to ID
+dlv-WM(ID, vid)
+req *compat-dlv-WM(ID, vid)
+𝑊 ←WM[ID, vid]
+(𝑠[ID],GI)← Proc-WM(𝑠[ID],𝑊 )
+if ¬HG.checkGI(vid,GI)
+win
+V-Pt[ID]← vid
+V-St[ID]← [vid]
+wkid← HG.addedWK(ID, vid)
+if ¬Del[ID]
+WK-Tr[ID] +← wkid
+WK-St[ID] −← wkid
+// Welcome msg. 𝑊 ′ injected to ID
+inj-WM(ID,𝑊 ′)
+req *compat-inj-WM(ID,𝑊 ′)
+(𝑠[ID],GI)← Proc-WM(𝑠[ID],𝑊 ′)
+𝐸 ← GI.epID
+req ∃ vid : Ep-ID[vid] = 𝐸
+IDO ← GI.orig
+req ¬(*auth-compr(vid)
+∧ *SK-compr(vid, IDO))
+if GI ̸= ⊥
+win
+Figure 4: Commit-related oracles of the security game for se-
+cure group-messaging schemes. The compatibility functions are
+described in the accompanying text; a formal description is pro-
+vided in Section D of the Appendix.
+Delivering and injecting commit messages. As with proposals, there
+are two oracles that allow attacker A to get a commit message
+(CM) to a current group member—for honestly generated CMs and
+for adversarially generated CMs (Figure 4). The former oracle, dlv-
+CM, can be used by A to deliver to a party ID any CM 𝑇 that
+corresponds to a child epoch vid of ID’s current epoch V-Pt[ID],
+provided all proposals that lead to vid have been delivered to ID.
+Oracle dlv-CM runs SGM algorithm Proc-CM on 𝑇 , which results
+in group information GI being output. This information is checked
+by functionHG.checkGI. Function checkGI checks thatGI correctly
+reports the new group roster, the originator, as well as the parties
+added and removed. Next, if ID has been removed as part of the
+commit (checked by function HG.isRemoved), its pointer V-Pt[ID]
+is set to vidroot; otherwise, V-Pt[ID] is set to the new epoch vid.
+Furthermore, the index counter 𝑖[ID] is reset to 0, and P-St[ID],
+the set of proposals stored, is set to the empty set. If ID deletes
+old values, i.e., if Del[ID] = true, the game changes the flag in
+(·, flag) = V-St[ID].last to false since it is no longer the newest state.
+If ID does not delete old values, this change is not made, and the
+first element of V-St[ID] is put into V-Tr[ID] (because it is about
+to be removed from the queue). Finally, the new epoch vid is added
+to the end of queue V-St[ID]. Recall that this queue has a capacity
+of 𝑟 , which means that the first element of the queue is removed.
+This captures that information about the oldest epoch in ID’s state
+is now deleted by ID.
+The second oracle, inj-CM, is used by A to inject CMs to a
+party ID. More precisely, A is allowed to submit any CM 𝑇 ′ that
+(a) either belongs to an epoch different from any child epoch of
+vid := V-Pt[ID] or (b) is completely made up. A call to this second
+oracle is only allowed if the adversary is not currently able to forge
+messages for epoch vid. Similarly to proposals, whether this is the
+case is determined via the (generic) safety predicates *auth-compr
+and *SK-compr.
+Delivering and injecting welcome messages. The oracles dlv-WM
+and inj-WM can be used by A to deliver and inject welcome mes-
+sages, respectively. The work analogously to oracles dlv-CM and
+inj-CM above.
+Sending messages and challenges. Oracle send allowsA to instruct
+any current group member S to send a message𝑚 and associated
+data (AD) 𝑎. The oracle runs algorithm Send on𝑚 and 𝑎, which
+creates a ciphertext 𝑒 . The oracle increments S’s message counter,
+and stores the triple (𝑎,𝑚, 𝑒) in AM.
+The challenge oracle chall works quite similarly, except that A
+specifies two equal-length messages𝑚0 and𝑚1, and𝑚𝑏 is passed to
+Send (where 𝑏 is the bit chosen during initialization). Furthermore,
+the pair (S, 𝑖[S]) is recorded in array Chall.
+Delivering and injecting application messages. The attacker can get
+application messages to group members in two ways, by using ei-
+ther dlv-AM or inj-AM—for honestly and adversarially generated
+AMs, respectively. Oracle dlv-AM takes as input a tuple (vid, S, 𝑖, R)
+identifying the epoch, the sender, the index, and the recipient of the
+AM to be delivered. Then, the corresponding AD and ciphertext
+are input to Rcv, which subsequently outputs (𝐸 ′, S′, 𝑖 ′,𝑚′). These
+values are checked, and if R misidentifies any of them, the attacker
+immediately wins the security game. Subsequently, AM[vid, S, 𝑖,R]
+is set to received, indicating that R should no longer keep around
+any key material that can be used to decipher 𝑒 . If R does not delete
+old values, then a corresponding entry is place in array AM-Tr[R].
+Note that the oracle does not return any values since the attacker
+knows which values are output by Rcv.
+Oracle inj-AM allowsA to inject any AD/ciphertext pair (𝑎′, 𝑒 ′)
+to a group member R as long as they do not correspond to an hon-
+estly generated AM. The game requires that if Rcv accepts 𝑒 ′ and
+outputs (𝐸 ′, S′, 𝑖 ′,𝑚′), it must be the case that (1) the key material
+for the 𝑖 ′th message sent by S′ in epoch 𝐸 ′ has not been compro-
+mised, and (2) no message has been output for these identifiers
+before (i.e., a successful replay attack is considered a break of au-
+thenticity). Whether (1) is the case is determined by the (generic)
+safety predicates *AM-sec and *SK-compr.
+Corruption oracle. The corruption oracle corr allows the attacker to
+leak the state of any party ID. It does bookkeeping for the following:
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1470
+// S sends message 𝑚 with AD 𝑎
+send(S, 𝑎,𝑚)
+req *compat-send(S)
+(𝑠[S], 𝑒)← Send(𝑠[S], 𝑎,𝑚)
+𝑖[S]++
+for R ∈ HG.roster(V-Pt[S]) \ {S}
+AM[V-Pt[S], S, 𝑖[S],R]←
+(𝑎,𝑚, 𝑒)
+return 𝑒
+// Deliver 𝑖th msg of S in vid to R
+dlv-AM(vid, S, 𝑖,R)
+req *compat-dlv-AM(vid, S, 𝑖,R)
+(𝑎,𝑚, 𝑒)← AM[S, vid, 𝑖,R]
+(𝑠[R], 𝐸′, S′, 𝑖′,𝑚′)← Rcv(𝑠[R], 𝑎, 𝑒)
+if (𝐸′, S′, 𝑖′,𝑚′) ̸=
+(Ep-ID[vid], S, 𝑖,𝑚)
+win
+if ¬Del[R]
+AM-Tr[R]← (vid, S, 𝑖)
+AM[vid, S, 𝑖,R]← received
+// Attacker leaks state of ID
+corr(ID)
+for (vid, flag) ∈ V-St[ID]∪ V-Tr[ID]
+if flag
+V-Lk +← (vid, ID)
+AM-Rcvd←
+{(S, 𝑖) | AM[vid, S, 𝑖, ID] =
+received}
+AM-Lk +←
+(vid,AM-Rcvd,AM-Tr[ID])
+𝑊 ←WK-St[ID] ∪WK-Tr[ID]
+WK-Lk +← {wkid ∈𝑊 |
+WK-ID[wkid] = ID}
+𝑆 ← SK-St[ID] ∪ SK-Tr[ID]
+SK-Lk +← {skid ∈ 𝑆 |
+SK-ID[skid] = ID}
+HG.corrHanging(ID)
+return 𝑠[ID]
+// Disable deletions for ID
+no-del(ID)
+disable deletions for ID
+Del[ID]← false
+// Safety for privacy
+*priv-safe
+return ∀vid, S, 𝑖 : ((S, 𝑖) ∈
+Chall[vid] =⇒ *AM-sec(vid, S, 𝑖))
+// S sends challenge with AD 𝑎
+chall(S, 𝑎,𝑚0,𝑚1)
+req *compat-chall(S)
+(𝑠[S], 𝑒)← Send(𝑠[S], 𝑎,𝑚𝑏 )
+𝑖[S]++
+for R ∈ HG.roster(V-Pt[S]) \ {S}
+AM[V-Pt[S], S, 𝑖[S],R]←
+(𝑎,𝑚, 𝑒)
+Chall[V-Pt[S]] +← (S, 𝑖[S])
+return 𝑒
+// 𝑎′, 𝑒′ get injected to R
+inj-AM(𝑎′, 𝑒′,R)
+req *compat-inj-AM(𝑎′, 𝑒′,R)
+(𝑠[R], 𝐸′, S′, 𝑖′,𝑚′)← Rcv(𝑠[R], 𝑎′, 𝑒′)
+if𝑚′ ̸= ⊥
+let vid′ : Ep-ID[vid′] = 𝐸′
+if ¬
+(
+¬*AM-sec(vid′, S′, 𝑖′)
+∧ *SK-compr(vid′, S′)
+)
+∨ AM[vid′, S′, 𝑖′,R] =
+received
+win
+if ¬Del[vid]
+AM-Tr[R]← (vid′, S′, 𝑖′)
+AM[vid′, S′, 𝑖′,R]←
+received
+return (𝐸′, S′, 𝑖′,𝑚′)
+Figure 5: Send/receive, corruption, no-deletion, and privacy-
+safety oracles of the security game for secure group-messaging
+schemes. The compatibility functions are described in the accom-
+panying text; a formal description is provided in Section D of the
+Appendix.
+• Epochs: All epochs ID currently stores information for are
+kept track of byV-St[ID]; recall that for (vid, flag) ∈ V-St[ID]
+the variable flag records whether or not the information
+stored about vid allows to infer key material of child epochs.
+The security game copies the pairs in V-St[ID] with flag =
+true into the set V-Lk. Additionally, for all (vid, ·) ∈ V-St[ID],
+records the current set of messages already received by ID in
+epoch vid. This helps keep track of which application mes-
+sages are affected by this instance of state leakage. Finally,
+the values in V-Tr[ID] are also recorded.
+• Welcome keys: By leaking ID’s state, A learns all welcome
+secret keys currently stored by ID: either because ID is sup-
+posed to be storing them (recorded byWK-St[ID]) or because
+they are in ID’s trash (i.e., inWK-Tr[ID]). The corresponding
+wkids are added to the set WK-Lk.
+• Signature keys: Handled analogously to welcome keys.
+• Application-message trash: The attacker also learns all values
+in the array AM-Tr[ID].
+• Pending proposals and commits. If at the time ID is corrupted,
+there are outstanding (i.e., uncommitted) update proposals
+(with ID) pid by ID or hanging (i.e, created but not processed
+yet) commits (with ID) vid by ID, the attacker learns the
+corresponding secrets. To that endHG.corrHanging(ID) sets
+BR[pid]← true resp. BR[vid]← true for all of them. This
+will reflect the fact that these update proposals / commits
+cannot be used for PCS.
+Disabling deletions. When the attacker calls oracle no-del for a
+party ID, that party stops deleting old values and stores them on a
+special trash tape instead (which is leaked along with the rest of
+ID’s state to the attacker upon state compromise).
+3.2.6 Privacy-related safety. At the end of the execution of the
+SGM security game, the procedure *priv-safe ensures that the
+attacker has only challenged messages that are considered secure
+by the (generic) safety predicate *AM-sec. If the condition is not
+satisfied, the attacker loses the game.
+3.2.7 Advantage. Let Π = {*AM-sec, *auth-compr, *SK-compr}
+be the set of generic safety predicates used in the SGM definition.
+The attacker A is parameterized by it’s running time, 𝑡 , and the
+number of challenge queries, 𝑞, and referred to as (𝑡, 𝑞)-attacker.
+The advantage of A against an SGM scheme Γ w.r.t. to predicates
+Π is denoted by Adv
+Γ
+SGM,Π
+(A).
+Definition 3.1. An SGM scheme Γ is (𝑡, 𝑞, Y)-secure w.r.t. predicates
+Π, if for all (𝑡, 𝑞)-attackers,
+Adv
+Γ
+SGM,Π(A) ≤ Y .
+4 MODULARIZING MLS AND PROVING ITS
+SECURITY
+This section provides a summary of the MLS protocol, our modu-
+larization of it, as well as the security proofs for the full protocol—
+based only on the security of the generic components—and for the
+components themselves (based on specific common cryptographic
+assumptions).
+Our modularization splits MLS into the following three compo-
+nent primitives: continuous group key-agrement (CGKA), forward-
+secure group AEAD (FS-GAEAD), and PRF-PRNGs. FS-GAEAD corre-
+sponds to a single epoch of secure group messaging, the PRF-PRNG
+can be thought of as an entropy pool from which key material for
+FS-GAEAD is extracted, and the entropy pool itself is continually
+refreshed by values from CGKA.
+4.1 Continuous Group Key Agreement
+CGKA schemes have a structure that is very close to that of an SGM
+protocol: they proceed in epochs using the propose-and-commit
+paradigm and provide algorithms for group creation/joining, in-
+teraction with the PKI, issuing proposals, and creating/processing
+commits. However, instead of being used to send/receive messages,
+in each epoch, CGKA scheme outputs a high-entropy update secret.
+The full CGKA syntax can be found in Section A of the Appendix.
+The part of MLS responsible for CGKA is called TreeKEM; an
+improved version called RTreeKEM is also known and considered
+in this work, despite not currently being part of the MLS standard.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1471
+Security definition. CGKA schemes are expected to guarantee the
+secrecy of the generated group keys. Furthermore, just like SGM
+schemes, they must provide post-compromise forward secrecy (PCFS).
+Once more, both update proposals and commits must contribute to
+post-compromise security (PCS). CGKA schemes must also be able
+to deal with bad randomness as well as parties who do not delete
+old values.
+An important difference between CGKA and SGM schemes is
+that the former are designed in a fully authenticated setting. That
+is, the attacker in the CGKA security game is not permitted to inject
+control messages. This turns out to be sufficient as the “authenti-
+cation layer” can be added by the higher-level protocol using the
+CGKA scheme; it also greatly simplifies the security analysis.
+Similarly to SGM, the CGKA security game allows adversary A
+to control the execution of and attack a single group. In particular,
+A controls who creates the group, who is added and removed, who
+updates, who commits, etc. The attacker is also allowed to leak the
+state of any party (whether currently part of the group or not) at
+any time. The privacy of keys is captured by considering a challenge
+that outputs either the actual key output by the CGKA scheme or a
+truly random one—which one is determined by an internal random
+bit 𝑏, which must be guessed by A at the end.
+The CGKA security game follows the history-graph paradigm
+to keep track of all the relevant execution data. The recorded data
+informs a safety predicate *CGKA-priv used at the end of the game
+to exclude trivial wins byA. More details can be found in Section A
+of the Appendix.
+Instantiation: (R)TreeKEM. The (R)TreeKEM CGKA protocols are
+based on so-called (binary) ratchet trees (RTs). In an RT, group
+members are arranged at the leaves, and all nodes have an associated
+public-key encryption (PKE) key pair, except for the root. The tree
+invariant is that each user knows all secret keys on their direct path,
+i.e., on the path from their leaf node to the root. In order to perform
+a commit operation and produce a new update secret 𝐼 , a party
+first generates fresh key pairs on every node of their direct path.
+Then, for every node 𝑣 ′ on its co-path—the sequence of siblings of
+nodes on the direct path—it encrypts specific information under the
+public key of 𝑣 ′ that allows each party in the subtree of 𝑣 ′ to learn
+all new secret keys from 𝑣 ’s parent up to the root. In TreeKEM,
+standard (CPA-secure) PKE is used. As shown in previous work [3],
+this leads to subpar PCFS. RTreeKEM improves on this by using
+so-called updatable PKE (UPKE), in which public and secret keys are
+“rolled forward” every time a message is encrypted and decrypted,
+respectively.
+Security results. In order to establish adaptive security of the RTreeKEM
+protocol, this work applies the so-called Generalized-Selective-
+Decryption (GSD) paradigm to UPKE. Specifically, we prove GSD
+security of IND-CPA-secure UPKE in the random oracle model, by
+first defining a GSD game that models UPKE based executions, in
+the presence of bad randomness and group splitting attacks, and
+then appropriately adapting the framework of [1]. The security of
+RTreeKEM itself is established by reduction to the GSD security of
+the underlying UPKE scheme. The safety predicate *CGKA-priv
+considers the commit secret of an epoch vid secure if (informally)
+the following conditions are satisfied: (1) There is no “corrupted”
+ancestor epoch in the history graph, where an epoch can be cor-
+rupted if either a party gets added with leaked initial keys or if the
+state of a party in the epoch is leaked; (2) no information about
+vid is known to the attacker as the result of splitting the group (cf.
+full version [4]); (3) good randomness was used by the commiter
+creating vid. More details can be found in the full version [4].
+TreeKEM is securew.r.t. a weaker security predicate than RTreeKEM.
+Namely, it is required that either there is no post-challenge compro-
+mise (the notion of PCS in [3]), or if there is, compromise happens
+after the party has already updated it’s state (the FSU notion of [3]).
+Then, security proof for TreeKEM is similar to that of RTreeKEM
+and proceeds in two steps: first, we consider a reduction from GSD
+for standard public-key encryption to the IND-CPA security of the
+underlying scheme, and then we reduce the security of TreeKEM
+to that of GSD.
+4.2 Forward-Secure Group AEAD
+FS-GAEAD schemes provide the convenient abstraction of an “epoch
+of groupmessaging.” That is, they capture the sending and receiving
+of application messages within a single epoch of a full SGM scheme.
+In an execution of FS-GAEAD, all participating group members
+are initialized with the same random group key (i.e., that key is
+assumed to be generated and distributed among the group members
+by the higher-level protocol).
+An FS-GAEAD scheme protects the authenticity and privacy of
+messages sent. Furthermore, it provides forward secrecy, i.e., the
+security of messages received will not be affected by state compro-
+mise. Note that FS-GAEAD is not required to provide any form
+of post-compromise security, which allows to design completely
+deterministic schemes (apart from the initial key).
+Security definition. The security of FS-GAEAD is captured via a
+corresponding game, in which 𝑛 parties share the same initial key.
+The attacker can have parties send and receive messages arbitrarily,
+ask for challenges, and leak the state of any party at any time. The
+game keeps track of the entire execution, but crucially of which
+messages have been received by which parties. When the state of
+some party ID is leaked, the set of messages received by ID is stored:
+these are the messages that must remain secure even given ID’s
+leaked state. This information is used by a safety predicate *FS-
+sec to avoid trivial wins by A, be it w.r.t. privacy or authenticity.
+More details can be found in Section B of the Appendix and the full
+version [4].
+Instantiation and security results. We show how to build FS-GAEAD
+from a forward-secure key-derivation function (FS-KDF). An FS-KDF
+keeps state 𝑠—initially set to a uniformly random string—and, upon
+request, derives keys corresponding to labels lab. After each such
+request, the FS-KDF also updates its own state. For each initial state,
+there a unique key corresponding to each label, irrespective of the
+order in which the labels were queried. The FS-KDF is forward-
+secret because even if its state is leaked, all keys output up to that
+point remain secure. An FS-KDF itself can be obtained via a tree
+construction based on a normal PRG.
+Given an FS-KDF, the construction of FS-GAEAD is as follows:
+messages and AD are encrypted/authenticatedwith a normal AEAD
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1472
+scheme, where the key for the 𝑖th message by party ID is derived
+using the label (ID, 𝑖).
+The safety predicate *FS-sec achieved by our construction con-
+siders a message secure if no party’s state is leaked before it receives
+the message. For more information see Section B of the Appendix
+and the full version [4].
+4.3 PRF-PRNGs
+A PRF-PRNG resembles both a pseudo-random function (PRF) and
+a pseudorandom number generator with input (PRNG)—hence the
+name. On the one hand, as a PRNG would, a PRF-PRNG (1) repeat-
+edly accepts inputs 𝐼 and context information 𝐶 and uses them to
+refresh its state 𝜎 and (2) occasionally uses the state, provided it
+has sufficient entropy, to derive a pseudo-random pair of output
+𝑅 and new state; for the purposes of secure messaging, it suffices
+to combine properties (1) and (2) into a single procedure. On the
+other hand, a PRF-PRNG can be used as a PRF in the sense that if
+the state has high entropy, the answers to various pairs (𝐼 ,𝐶) on
+the same state are indistinguishable from random and independent
+values.
+Security definition. The intuitive security properties for PRF-PRNGs
+mentioned above must also hold in the presence of state compro-
+mise. In particular, a PRF-PRNG must satisfy PCFS (cf. Section 3.2)
+and deal with splitting (cf. Section C of the Appendix and the full
+version [4]). Therefore, the security game for PRF-PRNGs follows
+the same history-graph approach as the definitions of SGM and
+CKGA. However, since the game only consists of the state of the
+PRF-PRNG and there are no parties, it suffices to keep track of
+a much smaller amount information. Formal definitions for PRF-
+PRNGs are provided in Section C of the Appendix.
+Instantiation and security results. The MLS protocol uses HKDF [22]
+as PRF-PRNG. This work models HKDF as a random oracle and
+shows that it achieves achieves security w.r.t. safety predicate *PP-
+secure, which captures that in order for a value 𝑅 to be considered
+secure in a particular epoch 𝑒 , (1) 𝑒 must have an ancestor 𝑒 ′ (pos-
+sibly itself) that was reached via a random input 𝐼 not known to
+A, and (2) there must have been no corruptions on the path from
+𝑒 ′ to 𝑒’s parent. More details can be found in the full version [4].
+4.4 Plugging things together
+The protocol is based on the following primitives: A CGKA scheme
+K = (K-Gen-IK,K-Create,K-Add,K-Remove,K-Update,K-Commit,
+K-Proc-Com,K-Join), an FS-GAEAD scheme F = (F-Init, F-Send,
+F-Rcv), a CPA-secure public key encryption schemePKE = (E-KeyGen,
+E-Enc, E-Dec), an existentially unforgeable signature scheme S =
+(S-KeyGen, S-Sign, S-Ver), a message authentication scheme M =
+(M-Tag,M-Ver), a PRF-PRNG PP, a collision resistant hash function
+H. The initialization and PKI algorithms of our construction are
+depicted on Figure 6. The helper functions are formally presented
+in the full version. Below we describe the main SGM algorithms
+depicted on Figure 7, in which we use different colors to high-
+light the use of the underlying primitives: CGKA, FS-GAEAD, PKE,
+Signatures, MAC, PRF-PRNG, Hash.
+Group creation. The group creation operation, Create, receives
+(possibly bad) randomness 𝑟 , a signature verification key, spk, which
+is the key that will be used by the groupmembers to verify messages
+sent by the group creator, as well as the welcome key material wpk.
+It adds the group creator’s id to the roster (s.G← [ME]), executes
+the CGKA group creation operation, absorbs the output 𝐼 into the
+PRF-PRNG PP. PP outputs the new PRF-RPNG state s.𝜎 , the FS-
+GAEAD key 𝑘𝑒 , a MAC key s.km (used to authenticate control
+messages), and the current epoch id, s.C-epid. Next, the FS-GEAD
+init operation F-Init, is executed with inputs 𝑘𝑒 , the group size,
+which is 1, and the id ME of the group creator.
+Proposals. To add a party ID𝑎 , Add recovers the key bundle kb′
+for that ID from the contact list, and runs the CGKA add-proposal
+algorithm with keys from kb′, getting a CGKA proposal P̄, which it
+then uses to construct and authenticate (with MAC and signature)
+the SGM proposal message P
+′
+. Remove and Update are similar
+(where Update takes the new signing key of the updater as input).
+When processing any proposal, algorithm Proc-PM simply attempts
+to authenticate the proposal and stores it locally. Proc-PM returns
+proposal information: the operation op, the origin of the proposal,
+orig, and the data data, as computed by *get-propInfo(P
+′
+) (cf.
+Section E of the Appendix).
+Committing. To commit to a set P of proposals, Commit calls
+the CGKA commit operation to obtain CGKA welcome messages
+𝑊pub and WPrv as well as CGKA control message T̄ and update
+secret 𝐼 . T̄ is used to construct and authenticate (with MAC and
+signature) the SGM control message T
+′
+(which includes a hash
+of the proposals). Then, Commit creates and authenticates (with
+MAC and signature) the SGM welcome messages for joining parties
+by adding an encryption of the PRF-PRNG state s.𝜎 to the CGKA
+welcome messages. The MAC key used for authenticating control
+and welcomemessages is derived by absorbing 𝐼 into the PRF-PRNG
+(with context information that depends on T
+′
+). Note that s.𝜎 is not
+updated yet, however.
+Process commit/welcome messages. Algorithm Proc-CM first verifies
+the authentication information (MAC and signatures) of a commit
+message T
+′
+= ("com", epid, ID,h, T̄). However, in order to obtain the
+MAC key, (1) the CGKA control message T̄ has to be processed by
+Proc-Com, which (2) recovers the update secret 𝐼 , which in turn (3)
+must be absorbed into the PRF-PRNG (this time updating its state).
+The last step also produces the shared key for the new FS-GAEAD
+session.
+Algorithm Proc-WM, used by joining parties to processes wel-
+come messages W
+′
+proceeds similarly, except that the state of the
+PRF-PRNG must first be obtained by decrypting the corresponding
+ciphertext in W
+′
+.
+Send message. To send associated data 𝑎 and plaintext 𝑚, Send
+passes 𝑎 and𝑚 to the current epoch’s FS-GAEAD send operation,
+and, additionally, also signs the resulting ciphertext, 𝑎, and the iden-
+tifier s.C-epid of the current epoch. Receiving works analogously,
+with the caveat that the appropriate FS-GAEAD session must be
+used.
+4.4.1 Security. Main idea: The authenticity property of our con-
+struction relies on the EU-CMA security of signatures, the unforge-
+ability of MACs, and the authenticity of the FS-GAEAD scheme. In
+particular, if the sender’s signing key is secure, then an injection
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1473
+w.r.t. that key fails with overwhelming probability. If this is not
+the case, an honest commit operation provides post-compromise
+authenticity, by producing a secure CGKA update secret, 𝐼 , which
+feeds the PRF-PRNG with good randomness, which in turn outputs
+secure MAC and FS-GAEAD keys, used for the authentication of
+future control (via MAC security) and application (via FS-GAEAD
+security) messages (this requires the adversary to remain passive
+for one epoch). PCFS with respect to privacy is similar and relies
+on the PCFS security CGKA and the FS of FS-GAEAD.
+Simplified properties. Proving SGM security is facilitated by consid-
+ering three simplified properties, namely correctness, authenticity,
+and privacy. In the full version of the paper [4] we prove that these
+properties together imply full SGM security. Besides modularity,
+simplified properties facilitate the transition from selective to fully
+adaptive security, as the individual “simplified” games, defined in
+the full version [4], consider selective adversaries that commit to the
+challenge (e.g., the challenge or the last healing, epoch, the message
+sender and index used for the challenge) at the beginning of the
+game. In the reduction from the simplified properties to full SGM
+security, the adversarial strategy is being guessed and the success
+probability is bounded by values that relate to the running time of
+the adversary. After proving the simplified properties theorem, one
+can prove authenticity and privacy, individually, against selective
+adversaries that commit to their strategy before the security game
+begins.
+Safety predicates. Using safety predicates, we provide a generic
+theorem (cf. Theorem 4.1), that considers any CGKA, FS-GAEAD,
+and PRF-PRNG scheme. Those schemes come along with their se-
+curity predicates, ΠCGKA, ΠFS and ΠPP, respectively, and we prove
+that as long as the attacker’s actions are not violating those predi-
+cates, then the resulting SGM construction is secure w.r.t. the SGM
+predicate ΠSGM = ΠSGM(ΠCGKA,ΠFS,ΠPP). Our SGM safety predi-
+cate ΠSGM (explained below) is depicted in Figure 8 and operates
+over history graph information, generated by the SGM security
+game. Here, we consider ΠCGKA = *CGKA-priv, ΠFS = *FS-sec,
+ΠPP = *PP-secure (cf. Figure 8).
+Proof idea. The adversary breaks authenticity if it manages to make
+a non-trivial injection, which implies that either of the following
+holds: (1) injects a (proposal, welcome, commit or key bundle) mes-
+sage in epoch vid that is signed with a non-compromised signing
+key of the party ID (determined by *SK-compr(vid, ID)), (2) injects
+a (proposal, welcome, commit) message when *auth-compr(vid)
+holds, which implies that *PP-secure(vid, *Proj-PP(SGM-Data)),
+i.e., PP is secure, and (3) injects an application message when the FS-
+GAEAD state is not trivially compromised (determined by *FS-sec).
+Clearly, security against (1) reduces to the EU-CMA security of
+S. For (2) the output of the PRF-PRNG, PP, in epoch vid is secure,
+therefore that MAC key (output by PP) is secure and we can rely
+on the security of PP and the unforgeability of M. This requires
+the following hybrids: (A) In the first hybrid, if the attacker finds a
+collision against H, the execution aborts (reduces to the collision
+resistance property of H). This hybrid is required for the protection
+of the PP state in the presence of group splitting attacks in which
+the adversary can split the group, corrupt in one branch to recover
+the PP state, and challenge on another branch in which the PP state
+is related to the corrupted one. Here, collision resistance ensures
+that different control messages have different hash values, therefore
+lead to independent PP states. (B) In the next hybrid, in the last
+healing epoch before the challenge, substitute the CGKA update
+secret (which feeds PP) with a uniformly random value (required
+for the reduction to the PRF-PRNG security). Note that, by the defi-
+nitions of *PP-secure, *Proj-PP, a good healing epoch before the
+challenge epoch, exists, and this epoch satisfies *CGKA-priv. (C)
+In the next hybrid we use the CPA security of PKE. In particular, in
+the commit operation that creates the target epoch, encrypt the zero
+message instead of encrypting the PP state, as part of the welcome
+message (requires a reduction to the CPA security of PKE). (D) Next,
+substitute the output of the PRF-PRNG PP in a commit message
+for the target epoch, with a uniformly random value (reduces to
+PRF-PRNG security). Finally, since the output of PP is substituted
+by a uniformly random value, so does that MAC key, thus we have
+a reduction to the unfogeability of the MAC scheme M for case (2).
+Case (3) is similar, however in the last step we have a reduction to
+the FS-GAEAD authenticity property of F. For privacy we consider
+the same sequence of hybrids, however the final reduction is against
+the FS-GAEAD privacy property of F. For that reduction we use
+the fact that *FS-sec is satisfied.
+We ultimately prove the following theorem:
+Theorem 4.1. Let SGM = SGM(K, F, PKE, S,M, PP,H) be the
+SGM scheme presented above and letΠSGM = ΠSGM(ΠCGKA,ΠFS,ΠPP)
+be predicates such that: (1) K is a CGKA scheme with respect to predi-
+cate ΠCGKA, (2) F is an FS-GAEAD scheme with respect to predicate
+ΠFS, (3) PKE is a CPA secure public-key encryption scheme, (4) S is
+an existentially unforgeable signature scheme, (5) M is a message
+authentication code, (6) PP is a PRF-PRNG with respect to predicate
+ΠPP, (7) H is a collision resistant hash. Then, SGM is an SGM scheme
+with respect to predicate ΠSGM.
+// Initialization
+Init(ID)
+// – Global State –
+// Set Caller’s ID
+ME← ID
+// Stored Sig. Keys
+SK-sk[.]← Y
+// Stored Wel. Keys
+WK-wk[.]← Y
+// Contact List
+CL-KB[.]← Y
+// – Group Specific State –
+// Buffered Props
+s.Props[.]← Y
+// Roster
+s.G← [.]
+// CGKA State
+s.𝛾 ← Y
+// PRF-PRG State
+s.𝜎 ← Y
+// FS-GAEAD States
+s.𝑣[.]← Y
+// Current Epoch ID
+s.C-epid← Y
+// My Sig. Key
+s.C-ssk← Y
+// Verif. Keys
+s.Ep-SPK[., .]← Y
+// MAC Key
+s.km ← Y
+// Generate Signature Keys
+Gen-SK
+(spk, ssk)← S-KeyGen
+SK-sk[spk]← ssk
+return spk
+// Delete Signing Key
+Rem-SK(spk)
+SK-sk[spk]← Y
+// Store Signing Key for Contact
+Get-SK(ID, spk)
+CL-S[ID] +← spk
+// Generate Key Bundle
+Gen-KB(spk)
+(ipk, isk)← K-Gen-IK
+(epk, esk)← E-KeyGen
+(wpk,wsk)← ((epk, ipk), (esk, isk))
+WK-wk[wpk]← wsk
+ssk← SK-sk[spk]
+sig← S-Sign(ssk,wpk)
+return (wpk, spk, sig)
+// Store Key Bundle of a Contact
+Get-KB(ID′, kb)
+(wpk, spk, sig)← kb
+req spk ∈ CL-S[ID′]
+req S-Ver(spk,wpk, sig)
+CL-KB[ID′].enq((wpk, spk))
+Figure 6: The SGM Construction : Initialization and PKI Algo-
+rithms.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1474
+// Create a group
+Create(spk,wpk;𝑟 )
+s.G← [ME]
+wsk←WK-wk[wpk]
+(·, isk)← wsk
+(s.𝛾, 𝐼 )← K-Create(ME, isk;𝑟 )
+(s.𝜎,𝑘𝑒 , s.km, s.C-epid)← PP(0, 𝐼 , 0)
+s.Ep-SPK[s.C-epid,ME]← spk
+s.𝑣[s.C-epid]← F-Init(𝑘𝑒 , 1,ME)
+// Add proposal
+Add(ID𝑎 )
+kb′ ← CL-KB[ID𝑎 ]
+((epk, ipk), spk)← kb′
+(s.𝛾, P̄)← K-Add(s.𝛾, ID𝑎, ipk)
+P
+′ ← ("add", s.C-epid,ME, (ID𝑎, kb′), P̄)
+𝑡 ← M-Tag(s.km, P′)
+sig← S-Sign(s.C-ssk, (P′, 𝑡 ))
+return (P
+′, 𝑡, sig)
+// Remove proposal
+Remove(ID𝑟 )
+(s.𝛾, P̄)← K-Remove(s.𝛾, ID𝑟 )
+P
+′ ← ("rem", s.C-epid,ME, ID𝑟 , P̄)
+𝑡 ← M-Tag(s.km, P′)
+sig← S-Sign(s.C-ssk, (P′, 𝑡 ))
+return (P
+′, 𝑡, sig)
+// Update proposal
+Update(spk;𝑟 )
+req SK-sk[spk] ̸= Y
+(s.𝛾, P̄)← K-Update(s.𝛾 ;𝑟 )
+P
+′ ← ("upd", s.C-epid,ME, spk, P̄)
+𝑡 ← M-Tag(s.km, P′)
+sig← S-Sign(s.C-ssk, (P′, 𝑡 ))
+return (P
+′, 𝑡, sig)
+// Receive A Message
+Rcv(𝑎, 𝑒)
+(𝑒′, sig)← 𝑒
+(epid, 𝑎, 𝑒)← 𝑒′
+(s.𝑣[epid], ID𝑠 , 𝑖,𝑚)← F-Rcv(s.𝑣[epid], (epid, 𝑎), 𝑒)
+req ID𝑠 ̸= ⊥
+spk← s.Ep-SPK[epid, ID𝑠 ]
+req S-Ver(spk, 𝑒′, sig)
+return (epid, ID𝑠 , 𝑖,𝑚)
+// Commit
+Commit(P;𝑟 )
+req P ⊆ s.Props
+// Get CGKA Proposals
+P̄← P.P̄
+// – Prepare Commit Message –
+(s.𝛾,𝑊pub,WPrv, T̄, 𝐼 )← K-Commit(s.𝛾, P̄;𝑟 )
+T
+′ ← ("com", s.C-epid,ME, H(P), T̄)
+v← H(T
+′
+)
+// New MAC Key & Epoch ID
+(., ., 𝑘𝑚, epid)← PP(s.𝜎, 𝐼 , v)
+𝑡 ← M-Tag(𝑘𝑚, T′)
+sig← S-Sign(s.C-ssk, (T′, 𝑡 ))
+// Commit Message
+T← (T
+′, 𝑡, sig)
+// – Prepare Welcome Messages –
+(ID,wpk)← *added(P)
+spk←
+*new-spks(s.Ep-SPK[s.C-epid, ·], P)
+for 𝑖 ∈ ID
+𝑒 ← E-Enc(wpk[𝑖].epk, s.𝜎 )
+W
+′ ←
+("wel",ME, ID[𝑖], v,𝑊pub, . . .
+. . . ,WPrv[𝑖], 𝑒,wpk[𝑖], spk)
+𝑡 ← M-Tag(𝑘𝑚, (W′, epid))
+sig← S-Sign(spk[ME], (W′, 𝑡 ))
+// Welcome Message
+W[𝑖]← (W
+′, 𝑡, sig)
+return (epid,W, T)
+// Process a proposal
+Proc-PM(P)
+(P
+′, 𝑡, sig)← P
+(., epid, ID, ., .)← P
+′
+req epid = s.C-epid
+spk← s.Ep-SPK[epid, ID]
+reqM-Ver(s.km, P′, 𝑡 )
+req S-Ver(spk, (P′, 𝑡 ), sig)
+s.Props +← P
+′
+return *get-propInfo(P
+′
+)
+// Send A Message
+Send(𝑎,𝑚)
+𝐸 ← s.C-epid
+(s.𝑣[𝐸], 𝑒)← F-Send(s.𝑣[𝐸], (𝐸,𝑎),𝑚)
+𝑒′ ← (𝐸,𝑎, 𝑒)
+sig← S-Sign(s.C-ssk, 𝑒′)
+return (𝑒′, sig)
+// Process Commit Message
+Proc-CM(T)
+(T
+′, 𝑡, sig)← T
+(., epid, ID, h, T̄)← T
+′
+// Matching Epochs?
+req epid = s.C-epid
+spk← s.Ep-SPK[epid, ID]
+req S-Ver(spk, (T′, 𝑡 ), sig)
+P← s.Props[h]
+// Call CGKA
+(s.𝛾,GI, 𝐼 )← K-Proc-Com(s.𝛾, T̄)
+(s.𝜎,𝑘𝑒 , s.km, s.C-epid)← PP(s.𝜎, 𝐼 ,H(T
+′
+))
+reqM-Ver(s.km, T′, 𝑡 )
+s.G← GI.G
+𝑝𝑜𝑠 ← *roster-pos(ME, s.G)
+// Start FS-GAEAD
+s.𝑣[s.C-epid]← F-Init(𝑘𝑒 , |s.G| , 𝑝𝑜𝑠)
+s.Ep-SPK[s.C-epid, .]←
+*new-spks(s.Ep-SPK[epid, ·], P)
+spk← s.Ep-SPK[s.C-epid,ME]
+s.C-ssk← SK-sk[spk]
+return GI
+// Join a Group
+Proc-WM(W)
+(W
+′, 𝑡, sig)← W
+(., ID𝑠 , ., v,𝑊pub,𝑊priv, 𝑒,wpk, spk)←
+W
+′
+spk← spk[ID𝑠 ]
+req
+spk ∈ CL-S[ID𝑠 ] ∧ S-Ver(spk,W′, sig)
+(esk, isk)←WK-wk[wpk]
+s.𝜎 ← E-Dec(esk, 𝑒)
+(s.𝛾,GI, 𝐼 )← K-Join(ME, ID𝑠 ,𝑊pub,𝑊priv, isk)
+(s.𝜎,𝑘𝑒 , s.km, s.C-epid)← PP(s.𝜎, 𝐼 , v)
+reqM-Ver(s.km, (W′, s.C-epid), 𝑡 )
+s.G← GI.G
+𝑝𝑜𝑠 ← *roster-pos(ME, s.G)
+s.𝑣[s.C-epid]← F-Init(𝑘𝑒 , |s.G| , 𝑝𝑜𝑠)
+s.Ep-SPK[s.C-epid, .]← spk
+spk← s.Ep-SPK[s.C-epid,ME]
+s.C-ssk← SK-sk[spk]
+s.Props← Y
+Figure 7: The SGM Construction: main algorithms.
+// Determines if authenticity of epoch vid compromised
+*auth-compr(vid)
+return ¬*PP-secure(vid, *Proj-PP(SGM-Data))
+// Determines if ID’s signature key is compromised in epoch vid
+*SK-compr(vid, ID)
+chk HG.getSKIDs(vid, ID) ∩ SK-Lk = ∅
+// Privacy Predicate
+*AM-sec (vid, S, 𝑖)
+if *PP-secure(vid, *Proj-PP(SGM-Data))
+return *FS-sec((S, 𝑖), *Proj-FS(SGM-Data, vid))
+return false
+// Project History Graph to PRF-PRNG Game
+*Proj-PP (SGM-Data = (V, P,V-Lk,AM-Lk,BR,WK-Lk))
+for (vid, orig, data, pid) ∈ V
+V′ +← vid
+for vid ∈ V′
+BI[vid]← ¬*CGKA-priv(vid′, *Proj-CGKA(SGM-Data))
+return (V′,V-Lk,BI)
+// Project History Graph to CGKA Game
+*Proj-CGKA (SGM-Data = (V, P,V-Lk,AM-Lk,BR,WK-Lk))
+for (vid, orig, data, pid) ∈ V
+V′ +← (vid, orig, pid)
+for 𝑝 = (pid, vid, orig, op, data) ∈ V
+if op = add
+let data = (ID′,wkid′, skid′)
+data′ ← (ID′,wkid′)
+𝑝′ ← (pid, vid, op, orig, data′)
+if op = rem
+𝑝′ ← 𝑝
+if op = upd
+𝑝′ ← ⊥
+P′ +← 𝑝′
+return (V′, P′,V-Lk,BR,WK-Lk)
+// Project History Graph to FS-GAEAD Game
+*Proj-FS (SGM-Data = (V, P,V-Lk,AM-Lk,BR,WK-Lk), vid)
+for (vid, ID,AM-Rcvd[ID],AM-Tr[ID]) ∈ AM-Lk
+AM-Lk′ +← (ID,AM-Rcvd[ID],AM-Tr[ID])
+return AM-Lk′
+Figure 8: Safety oracles and safety predicate of the security
+game for SGM schemes.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1475
+REFERENCES
+[1] J. Alwen,M. Capretto, M. Cueto, C. Kamath, K. Klein, G. Pascual-Perez, K. Pietrzak,
+and M. Walter. Keep the dirt: Tainted treekem, an efficient and provably secure
+continuous group key agreement protocol. IACR Cryptol. ePrint Arch., 2019:1489,
+2019.
+[2] J. Alwen, S. Coretti, and Y. Dodis. The double ratchet: Security notions, proofs,
+and modularization for the Signal protocol. In Y. Ishai and V. Rijmen, editors,
+EUROCRYPT 2019, Part I, volume 11476 of LNCS, pages 129–158. Springer, Hei-
+delberg, May 2019.
+[3] J. Alwen, S. Coretti, Y. Dodis, and Y. Tselekounis. Security analysis and improve-
+ments for the IETF MLS standard for group messaging. In D. Micciancio and
+T. Ristenpart, editors, CRYPTO 2020, Part I, volume 12170 of LNCS, pages 248–277.
+Springer, Heidelberg, Aug. 2020.
+[4] J. Alwen, S. Coretti, Y. Dodis, and Y. Tselekounis. Modular design of secure group
+messaging protocols and the security of mls. Cryptology ePrint Archive, Report
+2021/1083, 2021. https://ia.cr/2021/1083.
+[5] J. Alwen, S. Coretti, D. Jost, and M. Mularczyk. Continuous group key agreement
+with active security. In R. Pass and K. Pietrzak, editors, TCC 2020, 2020.
+[6] J. Alwen, D. Jost, and M. Mularczyk. On the insider security of MLS. IACR Cryptol.
+ePrint Arch., 2020:1327, 2020.
+[7] R. Barnes. Subject: [MLS] Remove without double-join (in TreeKEM), 2018.
+https://mailarchive.ietf.org/arch/msg/mls/Zzw2tqZC1FCbVZA9LKERsMIQXik.
+[8] R. Barnes, B. Beurdouche, J. Millican, E. Omara, K. Cohn-Gordon, and R. Robert.
+The Messaging Layer Security (MLS) Protocol. Internet-Draft draft-ietf-mls-
+protocol-11, Internet Engineering Task Force, Dec. 2020. Work in Progress.
+[9] K. Bhargavan, B. Beurdouche, and P. Naldurg. Formal Models and Verified
+Protocols for Group Messaging: Attacks and Proofs for IETF MLS. Research
+report, Inria Paris, Dec. 2019.
+[10] A. Bienstock, Y. Dodis, and P. Rösler. On the price of concurrency in group
+ratcheting protocols. In R. Pass and K. Pietrzak, editors, TCC, 2020.
+[11] C. Brzuska, E. Cornelissen, and K. Kohbrok. Cryptographic security of the mls
+rfc, draft 11. Cryptology ePrint Archive, Report 2021/137, 2021.
+[12] R. Canetti, J. A. Garay, G. Itkis, D. Micciancio, M. Naor, and B. Pinkas. Multicast
+security: A taxonomy and some efficient constructions. In IEEE INFOCOM’99,
+pages 708–716, New York, NY, USA, Mar. 21–25, 1999.
+[13] K. Cohn-Gordon, C. Cremers, L. Garratt, J. Millican, and K. Milner. On ends-to-
+ends encryption: Asynchronous groupmessagingwith strong security guarantees.
+In D. Lie, M. Mannan, M. Backes, and X. Wang, editors, ACM CCS 2018, pages
+1802–1819. ACM Press, Oct. 2018.
+[14] K. Cohn-Gordon, C. J. F. Cremers, B. Dowling, L. Garratt, and D. Stebila. A
+formal security analysis of the signal messaging protocol. In 2017 IEEE European
+Symposium on Security and Privacy, EuroS&P 2017, pages 451–466, 2017.
+[15] C. Cremers, B. Hale, and K. Kohbrok. Revisiting post-compromise security
+guarantees in group messaging. IACR Cryptol. ePrint Arch., 2019:477, 2019.
+[16] Y. Dodis and N. Fazio. Public key broadcast encryption for stateless receivers. In
+J. Feigenbaum, editor,Digital Rights Management, pages 61–80, Berlin, Heidelberg,
+2002. Springer Berlin Heidelberg.
+[17] E. Eaton, D. Jao, , and C. Komlo. Towards post-quantum updatable public-key
+encryption via supersingular isogenies. Cryptology ePrint Archive, Report
+2020/1593, 2020. https://eprint.iacr.org/2020/1593.
+[18] A. Fiat and M. Naor. Broadcast encryption. In D. R. Stinson, editor, CRYPTO’93,
+volume 773 of LNCS, pages 480–491. Springer, Heidelberg, Aug. 1994.
+[19] Z. Jafargholi, C. Kamath, K. Klein, I. Komargodski, K. Pietrzak, and D. Wichs. Be
+adaptive, avoid overcommitting. In J. Katz and H. Shacham, editors, CRYPTO 2017,
+Part I, volume 10401 of LNCS, pages 133–163. Springer, Heidelberg, Aug. 2017.
+[20] D. Jost, U. Maurer, and M. Mularczyk. Efficient ratcheting: Almost-optimal guar-
+antees for secure messaging. In Y. Ishai and V. Rijmen, editors, EUROCRYPT 2019,
+Part I, volume 11476 of LNCS, pages 159–188. Springer, Heidelberg, May 2019.
+[21] Y. Kim, A. Perrig, and G. Tsudik. Group key agreement efficient in communication.
+IEEE Trans. Computers, 53(7):905–921, 2004.
+[22] H. Krawczyk. Cryptographic extraction and key derivation: The HKDF scheme.
+In T. Rabin, editor, CRYPTO 2010, volume 6223 of LNCS, pages 631–648. Springer,
+Heidelberg, Aug. 2010.
+[23] Matthew A. Weidner. Group Messaging for Secure Asynchronous Collaboration.
+Master’s thesis, University of Cambridge, June 2019.
+[24] S. Mittra. Iolus: A framework for scalable secure multicasting. In Proceedings of
+ACM SIGCOMM, pages 277–288, Cannes, France, Sept. 14–18, 1997.
+[25] S. Panjwani. Tackling adaptive corruptions in multicast encryption protocols.
+In S. P. Vadhan, editor, TCC 2007, volume 4392 of LNCS, pages 21–40. Springer,
+Heidelberg, Feb. 2007.
+[26] E. Rescorla. Subject: [MLS] TreeKEM: An alternative to ART. MLS Mailing List,
+2018. https://mailarchive.ietf.org/arch/msg/mls/WRdXVr8iUwibaQu0tH6sDnqU1no.
+[27] D. G. Steer, L. Strawczynski, W. Diffie, and M. J. Wiener. A secure audio telecon-
+ference system. In S. Goldwasser, editor, CRYPTO ’88, 1988.
+[28] D. Wallner, E. Hardner, and R. Agee. Key management for multicast: Issues and
+architectures. IETF RFC2676, 1999. https://tools.ietf.org/html/rfc2627.
+[29] M. Weidner. Group messaging for secure asynchronous collaboration. MPhil
+Dissertation, 2019. https://mattweidner.com/acs-dissertation.pdf.
+[30] C. K. Wong, M. Gouda, and S. S. Lam. Secure group communications using key
+graphs. IEEE/ACM Transactions on Networking, 8(1):16–30, Feb. 2000.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1476
+https://ia.cr/2021/1083
+https://mailarchive.ietf.org/arch/msg/mls/Zzw2tqZC1FCbVZA9LKERsMIQXik
+https://eprint.iacr.org/2020/1593
+https://mailarchive.ietf.org/arch/msg/mls/WRdXVr8iUwibaQu0tH6sDnqU1no
+https://tools.ietf.org/html/rfc2627
+https://mattweidner.com/acs-dissertation.pdf
+A CONTINUOUS GROUP KEY AGREEMENT
+A.1 Syntax
+This section introduces the formal syntax of a CGKA scheme. Par-
+ties are identified by unique party IDs ID chosen from an arbitrary
+fixed set. In the following, 𝛾 and 𝛾 ′ denote the internal state of the
+CGKA scheme before and after an operation, respectively. A CGKA
+scheme CGKA consists of eight algorithms:
+• For PKI:
+– (ipk, isk)← Gen-IK: generates and outputs a new initial
+key pair.
+• For group creation:
+– 𝛾 ′ ← Create(ID, isk): initializes the state and creates group
+with self, using as init secret key isk.
+• For proposals:
+– (𝛾 ′, 𝑃 ) ← Add(𝛾, ID′, ipk′): generates a proposal to add
+party ID′ using initial public key ipk′;
+– (𝛾 ′, 𝑃 )← Remove(𝛾, ID′): generates a proposal to remove
+party ID′;
+– (𝛾 ′, 𝑃 ) ← Update(𝛾 ): generates a proposal for self to up-
+date.
+• For commits:
+– (𝛾 ′, 𝐼 ,𝑊pub,Wpriv,𝑇 ) ← Commit(𝛾, P): creates a commit
+corresponding to a vector P of proposals and outputs the
+resulting commit secret 𝐼 , a public welcome message𝑊pub
+as well as a vector Wpriv of private welcome messages
+(for newly added parties), and a control message 𝑇 (for
+existing group members);
+– (𝛾 ′,GI, 𝐼 ) ← Proc-Com(𝛾,𝑇 , P): used by existing group
+members to process control message 𝑇 w.r.t. vector of
+proposals P, and reach new epoch; outputs updated group
+information GI (where GI = ⊥ if 𝑇 is considered invalid)
+and a commit secret 𝐼 ;
+– (𝛾,GI, 𝐼 ) ← Join(𝛾, orig,𝑊pub,𝑊priv, isk): used by newly
+added group members to process welcome message𝑊pub
+and𝑊priv, generated via a commit operation by orig, and
+join a group using initial secret key isk; outputs group
+information GI (where GI = ⊥ if𝑊pub or𝑊priv are consid-
+ered invalid) and a commit secret 𝐼 .
+A.2 Security
+CGKA schemes must satisfy correctness, i.e., all group members
+output the same keys in every epoch. Furthermore, the keys must
+be private, and the CGKA scheme must satisfy post-compromise
+forward secrecy (PCFS).
+Similarly to the SGM game, the CGKA game allows adversaryA
+to control the execution of and attack a single group. In particular,
+A controls who creates the group, who is added and removed, who
+updates, who commits, etc. The attacker is also allowed to leak the
+state of any party (whether currently part of the group or not) at
+any time. The privacy of keys is captured by considering a challenge
+that outputs either the actual key output by the CGKA scheme or a
+truly random one—which one is determined by an internal random
+bit 𝑏, which must be guessed by A at the end of the game.
+A.2.1 Bookkeeping. Similarly to SGM schemes, the CGKA security
+game keeps track of all the relevant execution data with the help
+of a so-called history graph, and the recorded data informs a safety
+predicate (pertaining to privacy) evaluated at the end of the game.
+The following paragraphs outline the differences in bookkeeping
+between the CGKA game and the SGM game.
+History graphs. A history graph is again a directed tree whose
+nodes correspond to the group state in the various epochs of an
+execution. As with the SGM game, there are three types of nodes:
+𝑣root, 𝑣create nodes, and commit nodes 𝑣 . A node consists of the
+following values:
+𝑣 = (vid, orig, pid) ,
+where
+• vid is the node’s (unique) ID,
+• orig is the party that caused the node’s creation, i.e., orig is
+either the group creator or the committer,
+• pid is the vector of (IDs of) proposals (see below) that were
+included in the commit.
+The history graph is accessed by the security-game oracles via the
+“HG object” HG, which provides information via several methods
+(explained later as they are needed). The (ID of the) node corre-
+sponding to a party’s current state is stored by the array V-Pt[ID].
+Proposals. Similarly to HG and the history graph, the object Props
+keeps track of proposals. The information recorded about each
+proposal is a vector
+𝑝 = (pid, vid, op, orig, data) ,
+where
+• pid is the proposal’s (unique) ID,
+• vid is the (ID of) the HG node corresponding to the epoch
+in which the proposal was created,
+• op ∈ {add, rem, upd} is the type of proposal,
+• orig is the party that issued the proposal, and
+• data is additional data.
+Similarly to the HG object, Props will also export several useful
+methods (also explained later) to the oracles of the security game.
+PKI bookkeeping. The PKI is significantly simpler in the CGKA
+game: it only handles so-called init keys (IKs), each of which has an
+ID ikid. Arrays are maintained to map ikids to the corresponding
+public init key (IK-PK) and secret init key (IK-SK). Moreover, IK-St
+records the IKs stored by each party, and IK-Tr and IK-Lk keep track
+of “trash” IKs (old secret init keys not deleted) and leaked IKs.
+Keys and Challenges. The array Key[vid] stores, for each vid the cor-
+responding key, and (the Boolean arrays)Reveal[vid] andChall[vid]
+store whether the key was revealed and challenged, respectively.
+A.2.2 Initialization. The initialization of the CGKA game proceeds
+along very similar lines to that of the SGM game. It is depicted in
+Figure 9.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1477
+// General
+𝑏 ← {0, 1}
+idCtr++
+∀ID : 𝛾[ID]← Init(ID)
+// Communication
+CM[·, ·]← 𝜖
+PM[·, ·]← 𝜖
+WMpub[·, ·]← 𝜖
+WMpriv[·, ·]← 𝜖
+WM-Lk← ∅
+// History Graph
+vidroot ← HG.init
+V-Pt[·]← vidroot
+V-Tr[·]← ∅
+V-Lk← ∅
+P-St[·]← ∅
+// Miscellaneous
+Key[·]← ∅
+Reveal[·]← ∅
+Chall[·]← ∅
+Del[·]← true
+BR[·]← false
+// PKI
+IK-PK[·]← 𝜖
+IK-SK[·]← 𝜖
+IK-St[·]← ∅
+IK-Tr← ∅
+IK-Lk← ∅
+Figure 9: Initialization of the security game for CGKA schemes.
+A.2.3 Oracles. All adversary oracles described below proceed ac-
+cording to the same pattern: (a) verifying the validity of the oracle
+call, (b) retrieving values needed for (c), (c) running the correspond-
+ing SGM algorithm, and (d) updating the bookkeeping. Validity
+checks (a) are described informally in the text below; a formal de-
+scription is provided in Figure 14. Note that, most of the time, (b) and
+(c) are straight-forward and are not mentioned in the descriptions.
+To improve readability, lines (c) are highlighted.
+A.2.4 PKI.. The spirit of the PKI (Figure 10) in the CGKA game
+differs somewhat from the SGM case. Init keys (IKs) are either
+honestly generated by a party, via oracle gen-new-ik, or registered
+by the attackerA, via oracle reg-ik. Note that the CGKA game will
+allow the attacker to pick which IK a new group member is added
+with; hence, there is no association between IKs and identities.
+Oracle gen-new-ik(ID) runs the IK-generation algorithmGen-IK
+and stores the resulting key pair with a new ikid. The oracle also
+records in IK-St that ID now stores the IK with ID ikid. Oracle
+reg-ik(ipk) allowsA to register an IK public key ipkwith the game
+(and get an ikid for it).
+A.2.5 Main oracles. The main oracles of the CGKA game are split
+into two figures: oracles related to (i) group creation, proposals, and
+commits (Figure 11), and (ii) message processing, corruption, and
+challenges (Figure 13). The validity of all oracle calls is checked by
+the corresponding compatibility functions (Figure 14).
+Group creation. The attacker can instruct a party ID to create a
+new group by calling the group-creation oracle (Figure 3), which
+works analogously to the corresponding oracle in the SGM game.
+The bookkeeping is updated as follows: A call is made to the
+HG.create(ID, skid) method. This causes HG to create a node
+𝑣 =
+©­«
+.vid ← idCtr++
+.orig ← ID
+.pid ← ⊥
+ª®¬
+// Instruct ID to generate a new initial key
+gen-new-ik(ID)
+(𝛾[ID], (ipk, isk))← Gen-IK(𝛾[ID])
+ikid← idCtr++
+IK-PK[ikid]← ipk
+IK-SK[ikid]← isk
+IK-St[ID] +← ikid
+return (ikid, ipk)
+// Allows attacker to register IKs with game
+reg-ik(ipk)
+req ̸∃ ikid : IK-PK[ikid] = ipk
+ikid← idCtr++
+IK-Lk +← ikid
+IK-PK[ikid]← ipk
+return ikid
+Figure 10: PKI-related oracles of the security game for contin-
+uous group key agreement schemes.
+as a child of 𝑣root and return vid = 𝑣 .vid. Note that the CGKA group-
+creation oracle also stores the key 𝐼 output by Create in the array
+Key.
+Proposal oracles. The oracles prop-{add, rem,up}-user (Figure 11)
+allow the attacker to instruct a party ID to issue add/remove/update
+proposals. These oracles work much like their counterparts in the
+SGMgame. Bookkeeping is updated by calling Props.new(op, ID, data),
+which records proposal data
+𝑝 =
+©­­­­­«
+.pid ← idCtr++
+.vid ← V-Pt[ID]
+.op ← op
+.orig ← ID
+.data ← data
+ª®®®®®¬
+,
+where op ∈ {add, rem, upd} is the proposal type and where data
+stores
+• (add proposals) data = (ID′, ikid′), where ikid′ is the (ID of
+the) init key ID′ is to be added with;
+• (remove proposals) data = ID′;
+• (update proposals) data = ⊥.
+Observe that one crucial difference between the CGKA and SGM
+games is that the CGKA game does not explicitly model the delivery
+of proposals. This is due to the fact that a CGKA is assumed to be
+run over authenticated channels, and hence there is no way for A
+to inject malicious proposals, and, consequently, the proper delivery
+of proposals can be outsourced to the higher-level protocol.
+Creating commits. The commit oracle (Figure 11) allows A to
+instruct a party ID to execute a commit operations. It works analo-
+gously to its SGM-game counterpart. Bookkeeping calls
+HG.commit(ID, pid), which creates a new HG node
+𝑣 =
+©­«
+.vid ← idCtr++
+.orig ← ID
+.pid ← pid
+ª®¬
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1478
+// ID creates new group
+create-group(ID, ikid, 𝑟 )
+req *compat-create(ID, ikid)
+isk← IK-SK[ikid]
+(𝛾[ID], 𝐼 )← Create(𝛾[ID], isk; 𝑟 )
+vid← HG.create(ID, 𝑟 )
+Key[vid]← 𝐼
+BR[vid]← (𝑟 ̸= ⊥)
+V-Pt[ID]← vid
+return vid
+// ID proposes to add ID′
+prop-add-user(ID, ID′, ikid′)
+req *compat-prop(add, ID, ID′, ikid′)
+ipk′ ← IK-PK[ikid′]
+(𝛾[ID], 𝑃 )← Add(𝛾[ID], ID′, ipk′)
+pid← Props.new(add, ID, (ID′, ikid′))
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// ID proposes to remove ID′
+prop-rem-user(ID, ID′)
+req *compat-prop(rem, ID, ID′,⊥)
+(𝛾[ID], 𝑃 )← Remove(𝛾[ID], ID′)
+pid← Props.new(rem, ID, ID′)
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// ID proposes to update
+prop-up-user(ID, 𝑟 )
+req *compat-prop(upd, ID,⊥,⊥)
+(𝛾[ID], 𝑃 )← Update(𝛾[ID]; 𝑟 )
+pid← Props.new(upd, ID,⊥)
+BR[vid]← (𝑟 ̸= ⊥)
+PM[pid]← 𝑃
+return (pid, 𝑃 )
+// ID commits proposals pid
+commit(ID, pid, 𝑟 )
+req *compat-commit(ID, pid)
+vid← HG.commit(ID, pid)
+(𝛾[ID], 𝐼 ,𝑊pub,Wpriv,𝑇 )← Commit(𝛾[ID], PM[pid]; 𝑟 )
+Key[vid]← 𝐼
+BR[vid]← (𝑟 ̸= ⊥)
+for ID′ ∈ HG.roster(V-Pt[ID])
+CM[vid, ID′]← 𝑇
+(ID1, . . . , ID𝑚 )← Props.addedIDs(pid)
+for 𝑖 = 1, . . . ,𝑚
+WMpub[vid, ID𝑖 ]←𝑊pub
+WMpriv[vid, ID𝑖 ]←Wpriv[ID𝑖 ]
+return (vid,𝑇 ,𝑊pub,Wpriv)
+Figure 11: Oracles for group creation, add, remove, update
+proposals and commits of the security game for continuous
+group key agreement schemes. The compatibility functions are
+described in the accompanying text; a formal description is
+provided in Figure 14.
+// Process commit msg for ID and epoch vid
+process(vid, ID)
+req *compat-process(vid, ID)
+𝑇 ← CM[vid, ID]
+P← PM[HG[vid].pid]
+(𝛾[ID],GI, 𝐼 )← Proc-Com(𝛾[ID],𝑇 , P)
+if ¬HG.checkGI(vid,GI) ∨ Key[vid] ̸= 𝐼
+win
+if ¬Del[ID]
+V-Tr[ID]← V-Pt[ID]
+if HG.isRemoved(vid, ID)
+V-Pt[ID]← vidroot
+else
+V-Pt[ID]← vid
+𝑖[ID]← 0
+P-St[ID]← ∅
+return GI
+// Reveal the update secret of epoch vid
+reveal(vid)
+req Key[vid] ̸= 𝜖
+req ¬(Reveal[vid] ∨ Chall[vid])
+Reveal[vid]← true
+return Key[vid]
+// Challenge the update secret of epoch vid
+chall(vid)
+req Key[vid] ̸= 𝜖
+req ¬(Reveal[vid] ∨ Chall[vid])
+𝐼0 ← Key[vid]
+𝐼1 ← I
+Chall[vid]← true
+return 𝐼𝑏
+// Welcome msg. of epoch vid delivered to ID
+dlv-WM(vid, ID)
+req *compat-dlv-WM(vid, ID)
+𝑊pub ←WM-pub[vid, ID]
+𝑊priv ←WM-priv[vid, ID]
+ikid← HG.addedIK(vid, ID)
+isk← IK-SK[ikid]
+let 𝑣 s.t. 𝑣 .vid = vid
+orig← 𝑣 .orig = vid
+(𝛾[ID],GI, 𝐼 )← Join(ID, orig,𝑊pub,𝑊priv, isk)
+if ¬HG.checkGI(vid,GI) ∨ Key[vid] ̸= 𝐼
+win
+if ¬Del[ID]
+IK-Tr[ID] +← ikid
+IK-St[ID] −← ikid
+V-Pt[ID]← vid
+return GI
+Figure 12: Part one of oracles for message processing, cor-
+ruption, and challenges of the security game for continuous
+group key agreement schemes. The compatibility functions are
+described in the accompanying text; a formal description is
+provided in Figure 14.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1479
+// Corrupt ID
+corr(ID)
+V-Lk +← {(vid, ID) | vid ∈ {V-Pt[ID]} ∪ V-Tr[ID]}
+IK-Lk +← IK-St[ID] ∪ IK-Tr[ID]
+HG.corrHanging(ID)
+return 𝛾[ID]
+// Enable no-delete for ID
+no-del(ID)
+disable deletions for ID
+Del[ID]← false
+// Safety for privacy
+*priv-safe
+return ∀vid : Chall[vid] =⇒ *CGKA-priv(vid)
+Figure 13: Part two of oracles for message processing, cor-
+ruption, and challenges of the security game for continuous
+group key agreement schemes. The compatibility functions are
+described in the accompanying text; a formal description is
+provided in Figure 14.
+as a child of ID’s current epoch V-Pt[ID] and returns vid = 𝑣 .vid.
+Note that the key output by Commit is stored in array Key. Further-
+more, observe that the algorithm outputs (one) public and several
+private welcome messages (one for each newly added party). The
+private welcome messages are not returned to A and are deliv-
+ered securely to their intended recipient—the idea being that these
+messages are encrypted by the higher-level application.
+Process control messages. The oracles process and dlv-WM (Fig-
+ure 13) allow the attacker to deliver commit messages (to existing
+group members) resp. welcome messages (to new group members).
+The oracles works much like their SGM counterparts, except that
+all the information required by Proc-Com resp. Join is supplied by
+the game. The oracles also check that the key 𝐼 output by Proc-Com
+resp. Join and matches the one stored in array Key during the cor-
+responding call to commit.
+Key-reveal and challenge oracles. For each epoch, the attacker A
+gets to either see the actual key output by the protocol or a challenge
+by calling reveal or chall (Figure 13), respectively. Oracle chall
+outputs either the real key or a completely random one, depending
+on the secret internal bit 𝑏 chosen at the onset of the game.
+Corruption oracles. The oracles related to corruption in the CGKA
+game (Figure 13) are:
+• corr(ID): leaks the state of ID to A;
+• no-del(ID): instructs ID to stop deleting old values.
+A.2.6 Safety. At the end of the execution of the CGKA security
+game, the procedure *priv-safe ensures that the attacker has only
+challenged in epochs that are considered secure by the (generic)
+safety predicate *CGKA-priv. If the condition is not satisfied, the
+attacker loses the game.
+A.2.7 Advantage. Let Π = *CGKA-priv be the generic safety pred-
+icate used in the CGKA definition. The attackerA is parameterized
+by it’s running time, 𝑡 , and the number of challenge queries, 𝑞, and
+referred to as (𝑡, 𝑞)-attacker. The advantage of A against a CGKA
+scheme K w.r.t. to predicate Π is denoted by Adv
+K
+CGKA,Π(A).
+Definition A.1. A CGKA scheme K is (𝑡, 𝑞, Y)-secure w.r.t. predicate
+Π, if for all (𝑡, 𝑞)-attackers,
+Adv
+K
+CGKA,Π(A) ≤ Y .
+*compat-create(ID, ikid)
+chk ikid ∈ IK-St[ID]
+return V-Pt[ID] = vidroot
+*compat-prop(op, ID, ID′, ikid)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+𝐺 ← HG.roster(vid)
+select op
+case add do
+chk ∃ipk′ : IK-PK[ikid′] = ipk′
+chk ID′ /∈ 𝐺
+case rem do
+chk ID′ ∈ 𝐺
+return true
+*compat-commit(ID, pid)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+G← HG.roster(vid)
+for pid ∈ pid
+𝑝 ← Props[pid]
+chk 𝑝.vid = vid
+G← *app-prop(G, 𝑝)
+chk G ̸= ⊥
+chk ID /∈ G
+return true
+*compat-process(vid, ID)
+chk HG.isChild(V-Pt[ID], vid)
+return true
+*app-prop(G, 𝑝)
+req 𝑝.orig ∈ G
+select 𝑝.op
+case add do
+(ID′, ·)← 𝑝.data
+req ID′ /∈ G
+G +← ID′
+case rem do
+ID′ ← 𝑝.data
+req ID′ ∈ 𝐺
+G −← ID′
+return G
+*compat-dlv-WM(vid, ID)
+chk V-Pt[ID] = vidroot
+ikid← HG.addedIK(vid, ID)
+chk ikid ̸= ⊥
+∧ ikid ∈ IK-St[ID]
+return true
+Figure 14: Compatibility oracles of the security game for con-
+tinuous group key agreement schemes.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1480
+B FORWARD-SECURE GROUP AEAD
+B.1 Syntax
+• 𝑣 ← Init(𝑘𝑒 , 𝑛, ID): takes as input a key 𝑘𝑒 , the group size 𝑛,
+as well as a party ID ID and generates the initial state.
+• (𝑣 ′, 𝑒) ← Send(𝑣, 𝑎,𝑚) generates ciphertext 𝑒 encrypting
+plaintext𝑚 and authenticating associated data 𝑎;
+• (𝑣 ′, S, 𝑖,𝑚)← Rcv(𝑣, 𝑎, 𝑒): decrypts ciphertext 𝑒 to plaintext
+𝑚 and verifies associated data 𝑎; also outputs a pair (S, 𝑖)
+consisting of sender ID S and message index 𝑖 .
+B.2 Security
+B.2.1 Main oracles. The oracles of the FS-GAEAD game are de-
+picted in Figure 15.
+Initialization. At the onset of the FS-GAEAD security game, a
+random bit 𝑏 and a uniformly random key 𝑘𝑒 are chosen, and the
+initialization algorithm is run for all group members in 𝐺 (which
+is specified by an argument to the initialization procedure). The
+security game also initializes a message counter 𝑖[ID] for each party.
+Additionally, the game maintains the following variables, which
+work analogously to their counterparts in the SGM game.
+• a set Chall of pairs (S, 𝑖) recording that the 𝑖th message sent
+by S was a challenge,
+• a trash array AM-Tr[ID] of pairs (S, 𝑖) keeping track of non-
+deleted key material by ID,
+• a set AM-Lk of elements (ID,AM-Rcvd,AM-Tr[ID]), where
+AM-Tr[ID] keeps track of themessages whose keymaterial is
+leaked via corruption of ID, and AM-Rcvd are the messages
+that have been already received at the time of corruption.
+• a Boolean array Del[ID] keeping track of which parties are
+deleting old values, and
+• an arrayAM[S, 𝑖, R] of triples (𝑎,𝑚, 𝑒) consisting of associated
+data (AD), plaintext, and ciphertext.
+The recorded data informs a safety predicate *priv-safe evaluated
+at the end of the game to determine whether a given execution was
+legal.
+Sending messages and challenges. The oracle send(S, 𝑎,𝑚) allows
+the attacker to have party S send AD 𝑎 and message 𝑚 (to all
+other group members). The oracle runs algorithm Send, which
+produces a ciphertext 𝑒 . The triple (𝑎,𝑚, 𝑒) is recorded in array AM.
+Oracle challworks similarly, except that it takes two (equal-length)
+messages as input and passes one of them to Send; which one is
+chosen is determined by the secret random bit 𝑏 chosen initially.
+Furthermore, the pair (S, 𝑖[S]) is recorded as being a challenge.
+Delivering and injecting ciphertexts. Oracle dlv-AM(S, 𝑖,R) allows
+A to have the ciphertext corresponding to the 𝑖th message sent
+by S delivered to R. The ciphertext and the corresponding AD are
+fed to algorithm Rcv, which must correctly decrypt the ciphertext
+and identify sender S and message number 𝑖 . The pair (S, 𝑖) is set as
+“received” by R by setting AM[S, 𝑖, R]← received which indicates
+that the corresponding key material should now have been deleted
+by R; in case R does not delete old values (i.e., Del[R] = false), the
+pair is added to AM-Tr.
+// Initialize group
+init(𝐺 )
+𝑏 ← {0, 1}
+𝑘𝑒 ← K
+for ID ∈ 𝐺
+𝑣[ID]← Init(𝑘𝑒 , |𝐺 |, ID)
+𝑖[ID]← 0
+Chall← ∅
+AM-Tr[·]← ∅
+AM-Lk← ∅
+AM[·, ·, ·]← 𝜖
+Del[·]← 𝜖
+// S sends 𝑚 with AD 𝑎
+send(S, 𝑎,𝑚)
+(𝑣[S], 𝑒)← Send(𝑣[S], 𝑎,𝑚)
+𝑖[S]++
+for R ∈ 𝐺 \ {S}
+AM[S, 𝑖[S],R]← (𝑎,𝑚, 𝑒)
+return 𝑒
+// Corruption of ID
+corr(ID)
+AM-Rcvd← {(S, 𝑖) | AM[S, 𝑖, ID] = received}
+AM-Lk +← (ID,AM-Rcvd,AM-Tr[ID])
+return 𝑣[ID]
+// Message delivery
+dlv-AM(S, 𝑖,R)
+req AM[S, 𝑖,R] ̸= {𝜖, received}
+(𝑎,𝑚, 𝑒)← AM[S, 𝑖,R]
+(𝑣[R], S′, 𝑖′,𝑚′)← Rcv(𝑣[R], 𝑎, 𝑒)
+if (S′, 𝑖′,𝑚′) ̸= (S, 𝑖,𝑚)
+win
+if ¬Del[R]
+AM-Tr[R] +← (S, 𝑖)
+AM[S, 𝑖,R]← received
+// stop deletions for ID
+no-del(ID)
+Del[ID]← false
+// Message injection
+inj-AM(𝑎′, 𝑒′,R)
+req ∀S, 𝑖, 𝑖 : AM[S, 𝑖,R] ̸= (𝑎′, 𝑖, 𝑒′)
+(𝑣[S], S′, 𝑖′,𝑚′)← Rcv(𝑣[R], 𝑎, 𝑒)
+if𝑚′ ̸= ⊥
+if (*AM-sec(S′, 𝑖′)) ∨ AM[S′, 𝑖′,R] = received
+win
+AM[S′, 𝑖′,R]← received
+return (S′, 𝑖′,𝑚′)
+// S challs 𝑚0, 𝑚1
+chall(S, 𝑎,𝑚0,𝑚1)
+req |𝑚0 |= |𝑚1 |
+(𝑣[S], 𝑒)← Send(𝑣[S], 𝑎,𝑚𝑏 )
+𝑖[S]++
+for R ∈ 𝐺 \ {S}
+AM[S, 𝑖[S],R]← (𝑎,𝑚, 𝑒)
+Chall +← (S, 𝑖)
+return 𝑒
+// Safety predicate
+*priv-safe
+if ∀(S, 𝑖) : (S, 𝑖) ∈ Chall =⇒ *FS-sec(S, 𝑖)
+return true
+return false
+Figure 15: The main oracles of the FS-GAEAD security game.
+Oracle inj-AM can be used byA to inject any non-honestly gen-
+erated AD/ciphertext pair. Algorithm Rcv must reject all such pairs
+unless they are compromised, which is the case ifA has learned the
+corresponding key material via state compromise. Whether or not
+this is the case is determined by the safety helper function *FS-sec,
+which is discussed below. Irrespective of whether a compromise
+has occurred, Rcv is required to detect and prevent replays.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1481
+Corruption. By calling oracle corr(ID) the attacker can learn the cur-
+rent state of party ID. The game adds the triple (ID,AM-Rcvd,AM-Tr[ID])
+to the set AM-Lk to indicate that ID’s state is now compromised,
+but the messages recorded in AM-Rcvd are supposed to remain
+secure (because the corresponding key material must have been
+deleted); the game also adds potential trash, AM-Tr[ID], stored by
+ID to the same set.
+B.2.2 Privacy-related safety. At the end of the execution of the FS-
+GAEAD security game, the procedure *priv-safe ensures that the
+attacker has only challenged messages that are considered secure
+by the (generic) safety predicate *FS-sec. If the condition is not
+satisfied, the attacker loses the game.
+B.2.3 Advantage. Let Π = *FS-sec be the generic safety predicate
+used in the FS-GAEAD definition. The attacker A is parameter-
+ized by it’s running time 𝑡 and the number of challenge queries
+𝑞, referred to as (𝑡, 𝑞)-attacker. The advantage of A against an FS-
+GAEAD scheme F w.r.t. to predicate Π is denoted by Adv
+FS
+fs,Π
+(A).
+Definition B.1. An FS-GAEAD scheme F is (𝑡, 𝑞, Y)-secure w.r.t.
+predicate Π, if for all (𝑡, 𝑞)-attackers,
+Adv
+F
+FS-GAEAD,Π(A) ≤ Y .
+C PRF-PRNGS
+C.1 Syntax
+A PRF-PNRG PP is an algorithm (𝜎 ′, 𝑅)← PP(𝜎, 𝐼,𝐶): it takes the
+current state 𝜎 , absorbs input 𝐼 along with context information 𝐶 ,
+and produces a new state 𝜎 ′ as well as an output string 𝑅.
+C.2 Security
+A PRF-PRNG must satisfy PCFS (cf. Section 3.2) and be resilient to
+splitting-attacks. Therefore, the security game for PRF-PRNGs (cf.
+Figure 16) follows the same history-graph approach as the defini-
+tions of SGM and CKGA. However, since the game only consists of
+the state of the PRF-PRNG and there are no parties, it suffices to
+keep track of a much smaller amount information:
+• Nodes of the history graph only consist of the vid.
+• For every node vid,
+– the value 𝜎[vid] stores the corresponding state of the PRF-
+PRNG,
+– the value 𝑅[vid] stores the corresponding output of the
+PRF-PRNG, and
+– the value BI[vid] is a flag indicating whether the input 𝐼
+absorbed to reach the state 𝜎[vid] is known to the attacker.
+• The set V-Lk records the vids for which the PRF-PRNG state
+is leaked to the attacker.
+The root node vidroot of the history graph corresponds to the initial
+state of the PRF-PRNG, which is assumed to be the all-zero string.
+The attacker A has the following capabilities:
+• He may create a new child state of any node vid by calling
+oracle process and specifying an input/context pair (𝐼 ,𝐶); of
+course, only one such call per triple (vid, 𝐼 ,𝐶) is allowed. If
+init
+𝑏 ←R {0, 1}
+vidroot ← HG.init
+𝜎[vidroot]← 0
+V-Lk← ∅
+𝑅[·]← ∅
+Reveal[·]← ∅
+Chall[·]← ∅
+BI[·]← ∅
+corr (vid)
+V-Lk +← vid
+return 𝜎[vid]
+process(vid, 𝐼 ,𝐶)
+req ̸∃ child of vid for (𝐼 ,𝐶)
+vid′ ← HG.create(vid, 𝐼 )
+BI[vid′]← (𝐼 ̸= ⊥)
+(𝜎[vid′], 𝑅[vid′])← PP(𝜎[vid], 𝐼 ,𝐶)
+return vid′
+reveal(vid)
+req 𝑅[vid] ̸= Y
+req ¬(Reveal[vid] ∨ Chall[vid])
+Reveal[vid]← true
+return 𝑅[vid]
+chall(vid)
+req 𝑅[vid] ̸= Y
+req ¬(Reveal[vid] ∨ Chall[vid])
+𝑅0 ← 𝑅[vid]
+𝑅1 ← R
+Chall[vid]← true
+return 𝑅𝑏
+safe
+return ∀vid : Chall[vid] =⇒ *PP-secure(vid)
+Figure 16: PRF-PRNG security game.
+the call is made with 𝐼 ̸= ⊥, the game samples 𝐼 it randomly.
+The value BI[vid] is set accordingly.
+• He may reveal or challenge outputs 𝑅[vid] corresponding to
+arbitrary nodes vid ̸= vidroot by calling the corresponding
+oracles reveal and chall, respectively. The flags Reveal[vid]
+resp. store Chall[vid] whether a reveal resp. a challenge has
+been requested for vid.
+• Finally, A can also leak the state 𝜎[vid] for any epoch vid ̸=
+vidroot using oracle corr.
+As per usual, at the end of the game, the oracle safe ensures thatA
+does not win the game trivially; safe uses a generic safety predicate
+*PP-secure.
+C.2.1 Advantage. Let Π = *PP-secure be the generic safety predi-
+cate used in the PRF-PRNG definition. The attackerA is parameter-
+ized by it’s running time 𝑡 , referred to as 𝑡-attacker. The advantage
+ofA against a PP scheme PRF-PRNGw.r.t. to predicateΠ is denoted
+by Adv
+PP
+PRF-PRNG,Π(A).
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1482
+Definition C.1. A PRF-PRNG scheme PP is (𝑡, Y)-secure w.r.t. pred-
+icate Π, if for all 𝑡-attackers,
+Adv
+PP
+PRF-PRNG,Π(A) ≤ Y .
+D SECURE GROUP MESSAGING
+In this section we define compatibility helpers for SGM.
+*compat-create(ID, skid,wkid)
+chk V-Pt[ID] = vidroot
+chk SK-ID[skid] = ID
+chkWK-SK[wkid] = skid
+chk skid ∈ SK-St[ID]
+chk wkid ∈ WK-St[ID]
+return true
+*compat-prop(op, ID, ID′, skid)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+𝐺 ← HG.roster(vid)
+select op
+case add do
+chk
+CL-KB[ID, ID′] ̸= ∅
+chk ID′ /∈ 𝐺
+case rem do
+chk ID′ ∈ 𝐺
+case upd do
+chk skid ∈ SK-St[ID]
+return true
+*compat-dlv-PM(ID, pid)
+chk Props[pid].vid = V-Pt[ID]
+return true
+*compat-inj-PM(ID, 𝑃 ′)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+chk ̸∃ pid :
+Props[pid].vid = vid
+∧ 𝑃 ′ = PM[pid]
+return true
+*compat-commit(ID, pid)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+chk pid ⊆ P-St[ID]
+G← HG.roster(vid)
+for pid ∈ pid
+G← *app-prop(G, pid)
+chk G ̸= ⊥
+return true
+*app-prop(G, pid)
+𝑝 ← Props[pid]
+req 𝑝.orig ∈ G
+select op
+case add do
+(ID′, ·, ·)← 𝑝.data
+req ID′ /∈ G
+G +← ID′
+case rem do
+ID′ ← 𝑝.data
+req ID′ ∈ 𝐺
+G −← ID′
+return G
+*compat-dlv-CM(ID, vid)
+chk HG.isChild(V-Pt[ID], vid)
+chk HG[vid].pid ⊆ P-St[ID]
+return true
+*compat-inj-CM(ID,𝑇 ′)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+chk ∀vid′ ∈ HG.children(vid) :
+𝑇 ′ ̸= CM[vid′, ID]
+return true
+*compat-dlv-CM(ID, vid)
+chk HG.isChild(V-Pt[ID], vid)
+chk HG[vid].pid ⊆ P-St[ID]
+return true
+*compat-inj-CM(ID,𝑇 ′)
+vid← V-Pt[ID]
+chk vid ̸= vidroot
+chk ∀vid′ ∈ HG.children(vid) :
+𝑇 ′ ̸= CM[vid′, ID]
+return true
+*compat-dlv-WM(ID, vid)
+chk V-Pt[ID] = vidroot
+wkid← HG.addedWK(ID, vid)
+chk wkid ̸= ⊥
+∧ wkid ∈ WK-St[ID]
+return true
+*compat-inj-WM(ID,𝑊 ′
+)
+vid← V-Pt[ID]
+chk vid = vidroot
+chk ∀vid′ :
+𝑊 ′ ̸= CM[vid′, ID]
+return true
+*compat-send(S)
+chk V-Pt[ID] ̸= vidroot
+return true
+*compat-chall(S,𝑚0,𝑚1)
+chk V-Pt[ID] ̸= vidroot
+chk |𝑚0 |= |𝑚1 |
+return true
+*compat-dlv-AM(vid, S, 𝑖,R)
+chk vid ∈ V-St[R]
+chk AM[vid, S, 𝑖,R] /∈
+{𝜖, received}
+return true
+*compat-inj-AM(𝑎, 𝑒,R)
+chk ∀S, vid, 𝑖,𝑚 :
+AM[vid, S, 𝑖,R] ̸= (𝑎,𝑚, 𝑒)
+return true
+Figure 17: Compatibility oracles of the security game for secure
+group-messaging schemes.
+E SGM CONSTRUCTION
+In this section we formally define the helper functions of our SGM
+construction.
+// Returns ids, wpks, of new parties
+*added(P)
+ID[·]← Y
+wpk[·]← Y
+𝑖 ← 1 for 𝑃 ∈ P
+if 𝑃 = ("add", ·, ·, (ID𝑎, kb′), ·)
+(wpk, ·)← kb′
+ID[𝑖]← ID𝑎
+wpk[𝑖]← wpk
+𝑖++
+return (ID,wpk)
+// Returns spks after applying props
+*new-spks(epid, P)
+spk← s.Ep-SPK[epid]
+for 𝑃 ∈ P
+if 𝑃 = ("add", ·, ·, (ID𝑎, kb′), ·)
+(·, spk)← kb′
+spk[ID𝑎]← spk
+if 𝑃 = ("rem", ·, ·, ID𝑟 , ·)
+spk[ID𝑟 ]← Y
+if 𝑃 = ("upd", ·, ID𝑢 , spk, ·)
+spk[ID𝑢 ]← spk
+return spk
+// Returns position of ID in roster
+*roster-pos(ID,G)
+[ID1, . . . , ID𝑛]← G
+for 𝑖 ∈ [1, 𝑛]
+if ID𝑖 = ID
+return 𝑖
+// Returns Proposal Info
+*get-propInfo(P′)
+if P′ = ("add", ·, ID𝑠 , (ID𝑎, kb′), ¯P)
+op = add
+orig = ID𝑠
+(wpk, spk)← kb′; data = (ID𝑎,wpk, spk)
+if P′ = ("rem", ·, ID𝑠 , ID𝑟 , ¯P)
+op = rem
+orig = ID𝑠
+data = ID𝑟
+if P′ = ("upd", ·, ID𝑠 , spk, ¯P)
+op = upd
+orig = ID𝑠
+data = spk
+return (op, orig, data)
+Figure 18: The SGM Construction : Helper Algorithm.
+Helpers. *added receives a vector of proposals P and returns the
+ids and welcome public keys of newly added members. *new-spks
+receives an epoch id and vector of proposals, (epid,P), and returns
+the public verification keys for the ids affected by the proposals in P.
+*roster-pos returns the position of ID in G, and *get-propInfo
+receives a proposal P
+′
+and returns the proposal information, namely
+the operation, op, the proposal origin, orig, and the data, data,
+where if op = add, data holds the id, ID𝑎 , welcome key material,
+wpk, and the signature verification key spk, of the newly added
+member. If op = rem, data holds the id of the removed party ID𝑟 ,
+and if op = upd, data holds the updated verification key spk.
+Session 5C: Messaging and Privacy  CCS ’21, November 15–19, 2021, Virtual Event, Republic of Korea
+1483
+	Abstract
+	Acknowledgments
+	1 Introduction
+	2 Preliminaries
+	3 Formal Definition of Secure Group Messaging
+	3.1 Syntax
+	3.2 Security
+	3.2.1 Bookkeeping.
+	3.2.2 Initialization.
+	3.2.3 Oracles.
+	3.2.4 PKI Oracles.
+	3.2.5 Main oracles.
+	3.2.6 Privacy-related safety.
+	3.2.7 Advantage.
+	4 Modularizing MLS and Proving Its Security
+	4.1 Continuous Group Key Agreement
+	4.2 Forward-Secure Group AEAD
+	4.3 PRF-PRNGs
+	4.4 Plugging things together
+	4.4.1 Security.
+	References
+	A Continuous Group Key Agreement
+	A.1 Syntax
+	A.2 Security
+	A.2.1 Bookkeeping.
+	A.2.2 Initialization.
+	A.2.3 Oracles.
+	A.2.4 PKI.
+	A.2.5 Main oracles.
+	A.2.6 Safety.
+	A.2.7 Advantage.
+	B Forward-Secure Group AEAD
+	B.1 Syntax
+	B.2 Security
+	B.2.1 Main oracles.
+	B.2.2 Privacy-related safety.
+	B.2.3 Advantage.
+	C PRF-PRNGs
+	C.1 Syntax
+	C.2 Security
+	C.2.1 Advantage.
+	D Secure Group Messaging
+	E SGM Construction

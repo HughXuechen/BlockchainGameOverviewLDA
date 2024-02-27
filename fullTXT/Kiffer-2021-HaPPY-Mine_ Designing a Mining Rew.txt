@@ -1,0 +1,1193 @@
+HaPPY-Mine: Designing a Mining Reward Function
+HaPPY-Mine: Designing a Mining Reward
+Function
+Lucianna Kiffer(B) and Rajmohan Rajaraman
+Northeastern University, Boston, MA, USA
+{lkiffer,rraj}@ccs.neu.edu
+Abstract. In cryptocurrencies, the block reward is meant to serve as the
+incentive mechanism for miners to commit resources to create blocks and
+in effect secure the system. Existing systems primarily divide the reward
+in proportion to expended resources and follow one of two static models
+for total block reward: (i) a fixed reward for each block (e.g., Ethereum),
+or (ii) one where the block reward halves every set number of blocks
+(e.g., the Bitcoin model of halving roughly every 4 years) but otherwise
+remains fixed between halvings. In recent work, a game-theoretic anal-
+ysis of the static model under asymmetric miner costs showed that an
+equilibrium always exists and is unique [4]. Their analysis also reveals
+how asymmetric costs can lead to large-scale centralization in blockchain
+mining, a phenomenon that has been observed in Bitcoin and Ethereum
+and highlighted by other studies including [11,16].
+In this work we introduce a novel family of mining reward functions,
+HaPPY-Mine (HAsh-Pegged Proportional Yield), which peg the value of the
+reward to the hashrate of the system, decreasing the reward as the hashrate
+increases. HaPPY-Mine distributes rewards in proportion to expended
+hashrate and inherits the safety properties of the generalized proportional
+reward function established in [9]. We study HaPPY-Mine under a hetero-
+geneous miner cost model and show that an equilibrium always exists with
+a unique set of miner participants and a unique total hashrate. Signifi-
+cantly, we prove that a HaPPY-Mine equilibrium is more decentralized than
+the static model equilibrium under a set of metrics including number of
+mining participants and hashrate distribution. Finally, we show that any
+HaPPY-Mine equilibrium is also safe against collusion and sybil attacks, and
+explore how the market value of the currency affects the equilibrium.
+1 Introduction
+Existing cryptocurrencies rely on block rewards for two reasons: to subsidize
+the cost miners incur securing the blockchain and to mint new coins. Miners in
+major cryptocurrencies like Bitcoin and Ethereum participate in the protocol
+by packaging user transactions into blocks and incorporating those blocks into
+We thank the anonymous reviewers and Yonatan Sompolinsky for their helpful com-
+ments. The first author was supported by a Facebook Fellowship and Dfinity Scholar-
+ship. This work was also partially supported by NSF grant CCF-1909363. This work
+was initiated when the first author was at an internship at DAGlabs.
+c© International Financial Cryptography Association 2021
+N. Borisov and C. Diaz (Eds.): FC 2021, LNCS 12675, pp. 250–268, 2021.
+https://doi.org/10.1007/978-3-662-64331-0_13
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-662-64331-0_13&domain=pdf
+https://doi.org/10.1007/978-3-662-64331-0_13
+HaPPY-Mine: Designing a Mining Reward Function 251
+the blockchain (the global record of all transactions that have taken place in
+the system). Creating a block involves significant computational power where
+the miner preforms iterations of some kind of computation, the proof of work,
+generally iterating over a hash function. This work, whether on a CPU, GPU or
+other specialized hardware, comes at a cost to the miner. To compensate miners
+for incurring this cost and to incentivize more miners to join, miners collect
+a block reward of newly minted coins for each block that gets added to the
+blockchain. In expectation, miners are rewarded in proportion to the resources
+they contribute. This computational work is also what cryptographically ties
+each block in the blockchain together and makes it so that anyone wanting to
+fork the blockchain, i.e. erase transactions by creating their own version of a
+subset of the chain, would have to redo an equivalent amount of work. The
+more resources miners invest in the system, the greater the system hashrate, the
+more expensive this attack becomes. In effect, the computational work of miners
+secures the blockchain system by making the blockchain immutable.
+There are two common frameworks for the block reward function in terms
+of distribution of supply. Bitcoin’s protocol has a set maximum number of coins
+that will ever be minted, therefore the mining reward diminishes over time. The
+mining reward halves every 210,000 blocks (approximately every 4 years). For
+now, miners continue to profit since the value of each Bitcoin has increased
+over time making up for the decrease in reward with increases system hashrate.
+Eventually though, the mining reward will reach zero and miners will be repaid
+solely in transaction fees for the transactions they include in the blocks they
+mine. Another cryptocurrency, Ethereum, currently has in its protocol a fixed
+mining reward of 5 Ethers for all blocks ever. This means that the supply of
+Ether is uncapped and the mining hashrate can grow linearly in the market
+value of Ether.
+In general miner costs are asymmetric [1] with miners with access to low-
+cost electricity or mining hardware being at an advantage. This has led to large
+centralization in both Bitcoin and Ethereum mining, with a significant portion
+of the hashrate being controlled by a few mining pools [2,3,11]. This prevents
+other players from having a share of the market. We ask the question, can we
+design a mining reward function that alleviates these problems?
+1.1 Main Contributions
+In this paper, we develop a novel hashrate-based mining reward function,HaPPY-
+Mine, which sets the block reward based on the system hashrate. HaPPY-Mine is
+defined so that as the system hashrate increases, the block reward smoothly
+decreases. We now outline the main contributions of this paper.
+1. We introduce the notion of a hashrate-pegged mining reward function, and
+formally argue that it can help in decentralizing the blockchain by reducing
+the hashrate that a new miner is incentivized to buy.
+2. We present HaPPY-Mine, a family of hashrate-pegged mining reward func-
+tions that dispense rewards in proportion to the expended hashrate. We con-
+duct a rigorous equilibrium analysis of the HaPPY-Mine family under general
+252 L. Kiffer and R. Rajaraman
+miner costs. We establish that equilibria always exist, and are more decen-
+tralized than an equlibrium under the static reward function: in particular,
+HaPPY-Mine equilibria have at least as many participating miners as and lower
+total hashrate than an equilibrium for the static reward function.
+3. We show that HaPPY-Mine equilibria (as well as that of a static reward func-
+tion) are resistant to any collusion attack involving fewer than half the miners,
+and that a Sybil attack does not increase the utility of the attacker.
+4. We finally consider the scenario where rewards are issued in the currency of
+the blockchain and study the effect of the change in the currency’s value on
+the equilibrium. We show that in HaPPY-Mine, an increase in the value of the
+cryptocurrency allows more higher cost miners to participate, again resulting
+in greater decentralization as compared to an equilibrium under the static
+reward function.
+Outline of the Paper. We begin in Sect. 2 with a description of the equilibrium
+analysis of [4], which provides a basic game-theoretic framework that we build
+on. We also describe the properties satisfied by the generalized proportional allo-
+cation rule of [9], of which our function is a special case. In Sect. 3 we introduce
+our hash-pegged mining reward function and in Sect. 4 we analyze its equilibria.
+We analyze other factors that impact the equilibria in Sect. 5. We conclude with
+a discussion on the practicality of implementing the hash-pegged mining reward
+function in a system and with future and related work in Sects. 6 and 7.
+2 Background
+In this paper, we follow a miner model of asymmetric costs with rewards being
+awarded in proportion to expended resources(hashrate). Our study builds on
+an analysis framework developed in [4]. In this section, we first summarize the
+model of [4] and their equilibrium analysis of a static reward function for mining.
+We next review proportional allocation, used in both the static reward function
+and HaPPY-Mine, and state salient properties established in [9].
+Equilibrium Analysis of Static Reward Function. The simple proportional
+model introduced in [4] has n miners with costs c1, c2, . . . , cn where c1 ≤ c2 ≤
+· · · ≤ cn ≤ ∞. A miner i who invests qi hashrate at a cost of ciqi has mining
+reward and utility given by
+xi(q) =
+qi∑
+j qj
+and Ui(q) = xi(q) − ciqi,
+respectively. The main result of [4] is that there is a unique pure strategy equi-
+librium where each miner invests
+qi =
+1
+c∗ max(1 − ci/c∗, 0)
+for the unique value c∗ s.t. X(c∗) = 1 where
+X(c) =
+∑
+i
+max(1 − ci/c, 0).
+HaPPY-Mine: Designing a Mining Reward Function 253
+The value c∗ thus serves as a bound for which miners participate, with a miner
+i participating if ci < c∗. They also show that the number of miners must be
+finite for there to be an equilibrium strategy and that even countably infinite
+miners would not have an equilibrium strategy.
+Properties of Proportional Allocation. In [9], the authors define a set
+of properties that allocation rules can satisfy: non-negativity, budget-balance
+(strong- means all the reward is allocated, weak- means less or all of the reward is
+allocated), symmetry (two miners with equal hashrate get equal reward), sybil-
+proofness (can’t split hashrate and get more reward) and collusion-proofness
+(can’t join hashrates and get more). They prove that the proportional allocation
+rule is the only rule that satisfies all of the above properties. They also define a
+generalized proportional allocation rule as
+xi(q) = f(
+∑
+j
+qj)
+qi∑
+j qj
+for some function f which takes in the sum of hashrate and returns the amount
+of reward that will be allocated. The static reward function is an example of
+the generalized proportional allocation rule with f(
+∑
+j qj) = 1. In HaPPY-Mine,
+we provide a family of functions for f . These functions follow the generalized
+proportional allocation rule and, hence, satisfy all of the above properties with
+a weak budget-balance as, by definition, the full reward value is not always
+rewarded (i.e. f(
+∑
+j qj) ≤ 1).
+3 Hashrate-Pegged Block Reward
+We now introduce the notion of a hash-pegged mining reward function. We con-
+sider a miner’s decision of how much hashrate to purchase when they are joining
+the system. In this section, we consider a simplified model where the network
+currently has hashrate 1 with network operational cost c and mining reward of
+1 per block such that mining is profitable, i.e. c < 1 and the system’s utility is
+U = 1 − c. Given the network hashrate H =
+∑
+j qj , we consider block reward
+r(H) =
+(
+1
+H
+)δ
+for a given parameter δ ≥ 0 such that any additional hashrate added to the
+system decreases the block reward1.
+The focus of this section is on answering the following question: Given a new
+miner with cost ci, how much hashrate is this new miner incentivized to buy?
+That is, what qi maximizes their utility
+Ui(q) =
+qi
+1 + qi
+r(1 + qi) − ciqi?
+1 Note that our r(H) function is replacing [9]’s c function. We change notation so as
+not to confuse the reward with the cost of hashrate.
+254 L. Kiffer and R. Rajaraman
+Case: δ = 0, Static Reward. First consider the fixed reward system where
+the reward is always 1. A new miner joining the system with hashrate qi will
+have utility Ui(q) = qi
+qi+1 − ciqi which they want to maximize. By solving for
+U ′
+i(q) = 0 with qi > 0 and ci < 1, we find that the miner maximizes their utility
+by buying hashrate qi =
+√
+1
+ci
+− 1.
+Case: δ = 1, Linear Decrease in Reward. With r(H) = 1
+H , a miner now
+wants to maximize Ui(q) = qi
+(qi+1)2 − ciqi. We can’t easily solve for U ′
+i(q) =
+1
+(qi+1)2 − 2qi
+(qi+1)3 −ci = 0. What we can observe is that Ui”(q) = 6qi
+(qi+1)4 − 4
+(qi+1)3
+and that Ui”(q) < 0 for qi < 2, i.e. Ui(q) is concave down when a miner buys
+less than double the current hashrate of the system. Since U ′
+i(qi =
+√
+1
+ci
+− 1) =
+2ci(
+√
+ci − 1) < 0 for ci < 1, we obtain that for a miner that’s acquiring less
+than twice the current system hashrate, the hashrate bought by the miner under
+a linearly diminishing reward ( δ = 1) is less than that bought under a static
+reward (δ = 0). (For a miner buying more than twice the hashrate (qi ≥ 2), ci
+would have to be sufficiently small for this to be profitable i.e. ci < 1
+(1+qi)2
+< 1
+9 .)
+General δ. We now analyze the impact of a more drastic decay function (larger
+δ) on the optimal hashrate bought by a new miner joining the system. When a
+new miner joins with additional hashrate qi, the mining reward becomes ( 1
+qi+1 )δ,
+where 0 ≤ δ < ∞. The utility function is now Ui(q) = qi
+qi+1 ( 1
+qi+1 )δ − ciqi =
+qi
+(qi+1)δ+1 − ciqi.
+Proposition 1. The optimal hashrate for a newminer decreases with increasing δ.
+Our proof proceeds in two steps. We show that (1) the utility is a concave
+function at the maxima and (2) the derivative of the utility w.r.t. qi is decreasing
+in δ. We then obtain that the utility maximum (i.e. the qi s.t. U ′
+i(q) = 0) is
+decreasing with an increase in δ. Due to space constraints, we defer the proof to
+the full version of this paper [14].
+Thus, if we increase the δ exponent in the total block reward, we decrease the
+hashrate that a new miner is incentivized to buy. While this may not have an
+effect for smaller miners who do not have the resources to purchase their maximal
+utility hashrate, Proposition 1 demonstrates that a hash-pegged reward function
+can be a useful decentralization tool that disincentivizes rational big miners from
+joining the system with a large fraction of the hashrate.
+Note that Proposition 1 does not take into account the dynamic game
+between different miner’s choices. We now formally define the above fam-
+ily of hash-pegged mining reward functions for arbitrary system hashrate as
+HaPPY-Mine and analyze the equilibria given a set of miners with asymmetric
+costs.
+HaPPY-Mine: Designing a Mining Reward Function 255
+4 HaPPY-Mine Equilibrium Analysis
+Building on the model of [4] we define a non-cooperative game between m miners
+with cost c1 ≤ c2 ≤ · · · ≤ cm where each miner i with hashrate qi has utility
+Ui(q) = xi(q) − ciqi.
+In HaPPY-Mine we set the maximal block reward to be 1 and have the reward
+start to decrease after the system’s hashrate surpasses Q, for a parameter Q > 0.
+We define the reward for miner i as
+xi(q) =
+qi∑
+j qj
+r(q) where r(q) = min
+⎛
+⎝1,
+(
+Q
+∑
+j qj
+)δ
+⎞
+⎠
+for system parameter δ ∈ [0,∞).
+The main results of this section concern the existence and properties of pure
+Nash equilibria for the above HaPPY-Mine game. We begin our analysis by dif-
+ferentiating r(q) and xi(q) with respect to qi, and finding the derivative of Ui(q)
+w.r.t. qi.
+U ′
+i(q) =
+⎧
+⎨
+⎩
+∑
+j qj−qi
+(
+∑
+j qj)2
+− ci if
+∑
+j qj < Q
+Qδ
+(
+∑
+j qj)δ+2 [
+∑
+j qj − (δ + 1)qi] − ci if
+∑
+j qj > Q
+Recall that for equilibria we need that U ′
+i(q) ≤ 0 with equality for qi > 0. (For
+the case
+∑
+j qj = Q, we need the left and right derivatives to be nonnegative
+and nonpositive, respectively.)
+4.1 Examples with Diverse Cost Scenarios
+We work through some cost examples to gain intuition for the equilibrium anal-
+ysis of the above reward function.
+Example 1. First we consider a general 2-miner case with δ and Q set to 1. In
+this model we have 2 miners with costs c1, c2 s.t. c1 ≤ c2. See the full version
+of this paper [14] for the full analysis. If c1 + c2 > 1 we use the analysis of [4]
+with reward 1 and obtain that the equilibrium hashrate is q1 + q2 < Q = 1 with
+qi = 1
+c1+c2
+(1 − ci
+c1+c2
+). If c1 + c2 ≤ 1, then there are multiple equilibria where
+α + β = 1 with 1−c1
+2 ≤ α ≤ 1 − c1 and 1−c2
+2 ≤ β ≤ 1 − c2. Note the equilibria
+system hashrate with two miners is always ≤ Q = 1.
+Taking c1 + c2 ≤ 1, let us consider the total utility of an equilibrium.
+max
+α,β
+(U1 + U2) = max
+α,β
+(1 − c1α − c2β) = max
+α
+(1 − c2 + (c2 − c1)α)
+Thus, a utilitarian equilibrium is one where α is maximized, i.e. α = 1− c1. The
+utilitarian equilibrium is thus the one with maximal utility for the miner with
+least cost and lowest utility for the miner with most cost.
+256 L. Kiffer and R. Rajaraman
+Example 2. ci = i
+i+1 We now consider an example from [4] where the cost func-
+tion ci = i
+i+1 , still considering δ = Q = 1. This case is interesting because in
+the static reward case (i.e. Ui(q) = qi∑
+i qi
+− qici) the equilibrium strategy has that
+∑
+i qi > 1 and that only the first 7miners participate.This equilibriumpointwould
+have less reward in HaPPY-Mine and thus may no longer be the equilibrium point.
+We solve this in the full version of this paper [14] and find that
+qi =
+1
+2
+√
+n − 2
+∑n
+j=1
+j
+j+1
+(1 − (n − 2)i
+∑n
+j=1
+j
+j+1 (i + 1)
+)
+for all miners that participate in equilibrium. We can iterate over n to find that
+with this strategy, equilibrium exists at n = 25, i.e. for n > 25 only the first 25
+miners participate otherwise all miners participate. Thus HaPPY-Mine with δ = 1
+results in an equilibrium with more miners participating than in the equilibrium
+under a static reward function.
+Example 3. ci = c for All i. The next example we consider is the case of homo-
+geneous cost with m miners, Q = 1 and any δ. See the full version of this paper
+[14] for the full analysis. For c > m−1
+m , we can use the analysis of [4] and obtain
+qi = m−1
+m2c with
+∑
+i qi = m−1
+mc < 1. For m−δ−1
+m ≤ c ≤ m−1
+m , an equilibrium exists
+at
+∑
+i qi = 1 where qi = 1
+m . Finally for c < m−δ−1
+m we get an equilibrium strategy
+with
+∑
+i qi > 1 where qi = 1
+m
+δ+1
+√
+m−δ−1
+cm . In each case the equilibrium hashrate
+forHaPPY-Mine for any δ is less than or equal to that of the static reward equilibria.
+In Corollary 2 below, we show this in fact holds for any set of costs.
+4.2 General Analysis of HaPPY-Mine
+We now analyze the equilibria for the general case of HaPPY-Mine with m > δ+1
+miners with costs c1 ≤ c2 ≤ ... ≤ cm < cm+1 = ∞. Recall the utility function
+Ui(q) =
+⎧
+⎨
+⎩
+qi∑
+j qj
+− qici if
+∑
+j qj ≤ Q
+qi∑
+j qj
+( Q∑
+j qj
+)δ − qici o/w
+In the propositions below we first derive necessary conditions for an equi-
+librium to exist in different cases depending on how the system hashrate
+∑
+i qi
+compares with Q. Taking these propositions we derive lemmas proving the exis-
+tence of equilibria given any set of miner costs. The lemmas also prove the
+impossibility of equilibria to exist simultaneously for different values of
+∑
+i qi,
+i.e. the uniqueness of the equilibria. We finish this section with our final theorem
+statement defining the equilibria values given a set of costs, as well as corollaries
+on the properties of the equilibria.
+Proposition 2 (Necessary condition for equilibrium with total
+hashrate less than Q, [4]). If
+∑
+i qi < Q at equilibrium then there exists
+a c∗ > 1/Q such that X(c∗) = 1 and all miners i with ci < c∗ participate with
+qi = 1
+c∗ (1 − ci/c∗).
+HaPPY-Mine: Designing a Mining Reward Function 257
+Proof. If
+∑
+i qi < Q then miners have utility function Ui(q) = qi∑
+j qj
+− qici which
+is the same as the simple proportional model of [4] where there is an equilibrium
+strategy with qi = 1
+c∗ max(1 − ci/c∗, 0) for c∗ such that X(c∗) = 1. In this
+analysis
+∑
+j qj = 1
+c∗ , and so for
+∑
+j qj < Q we have c∗ > 1/Q. ��
+Proposition 3 (Necessary condition for equilibrium with total
+hashrate equal to Q). If
+∑
+i qi = Q at equilibrium then all miners with
+cost ci < 1/Q participate and satisfy
+1
+δ + 1
+(Q − ciQ
+2) ≤ qi ≤ Q − ciQ
+2
+Proof. Assume there is an equilibrium strategy such that
+∑
+i qi = Q. The utility
+of a miner i is given by
+Ui(q) = qi(
+1
+Q
+− ci) ≤ 0
+so miners with cost ci > 1/Q will not participate; those with ci < 1/Q will.
+We take the n miners for which ci ≤ 1/Q.
+∑
+i qi = Q is an equilibrium iff,
+U ′
+i(q) =
+{
+1
+Q2 [Q − qi] − ci ≥ 0 for
+∑
+j qj < Q
+Qδ
+Qδ+2 [Q − (δ + 1)qi] − ci ≤ 0 for
+∑
+j qj > Q
+and thus, any equilibrium strategy satisfies
+1
+δ + 1
+(Q − ciQ
+2) ≤ qi ≤ Q − ciQ
+2
+Note that ci = 1/Q implies qi = 0, so a miner with cost 1/Q does not participate.
+Thus, exactly those miners with ci < 1/Q participate in an equilibrium. ��
+Proposition 4 (Necessary condition for equilibrium with total
+hashrate more than Q). If
+∑
+i qi > Q at equilibrium then there exists a
+c† < 1/Q such that X(c†) = δ + 1 and all miners with cost ci < c† participate
+with
+qi =
+δ+1
+√
+Qδ
+(δ + 1) δ+1
+√
+c† (1 − ci/c†)
+Proof. Assume first there exists an equilibrium where miner i + 1 participates
+and miner i does not with sum of hashrate H. This means
+U ′
+i+1(q) =
+Qδ
+Hδ+2
+[H − (δ + 1)qi+1] − ci+1 = 0,
+and thus ci+1 = Qδ
+Hδ+2 [H − (δ + 1)qi+1]. For qi = 0 we get U ′
+i(q) = Qδ
+Hδ+1 − ci ≤ 0
+which means Qδ
+Hδ+1 ≤ ci, putting both together we get
+Qδ
+Hδ+1
+≤ ci ≤ ci+1 =
+Qδ
+Hδ+2
+[H − (δ + 1)qi+1],
+258 L. Kiffer and R. Rajaraman
+which implies qi+1 ≤ 0, a contradiction to miner i+1 participating. Thus in any
+equilibrium, if miner i + 1 participates, then miner i must also participate.
+Letting H =
+∑
+i qi > Q, for a miner i that participates in equilibrium
+U ′
+i(q) =
+Qδ
+Hδ+2
+[H − (δ + 1)qi] − ci = 0 =⇒ qi =
+H
+δ + 1
+(1 − Hδ+1
+Qδ
+ci).
+Assuming that only the first n miners participate in equilibrium, we solve for H
+H =
+n∑
+i=1
+qi =
+n∑
+i=1
+H
+δ + 1
+(1 − Hδ+1
+Qδ
+ci) = δ+1
+√
+Qδ(n − δ − 1)
+∑n
+i=1 ci
+.
+This also means player n + 1 must have U ′
+n+1(q) ≤ 0 at qn+1 = 0, so we get
+U ′
+n+1(q) =
+Qδ
+Hδ+1
+[H − (δ + 1)qn+1] − cn+1 =
+Qδ
+Hδ+1
+− cn+1 ≤ 0,
+=⇒ Qδ
+Hδ+1
+=
+∑n
+i=1 ci
+n − δ − 1
+≤ cn+1.
+Let c† be the bound for which miners participate, i.e. miner i participates iff
+ci < c†. Then from the above we get that c† =
+∑n
+i=1 ci
+n−δ−1 . Rewriting this and using
+the fact that ci/c∗ ≥ 1 for ci ≥ c†, we obtain
+∑
+i
+max(1 − ci/c†, 0) = δ + 1,
+co-opting the X(c) equation for c† s.t. X(c†) = δ + 1. Since c† = Qδ
+Hδ+1 it must
+be that c† < 1/Q. Lastly we plug c† into the equation for qi and get
+qi =
+δ+1
+√
+Qδ
+(δ + 1) δ+1
+√
+c† (1 − ci/c†). ��
+We now use Propositions 2, 3, and 4 to establish the following lemmas, which
+will help prove our main theorem. We first define c∗ as the value for which
+X(c∗) = 1 and, for m > δ + 1, c† as the value for which X(c†) = δ + 1. Note
+that X(c) is a continuous increasing function in c and thus c∗ < c†.
+Lemma 1 (Equilibrium when c∗ > 1/Q). If c∗ > 1/Q, then there exists a
+unique equilibrium strategy with
+∑
+i qi < Q
+Proof. We know from Proposition 2 that there is an equilibrium strategy with∑
+i qi = 1
+c∗ < Q. Since c∗ > 1/Q that implies c† > 1/Q so by Proposition 4 there
+is not an equilibrium strategy with
+∑
+i qi > Q. Finally, lets assume there is an
+equilibrium strategy with
+∑
+i qi = Q. Recall from Proposition 3 that all miners
+with cost < 1/Q participate, so let n be those miners s.t. ci < 1/Q for i ≤ n.
+From the definition of X(c) we have that
+∑n
+i=1 1− ci/c∗ ≤ 1 which we can solve
+to be c∗(n − 1) ≤ ∑n
+i=1 ci and we get n−1
+Q <
+∑n
+i=1 ci. From Proposition 3 we
+have that qi ≤ Q − ciQ
+2 for all i ≤ n. Thus
+∑n
+i=1 qi ≤ ∑n
+i=1 Q − ciQ
+2 which
+solves to
+∑n
+i=1 ci ≤ n−1
+Q , and thus there is no equilibrium at
+∑
+i qi = Q. ��
+HaPPY-Mine: Designing a Mining Reward Function 259
+Lemma 2 (Equilibrium when c∗ ≤ 1/Q ≤ c†). If c∗ ≤ 1/Q ≤ c† then there
+exists at least one equilibrium at
+∑
+i qi = Q and any equilibrium strategy has∑
+i qi = Q with a miner i participating iff ci < 1/Q.
+Proof. First, since c∗ ≤ 1/Q we know from Proposition 2 there is no equilibrium
+at
+∑
+i qi < Q, and since c† ≥ 1/Q we know from Proposition 4 there is no equi-
+librium at
+∑
+i qi > Q. Finally from Proposition 3, for there to be an equilibrium
+at
+∑
+i qi = Q we need for each miner i with ci < 1/Q, qi must satisfy
+1
+δ + 1
+(Q − ciQ
+2) ≤ qi ≤ Q − ciQ
+2.
+Summing over all n s.t. ci < 1/Q for i ≤ n, and simplifying, we derive
+n − δ − 1
+Q
+≤
+n∑
+i=1
+ci ≤ n − 1
+Q
+Taking the fact that c∗ ≤ 1/Q we get
+∑n
+i=1 1 − ci/c∗ ≥ 1 which simplifies to
+c∗(n−1) ≥ ∑n
+i=1 ci. Taking the fact that c† ≥ 1/Q we get
+∑n
+i=1 1−ci/c† ≤ δ+1
+which simplifies to c†(n − δ − 1) ≤ ∑n
+i=1 ci. Putting these together, we obtain
+n − 1
+Q
+≥
+n∑
+i=1
+ci ≥ n − δ − 1
+Q
+��
+Lemma 3 (Equilibrium when c† < 1/Q). If c† < 1/Q then there exists a
+unique equilibrium strategy with
+∑
+i qi > Q.
+Proof. We know from Proposition 4 that there is a unique equilibrium strategy
+with
+∑
+i qi = δ+1
+√
+Qδ
+c† > Q. Since c∗ < c† we know from Proposition 2 there is
+not an equilibrium strategy with
+∑
+i qi < Q. Take the n miners s.t ci < c† for
+i ≤ n. From the definition of X(c) we have
+n∑
+i=1
+1 − ci/c† = δ + 1 =⇒
+n∑
+i=1
+ci = c†(n − δ − 1) <
+n − δ − 1
+Q
+.
+Assume there is an equilibrium with
+∑
+i qi = Q. By Proposition 3, miner i s.t.
+ci < 1/Q participates with 1
+δ+1 (Q−ciQ
+2) ≤ qi. If there are n miners s.t. ci < c†,
+n∑
+i=1
+1
+δ + 1
+(Q − ciQ
+2) ≤
+n∑
+i=1
+qi ≤ Q =⇒ n − δ − 1
+Q
+≤
+n∑
+i=1
+ci
+which is a contradiction. Thus, there is no equilibrium with
+∑
+i qi = Q. ��
+We can now put together the above lemmas to get our main result:
+260 L. Kiffer and R. Rajaraman
+Theorem 1. For any δ ∈ [0,∞) and m ≥ 2 miners with costs c1 ≤ c2 ≤ ... ≤
+cm < cm+1 = ∞, let
+X(c) =
+∑
+i
+max(1 − ci/c, 0)
+and c∗ s.t X(c∗) = 1 and (if m > δ + 1) let c† s.t. X(c†) = δ + 1. HaPPY-Mine
+with Q > 0 has equilibria as follows with system hashrate
+∑
+i qi = H:
+(a) if c∗ > 1/Q, there is a unique equilibrium with H = 1
+c∗ < Q with
+qi = max(
+1
+c∗ (1 − ci/c∗), 0)
+(b) if c∗ ≤ 1/Q ≤ c† or c∗ ≤ 1/Q and m ≤ δ+1, there exists an equilibrium and
+every equilibrium satisfies H = Q, with qi = 0 for ci ≥ 1/Q, and otherwise
+1
+δ + 1
+(Q − ciQ
+2) ≤ qi ≤ Q − ciQ
+2
+(c) if c† < 1/Q, m > δ+1, there is a unique equilibrium with H = δ+1
+√
+Qδ
+c† > Q,
+qi = max(
+δ+1
+√
+Qδ
+(δ + 1) δ+1
+√
+c† (1 − ci/c†), 0)
+Proof. The case c∗ > 1/Q follows directly from Lemma 1. Next we consider
+c∗ ≤ 1/Q and m ≤ δ + 1. Since c∗ ≤ 1/Q we know from Proposition 2 there is
+no equilibrium at
+∑
+i qi < Q. For equilibria with
+∑
+i qi = H > Q we need that
+U ′
+i(q) = 0 for all miners who participate which gives us that qi = H
+δ+1 [1−ci
+Hδ+1
+Qδ ].
+Assuming only the first n miners participate, we get H =
+∑n
+i qi =
+∑n
+i
+H
+δ+1 [1 −
+ci
+Hδ+1
+Qδ ]. We can simplify this to be Hδ+1
+Qδ
+∑n
+i ci = n − δ − 1 < 0 which is not
+satisfiable. The only option for equilibria is then for
+∑
+i qi = Q which we get from
+Proposition 3 iff 1
+δ+1 [Q − Q2ci] ≤ qi ≤ Q − Q2ci for all miners with ci < 1/Q.
+Summing over all miners i ≤ n s.t ci < 1/Q we get n−δ−1
+Q ≤ ∑n
+i ci ≤ n−1
+Q must
+be satisfied. Notice that the left-most expression is negative so the left expression
+is satisfied. We know c∗ ≤ 1/Q thus X(1/Q) =
+∑n
+i 1 − ciQ ≥ 1 which simplifies
+to
+∑n
+i ci ≤ n−1
+Q . Finally for m > δ + 1, the case for c∗ ≤ 1/Q ≤ c† follows from
+Lemma 2 and the case for c† < 1/Q follows from Lemma 3. ��
+In the following two corollaries we examine how the equilibria of HaPPY-Mine
+changes with the parameter δ in terms of miner participation and the system
+hashrate. In particular we show that any HaPPY-Mine equilibria has at least as
+many miners participating (with at most the same system hashrate) as in the
+static reward function equilibria.
+Corollary 1. For any m miners with costs c1 ≤ c2 ≤ ... ≤ cm, HaPPY-Mine with
+any Q, δ has equilibria with at least as many miners participating as the static
+reward function. Furthermore, the number of miners participating in equilibria
+for HaPPY-Mine monotonically increases in δ.
+HaPPY-Mine: Designing a Mining Reward Function 261
+Proof. By the analysis of [4] under the simple proportional model, the static
+reward function has a unique equilibrium with all miners whose cost ci < c∗
+participating s.t X(c∗) = 1. HaPPY-Mine has at least all the same miners partici-
+pating in 3 scenarios: ci < c∗ for c∗ > 1/Q, ci < 1/Q for c∗ ≤ 1/Q and m ≤ δ+1
+or 1/Q ≤ c† and ci < c† for c† < 1/Q where c∗ < c†, i.e. in all four cases, all
+miners with ci < c∗ are participating and possibly additional miners.
+For the general statement, take any δ-HaPPY-Mine equilibrium. If c∗ > 1/Q,
+regardless of how you change δ, c∗ remains fixed so by Lemma 1, the equilibrium
+remain the same with the same miners. Suppose instead c∗ ≤ 1/Q ≤ c†, as δ
+increases c† increases. Thus for a larger δ, the equilibrium remains at
+∑
+i qi = Q
+with the same miners of cost ci < 1/Q participating. If c† < 1/Q, then since c†
+acts as an upper-bound for which miners participate, as δ increases, this upper
+bound increases. This upper bound caps at 1/Q; then we switch to the second
+equilibrium case where all miners with ci < 1/Q participate. ��
+Corollary 2. HaPPY-Mine has equilibria with hashrate at most that of the static
+reward function. Furthermore, HaPPY-Mine equilibria hashrate is monotonically
+non-increasing with an increase in δ.
+Proof. We prove the second part of the statement and note that the static reward
+function is HaPPY-Mine with δ = 0, so the first statement follows. Given a set of
+costs, we consider the possible values of c∗ and c†. (a) If c∗ > 1/Q, then for any
+δ, H is always 1/c∗. (b) If c∗ ≤ 1/Q ≤ c† for some δ, then the equilibria hashrate
+for that δ is H = Q. As δ increases, the value of c† increases so the equilibrium
+hashrate will continue to be Q for any δ′ > δ. (c) If c† < 1/Q for some δ, we
+that H > Q and we have two cases to consider for δ′ > δ. Since c† increases as
+δ increases, either it increases s.t. c†
+new becomes ≥ 1/Q or m < δ′ + 1, in either
+case the new equilibrium hashrate would be H ′ = Q < H. The last case is that
+c† < c†
+new < 1/Q and m ≥ δ′ + 1. In this case we first assume H < H ′, i.e.
+H =
+Qδ/(δ+1)
+(c†)1/(δ+1)
+=
+Qδ′/(δ′+1)Qδ/(δ+1)−δ′/(δ′+1)
+(c†)1/(δ+1)
+≥Qδ′/(δ′+1)Qδ/(δ+1)−δ′/(δ′+1)
+(c†
+new)1/(δ+1)
+(c† < c†
+new)
+=
+Qδ′/(δ′+1)
+(c†
+new)1/(δ′+1)
+Qδ/(δ+1)−δ′/(δ′+1)
+(c†
+new)1/(δ+1)−1/(δ′+1)
+=H ′ Q(δ−δ′)/(δ+1)(δ′+1)
+(c†
+new)(δ′−δ)/(δ+1)(δ′+1)
+=H ′
+(
+1
+c†
+newQ
+)(δ′−δ)/(δ+1)(δ′+1)
+≥H ′ (c†
+newQ < 1 and δ′ > δ)
+��
+262 L. Kiffer and R. Rajaraman
+The previous corollaries together say that as δ increases, the number of miners
+who participate in equilibrium increases with the total hashrate of the system
+at equilibrium decreasing. We now explore what the impact of this is on the
+market share of miners. In particular we want to check that the new equilibrium
+does not disproportionately advantage lower cost miners. Unfortunately we can’t
+make such a strong statement, owing to the presence of multiple equilibria when
+the sum of hashrates equals Q. Instead, we get the following corollary which
+states that for most cases, a miner’s relative market share to any higher-cost
+miner does not go up. Formally, given two miners i, j with costs ci < cj and
+δ s.t. qi, qj > 0 at equilibrium (i.e. both miners participate at equilibrium), we
+define the relative market share rij(δ) as follows. If
+∑
+i qi 
+= Q, then there is
+a unique equilibrium, so we define rij(δ) to be qi/qj . Otherwise, there may be
+multiple equilibria and we define rij(δ) to be the ratio of the maximum value of
+qi to the maximum value of qj in equilibrium (defining it to be the ratio of the
+minimum values yields the same ratio).
+Corollary 3. For any two miners i, j with costs ci < cj, parameters δ, δ′ such
+that both miners participate in equilibrium at parameter δ, and δ′ > δ, rij(δ′) is
+at least rij(δ).
+Proof. Consider a miner who participates at equilibrium with a certain δ. Given
+a set of costs, we consider the possible values of c∗ and c†. (a) If c∗ > 1/Q, then
+for any δ, the equilibrium stays the same. (b) for c∗ ≤ 1/Q ≤ c†, any increase
+in δ does not change this inequality and thus the equilibrium conditions do not
+change and thus maintain the same equilibria maximum and minimum ratios
+(i.e. rij(δ) = rij(δ′) for all δ′).
+The only interesting case is thus (c) c† < 1/Q, as δ increases c† increases.
+Given a δ′ > δ, we compare the relative market share of two miners i, j where
+ci < cj as rij(δ′) = c†
+new−ci
+c†
+new−cj
+which is decreasing with an increase in c†
+new (i.e.
+increasing δ′). Thus, while c†
+new < 1/Q, a miner’s relative market share to any
+higher cost miner is decreasing.
+The only case left to consider is a δ′ > δ s.t. c†
+new ≥ 1/Q. The new equilibrium
+hashrate q′
+i for miners participating is bounded by 1
+δ+1 (Q − ciQ
+2) ≤ q′
+i ≤ Q −
+ciQ
+2. If we compare q′
+i, q
+′
+j at the bounds we get rij(δ′) = 1−ciQ
+1−cjQ which is less
+than the old relative market share of 1−ci/c†
+1−cj/c† since c† < 1/Q. ��
+5 Impact of Attacks and Currency on Equilibria
+Our equilibrium analysis in Sect. 4 assumes that the number of miners and their
+costs are known, and that the miner costs and rewards are in the same currency
+unit. In this section, we analyze certain attacks and events that may impact
+equilibria. We begin with the question: if miners are able to collude (two miners
+pretend to be a single miner) or duplicate themselves (a single miner pretends
+to be multiple miners), can they increase their own utility? In other words, are
+HaPPY-Mine equilibria resistant to miner collusion and sybil strategies? We show
+HaPPY-Mine: Designing a Mining Reward Function 263
+that HaPPY-Mine equilibria are resistant to collusion and Sybil attacks. We also
+study the effect of variable coin market value when reward is given in the coin of
+the blockchain. Due to space constraints, we state the main results for collusion
+resistance and the effect of variable coin market value, and refer the reader to
+the full version of this paper [14] for Sybil resistance and the missing proofs in
+this section.
+Collusion Resistance. We consider the case of m homogeneous miners.
+Lemma 4. Suppose m miners with uniform costs participate in HaPPY-Mine
+with parameters δ,Q. If k ≤ m/2 of the miners collude and act as one miner (so
+the game now has m − k + 1 miners), with each colluding miner receiving 1/k
+of the colluding utility, the utility achieved in an equilibrium with collusion is at
+most that achieved without collusion, assuming m is sufficiently large.
+In the heterogeneous cost model, it is unclear what collusion would mean
+for two miners with different costs, but one could imagine models where there
+are some miners with the same cost and they choose to collude. We leave this
+further analysis for future work. The general intuition we get from Lemma 4
+is that with fewer miners, the equilibrium hashrate decreases thus the reward
+may increase as the cost decreases. So for the miners who don’t collude, the
+equilibrium utility increases. But for miners who collude, they must then share
+the increased utility with all colluders, and it is unclear if the increase is enough
+to make up for splitting the utility into k parts.
+Variable Coin Market Value. In Sect. 4, we view the miner cost and reward
+in terms of the same currency unit. In reality, the reward is given in the coin
+of the blockchain being mined while cost is a real-world expense generally paid
+in the currency of the country where the mining is taking place. To bridge this
+gap we must understand how to convert real-world change in the price of the
+cryptocurrency to the relationship between the reward and the cost to miners.
+Consider the equilibrium analysis to be saying that a hashrate of 1 for miner
+i costs ci unit of cost (say dollars) and that one coin of the reward has 1 unit of
+worth (i.e. $1). Now, say the value of the currency changes by R, so one unit of
+currency is now worth $R. We are now interested in understanding what happens
+to the equilibrium of the system, i.e. which miners would now participate at
+equilibrium and with what hashrate?
+Lemma 5. In the static-reward model, an increase in the value of the cryptocur-
+rency by a factor of R results in a new equilibrium strategy where the same miners
+participate with Rqi hashrate where qi is the previous equilibrium hashrate. The
+new system hashrate thus increases by a factor of R.
+Lemma 6. In HaPPY-Mine, an increase in the value of the cryptocurrency by a
+factor of R results in the participation cost threshold to increase (allowing higher
+cost miners to participate), and the system hashrate to increase by a factor of R
+until it reaches Q, then increase by a factor of δ+1
+√
+R.
+264 L. Kiffer and R. Rajaraman
+6 Discussion
+In this paper we’ve presented a novel family of mining reward functions which
+adjust to the hashrate of the system. Our functions fall in the class of gen-
+eralized proportional allocation rules of [9] and thus inherit the properties of
+non-negativity, weak budget-balance, symmetry, sybil-proofness and collusion-
+proofness. These properties are defined based solely on the expectation of the
+reward of a miner and not under any equilibrium. In this work we’ve shown that
+for all Q > 0 and δ ≥ 0 HaPPY-Mine has an equilibrium at a unique hashrate and
+set of miners, and if that hashrate is equal to Q there may be multiple equilibria
+at Q. We further show that the equilibrium includes at least as many miners
+as the static-reward function and is at a hashrate at most that for the static-
+reward function. We also discuss collusion and sybil-proofness in equilibrium and
+that as the market value of the coin increases, the equilibrium shifts to include
+more miners at an increased hashrate that is sub-linear in the value of the coin
+after the system hashrate surpasses Q (unlike the static-reward function whose
+equilibrium hashrate increases linearly indefinitely).
+We show that by relaxing the budget-balance property from [9], we are able
+to improve upon fairness properties of a mining reward function. A question
+for future work is whether we can generalize this into an axiomatic framework
+for mining reward fairness and if there exists other functions in the generalized
+proportional allocation family that can improve upon our fairness results.
+Long-Term Dynamics. As our analysis focuses on equilibria, a natural ques-
+tion to ask is whether we introduce any unfavorable long-term dynamics by
+pegging our reward to the system hashrate. One such concern is on the control
+of supply of the system. Two current versions of coin issuance are the Bitcoin
+and Ethereum models. In Bitcoin the reward per block halves every 210K blocks
+(approximately every 4 years until it is 0), so that half the total supply ever was
+mined in the first 4 years. In Ethereum the block reward is set at 5 Ethers so
+that the total supply will never be capped. Our proposed model is novel in that
+assuming a steady increase in hashrate, the issuance will decrease smoothly over
+time. The rate of decrease, δ, is a parameter set by the system designer.
+In the start of any new cryptocurrency the coins have no value, thus the
+miners that initially mine are speculating that the coins will have value in the
+future making up for the cost. During this time the hashrate is generally low so
+the existing miners do not incur much cost. When the currency does have more
+value, it appears older coins were mined for “cheap”. One could argue that those
+early miners mine speculatively, and for systems whose coin reward goes down
+over time, early miners may also control a large portion of the supply. The steeper
+the decline in the reward, the larger fraction of supply early miners control. As
+an example, it is estimated that the creator of Bitcoin, Satoshi Nakamoto, and
+assumed first miner, holds approximately 1 million Bitcoins2, about 5% of the
+total supply ever, probably mined at a cost of only a few dollars [13,18].
+2 Currently valued at 10 billion Dollars but which have never been spent and are
+assumed to stay out of circulation.
+HaPPY-Mine: Designing a Mining Reward Function 265
+As a currency grows in value, new miners are incentivized to start mining in
+the system until the cost to mine a block becomes close to the value of the reward
+for that block. Since the total supply of the currency is tied to the hashrate
+we get the interesting phenomena that as the system gains users (miners) the
+projected total supply decreases, but inversely, if the system decreases in value
+and starts to lose miners, HaPPY-Mine works a bit like a fail safe where the
+reward will increase and hopefully aid in incentivizing the remaining miners to
+stay, stabilizing the value of the system as opposed to a death spiral of miners
+leaving and the reward just losing value. In this paper, we model the utility of
+the miner as the per-block profit. To understand the long-term dynamics at play,
+a future analysis of the evolving game should incorporate market share into the
+utility of the miner and its impact on market centralization.
+Setting Q and δ. We show that an increase in δ comes with an increase in good
+decentralization properties we want, like more miners mining at equilibrium and
+big miners joining with less hashrate. The more you increase δ however, the
+more constrained the issuance of the currency becomes, which could lead to
+centralization in the market control to early adopters. Setting Q and δ is thus a
+balancing game and involves practical considerations.
+The δ exponent in HaPPY-Mine controls how quickly the block reward declines.
+A low δ would correspond to a gradual decrease in the block reward as the
+hashrate increases. Q is the threshold from which point the reward starts to
+decrease. One way to think of Q is as a security lower-bound for the system.
+When the hashrate reaches Q, any additional hashrate would lower the reward.
+A system designer should then choose a Q based on the mining hardware of the
+system (e.g. ASICs,GPUs, etc.) and some understanding of likely advancements
+in its performance and choose Q to be a conservative bound on the cost to amass
+enough hardware to attack the system (e.g. a 51% attack). Based on this and
+the issuance rate the system designer is targeting a δ can be set.
+Since any change to parameters in blockchain systems generally require a
+hardfork in the code, i.e. a change that breaks consensus between adopters
+and non-adopters, the Bitcoin model of blockchain software development is to
+avoid such changes unless absolutely critical. Other, more expressive systems
+(e.g. Ethereum and Zcash), have relied on hardforks to implement changes and
+increase functionality on a more regular basis. Though setting Q and δ could be
+thoughtfully done only once in the inception of a new system, another approach
+would be to periodically update their values if the system’s growth (both miner
+hashrate and value of the currency) is not within the predicted bounds. One such
+concern would be if the target hashrate Q underestimated the growth of the sys-
+tem hashrate and thus stagnating the cost to attack the system. It would then
+be incentive compatible to increase Q as it would incentivize higher hashrates
+(increase security) while also increasing the reward for the miners. One idea is
+to set Q based on a long-term expected growth and have periodic updates (on
+the scale of years) to adjust Q based on miner increase and mining hardware
+trends.
+266 L. Kiffer and R. Rajaraman
+7 Related Work
+In this paper we’ve provided an equilibrium analysis of HaPPY-Mine, a new fam-
+ily of mining reward functions pegged to the network hashrate. As stated above,
+HaPPY-Mine is an example of the generalized proportional model of [9]. We com-
+pare HaPPY-Mine with the equilibrium of the static reward function of [4] asso-
+ciated with most cryptocurrencies. Other papers have looked at different games
+involved in mining including the game between participants in mining pools and
+different reward functions for how the pool rewards are allocated [20]. In [17],
+the authors present a continuous mean-field game for bitcoin mining which cap-
+tures how miner wealth and strategies evolve over time. They are able to capture
+the “rich get richer” effect of initial wealth disparities leading to greater reward
+imbalances. [12] models the blockchain protocol as a game between users generat-
+ing transactions with fees and miners collecting those fees and the block reward.
+They show if there is no block reward, then there is an equilibria of transaction
+fee and miner hashrate. Higher fees incentivize higher miner hashrate which leads
+to smaller block times (in between difficulty adjustments). When you introduce
+a high static block reward, the users may no longer be incentivized to introduce
+mining fees and there may no longer be an equilibrium.
+In contrast, [8] also studies the case where there is no block reward, and
+analyzes new games in which miners may use transactions left in the mempool
+(pending transactions) to incentivize other miners to join their fork. Another
+work exploring the mining game when there is no block reward is that of [21]
+who introduce the gap game to study how miners choose periods of times when
+not to mine (gaps) as they await more transactions (and their fees). They show
+that gap strategies are not homogeneous for same cost miners and that the game
+incentivizes miner coalitions reducing the decentralization of the system.
+Previous work on rational attacks in cryptocurrency mining includes [5] who
+study the security of Bitcoin mining under rational adversaries using the Ratio-
+nal Protocol Design framework of [10] as a rational-cryptographic game. Also,
+[6] who analyze the Bitcoin mining game as a sequential game with imperfect
+information, and [19] analyze selfish mining by looking at the minimal fraction of
+resources required for a profitable attack, tightening the previous lower-bounds
+and further extending the analysis to show how network delays further lower
+the computational threshold to attack. In [15], the authors explore the game of
+Bitcoin mining cost and reward focusing on incentives to participate honestly.
+They outline the choices different players can make in a blockchain system and
+their possible consequences, but their analysis does not take into account block
+withholding attacks. Another work related to the incentives at play in cryptocur-
+rency mining is [7] which looks at the coordination game of Bitcoin miners in
+choosing which fork to build on when mining. They find the longest chain rule
+is a Markov Perfect equilibrium strategy in a synchronous network and explore
+other miner strategies, some that result in persistent forks.
+HaPPY-Mine: Designing a Mining Reward Function 267
+References
+1. Here’s how much it costs to mine a single bitcoin in your country. https://www.
+marketwatch.com/story/heres-how-much-it-costs-to-mine-a-single-bitcoin-in-
+your-country-2018-03-06
+2. Pool distribution. https://btc.com/stats/pool?pool mode=month3
+3. Top 25 miners by blocks. https://etherscan.io/stat/miner?blocktype=blocks
+4. Arnosti, N., Matthew Weinberg, S.: Bitcoin: a natural oligopoly. In 10th Innova-
+tions in Theoretical Computer Science Conference (ITCS 2019). Schloss Dagstuhl-
+Leibniz-Zentrum fuer Informatik (2018)
+5. Badertscher, C., Garay, J., Maurer, U., Tschudi, D., Zikas, V.: But why does it
+work? A rational protocol design treatment of bitcoin. In: Nielsen, J.B., Rijmen, V.
+(eds.) EUROCRYPT 2018. LNCS, vol. 10821, pp. 34–65. Springer, Cham (2018).
+https://doi.org/10.1007/978-3-319-78375-8 2
+6. Beccuti, J., Jaag, C., et al.: The bitcoin mining game: on the optimality of hon-
+esty in proof-of-work consensus mechanism. Swiss Economics Working Paper 0060
+(2017)
+7. Biais, B., Bisiere, C., Bouvard, M., Casamatta, C.: The blockchain folk theorem.
+Rev. Fin. Stud. 32(5), 1662–1715 (2019)
+8. Carlsten, M., Kalodner, H., Matthew Weinberg, S., Narayanan, A.: On the instabil-
+ity of bitcoin without the block reward. In: Proceedings of the 2016 ACM SIGSAC
+Conference on Computer and Communications Security, pp. 154–167 (2016)
+9. Chen, X., Papadimitriou, C., Roughgarden, T.: An axiomatic approach to block
+rewards. In: Proceedings of the 1st ACM Conference on Advances in Financial
+Technologies, pp. 124–131 (2019)
+10. Garay, J., Katz, J., Maurer, U., Tackmann, B., Zikas, V.: Rational protocol design:
+cryptography against incentive-driven adversaries. In 2013 IEEE 54th Annual Sym-
+posium on Foundations of Computer Science, pp. 648–657. IEEE (2013)
+11. Gervais, A., Karame, G.O., Capkun, V., Capkun, S.: Is bitcoin a decentralized
+currency?. IEEE Secur. Privacy 12(3), 54–60 (2014)
+12. Iyidogan, E.: An equilibrium model of blockchain-based cryptocurrencies. Available
+at SSRN 3152803 (2019)
+13. Kenton, W.: Satoshi Nakamoto. https://www.investopedia.com/terms/s/satoshi-
+nakamoto.asp
+14. Kiffer, L., Rajaraman, R.: Happy-mine: designing a mining reward function. arXiv
+e-prints, pages arXiv-2103 (2021)
+15. Kroll, J.A., Davey, I.C., Felten, E.W.: The economics of bitcoin mining, or bitcoin
+in the presence of adversaries. In: Proceedings of WEIS, vol. 2013, p. 11 (2013)
+16. Leonardos, N., Leonardos, S., Piliouras, G.: Oceanic games: centralization risks
+and incentives in blockchain mining. In: Pardalos, P., Kotsireas, I., Guo, Y., Knot-
+tenbelt, W. (eds.) Mathematical Research for Blockchain Economy. SPBE, pp.
+183–199. Springer, Cham (2020). https://doi.org/10.1007/978-3-030-37110-4 13
+17. Li, Z.: A Max Reppen, and Ronnie Sircar. A mean field games model for cryp-
+tocurrency mining. arXiv preprint arXiv:1912.01952 (2019)
+18. Redman, J.: Bitcoin’s early days: how crypto’s past is much different than the
+present. https://news.bitcoin.com/bitcoins-early-days-how-cryptos-past-is-much-
+different-than-the-present/
+19. Sapirshtein, A., Sompolinsky, Y., Zohar, A.: Optimal selfish mining strategies in
+bitcoin. In: Grossklags, J., Preneel, B. (eds.) FC 2016. LNCS, vol. 9603, pp. 515–
+532. Springer, Heidelberg (2017). https://doi.org/10.1007/978-3-662-54970-4 30
+https://www.marketwatch.com/story/heres-how-much-it-costs-to-mine-a-single-bitcoin-in-your-country-2018-03-06
+https://www.marketwatch.com/story/heres-how-much-it-costs-to-mine-a-single-bitcoin-in-your-country-2018-03-06
+https://www.marketwatch.com/story/heres-how-much-it-costs-to-mine-a-single-bitcoin-in-your-country-2018-03-06
+https://btc.com/stats/pool?pool_mode=month3
+https://etherscan.io/stat/miner?blocktype=blocks
+https://doi.org/10.1007/978-3-319-78375-8_2
+https://www.investopedia.com/terms/s/satoshi-nakamoto.asp
+https://www.investopedia.com/terms/s/satoshi-nakamoto.asp
+https://doi.org/10.1007/978-3-030-37110-4_13
+http://arxiv.org/abs/1912.01952
+https://news.bitcoin.com/bitcoins-early-days-how-cryptos-past-is-much-different-than-the-present/
+https://news.bitcoin.com/bitcoins-early-days-how-cryptos-past-is-much-different-than-the-present/
+https://doi.org/10.1007/978-3-662-54970-4_30
+268 L. Kiffer and R. Rajaraman
+20. Schrijvers, O., Bonneau, J., Boneh, D., Roughgarden, T.: Incentive compatibility
+of bitcoin mining pool reward functions. In: Grossklags, J., Preneel, B. (eds.) FC
+2016. LNCS, vol. 9603, pp. 477–498. Springer, Heidelberg (2017). https://doi.org/
+10.1007/978-3-662-54970-4 28
+21. Tsabary, I., Eyal, I.: The gap game. In: Proceedings of the 2018 ACM SIGSAC
+Conference on Computer and Communications Security, pp. 713–728 (2018)
+https://doi.org/10.1007/978-3-662-54970-4_28
+https://doi.org/10.1007/978-3-662-54970-4_28
+	HaPPY-Mine: Designing a Mining Reward Function
+	1 Introduction
+	1.1 Main Contributions
+	2 Background
+	3 Hashrate-Pegged Block Reward
+	4 HaPPY-Mine Equilibrium Analysis
+	4.1 Examples with Diverse Cost Scenarios
+	4.2 General Analysis of HaPPY-Mine
+	5 Impact of Attacks and Currency on Equilibria
+	6 Discussion
+	7 Related Work
+	References

@@ -1,0 +1,672 @@
+Unstable Throughput: When the Difficulty Algorithm Breaks
+Unstable Throughput: When the Difficulty
+Algorithm Breaks
+Dragos I. Ilie, Sam M. Werner, Iain D. Stewart and William J. Knottenbelt
+Imperial College London
+London, United Kingdom
+Abstract—In Proof-of-Work blockchains, difficulty algorithms
+serve the crucial purpose of maintaining a stable transaction
+throughput by dynamically adjusting the block difficulty in re-
+sponse to the miners’ constantly changing computational power.
+Blockchains that may experience severe hash rate fluctuations
+need difficulty algorithms that quickly adapt the mining difficulty.
+However, without careful design, the system could be gamed by
+miners using coin-hopping strategies to manipulate the block
+difficulty for profit. Such miner behavior results in an unreliable
+system due to the unstable processing of transactions.
+We provide an empirical analysis of how Bitcoin Cash’s
+difficulty algorithm design leads to cyclicality in block solve times
+as a consequence of a positive feedback loop. In response, we
+mathematically derive a difficulty algorithm using a negative
+exponential filter which prohibits the formation of positive
+feedback and exhibits additional desirable properties, such as
+history agnosticism. We compare the described algorithm to
+that of Bitcoin Cash in a simulated mining environment and
+verify that the former would eliminate the severe oscillations in
+transaction throughput.
+Index Terms—Blockchain, Bitcoin, Bitcoin Cash, Difficulty
+Algorithm, Mining, Coin-Hopping
+I. INTRODUCTION
+Proof-of-Work (PoW) blockchains offer a decentralized
+mechanism for recording data in a trustless and immutable
+manner. To reach consensus over the ordering and validity
+of blocks, miners participate in a leader election process by
+solving a computationally intensive puzzle named Proof-of-
+Work. The first miner to find a valid solution appends a block
+and receives a reward for the invested computational effort.
+To ensure stable transaction throughput, a difficulty algorithm
+(DA) adjusts the difficulty of the PoW puzzle in response to
+changes in the miners’ computational power. However, without
+careful design the DA can expose vulnerabilities, which when
+exploited by miners, lead to inappropriate difficulty levels and
+thus patterns of instability in the transaction throughput. In
+general, this issue arises in blockchains that lack a consistent
+amount of computational power due to some miners directing
+their resources towards other blockchains especially as prof-
+itability varies. For instance, such patterns have been observed
+in Bitcoin Cash (BCH) [3], [1], the cryptocurrency with the
+7th highest market capitalization of $5bn1. Its developers have
+announced that fixing the high variations in block solve times
+is one of their main development goals for 2020 [2]. Two
+1Data obtained from: https://coinmarketcap.com. Accessed: 22-11-2020.
+proposals [7], [15] have been put forward to replace BCH’s DA
+known as cw-144. In this paper, we present a negative expo-
+nential filter DA (NEFDA) which is similar to these proposals
+and is explicitly referenced2 by one of them [7]. Additionally,
+we define desirable properties exhibited by NEFDA and prove
+their benefits by comparing the performance of NEFDA with
+cw-144 in a simulated mining scenario.
+II. RELATED WORK
+The most extensive body of difficulty algorithm research
+has been done by the pseudonym zawy12, who provides
+a comprehensive overview of various difficulty algorithms
+in [21]. He examines the difficulty instabilities in BCH in [19]
+and simulates the performance of various DAs, including
+ASERT [12]3 and EMA [22], [5], [6], which is an approxima-
+tion of ASERT that avoids the computation of exponentials.
+Our work differentiates by providing a formal derivation of
+NEFDA starting from first principles and an outline of the
+desirable properties achieved.
+III. BACKGROUND
+In this section, we introduce readers to the difficulty algo-
+rithms used in Bitcoin (BTC) [14] and BCH.
+A difficulty algorithm (DA) is a fundamental component of
+PoW blockchains as it ensures a stable transaction throughput
+by adjusting the hardness of generating a PoW solution. An
+omniscient DA, with knowledge of the real world hash rate,
+would be able to compute the difficulty of the next block
+by simply multiplying the current hash rate with the ideal
+inter-block time (e.g. 10 minutes). However, computing the
+difficulty of a block must be deterministic and based on data
+from previous blocks s.t. individual nodes can perform the
+computation independently and agree on the same results.
+Therefore, DAs estimate the current hash rate based on the
+difficulties and solve times of blocks in the recent past. The
+extent to which a DA is able to minimize the lag between
+the actual hash rate and the estimated one is regarded as
+the reactiveness of the algorithm. Blockchains with relatively
+stable hash rate can afford to use a less reactive DA to reduce
+volatility in difficulty, allowing miners to predict expected
+rewards over near-term time scales. The frequency of difficulty
+adjustments also affects the reactiveness of a DA.
+2The reference has been made to an earlier pre-printed version of this paper.
+3We have become aware of ASERT, which is essentially equivalent to
+NEFDA, after receiving the unpublished work [11] of Mark B. Lundeberg
+from zawy12.978-1-6654-3578-9/21/$31.00 ©2021 IEEE
+20
+21
+ IE
+EE
+ In
+te
+rn
+at
+io
+na
+l C
+on
+fe
+re
+nc
+e 
+on
+ B
+lo
+ck
+ch
+ai
+n 
+an
+d 
+C
+ry
+pt
+oc
+ur
+re
+nc
+y 
+(I
+C
+B
+C
+) |
+ 9
+78
+-1
+-6
+65
+4-
+35
+78
+-9
+/2
+0/
+$3
+1.
+00
+ ©
+20
+21
+ IE
+EE
+ | 
+D
+O
+I: 
+10
+.1
+10
+9/
+IC
+B
+C
+51
+06
+9.
+20
+21
+.9
+46
+10
+86
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:15:04 UTC from IEEE Xplore.  Restrictions apply. 
+A. BTC Difficulty Algorithm
+In BTC, the new difficulty D′ is updated every 2 016 blocks
+(approx. 2 weeks) based on the previous difficulty D, using
+the following formula:
+D′ = D ·max
+(
+min
+(
+2 016 · T
+TA
+, 4
+)
+,
+1
+4
+)
+(1)
+where T is the ideal inter-block time (i.e. 10 minutes) and TA
+is the time it actually took to mine the last 2 016 blocks.
+B. BCH Difficulty Algorithm
+BCH’s DA, referred to as cw-144, attempted to increase
+responsiveness to both effluxes and influxes of hash rate by
+performing difficulty adjustments on a per-block basis. The
+difficulty D of a new block is derived from the estimated hash
+rate, Ĥ , and the ideal inter-block time, T . To this end, Ĥ is
+computed using a simple moving average with a sample size
+of approx. 144 blocks from Bstart to Bend . The DA computes
+CW , the amount of chain work that was performed between
+these two blocks, as the sum of difficulties of all blocks in
+the interval [Bstart , Bend ]. The estimated hash rate is: Ĥ =
+CW/TA, where TA is the actual time elapsed between Bstart
+and Bend , capped in the interval from half a day to 2 days
+to prevent difficulty changing too abruptly. Thus, the equation
+for the new difficulty is:
+D = Ĥ · T =
+end∑
+i=start
+diff(Bi)
+TA
+· T (2)
+IV. EMPIRICAL ANALYSIS OF BCH’S DA
+In this section, we provide an empirical analysis of issues
+stemming from the use of cw-144 in BCH.
+A. Oscillations in Number of Blocks Mined per Hour
+As intended, cw-144 achieves a daily average solve time
+of 10 minutes. This gives the superficial impression of per-
+forming well in terms of stable throughput; however, certain
+patterns in the distribution of blocks within a day emerge.
+From Figure 1 it can be seen that the oscillations in number
+of blocks mined per hour are notably more severe in BCH than
+in BTC. Especially during the later months, it is evident that
+BCH exhibited more 1 hour periods with either many blocks
+mined or none.
+Fig. 1. Number of blocks mined per hour in BTC and BCH.
+B. Positive Feedback Loop in Simple Moving Averages
+The observed instability in transaction throughput can be
+explained by a positive feedback loop that stems from a
+combination of two factors: the use of a simple moving
+average and miners’ economically rational behavior.
+From equation (2) it is apparent that cw-144 relies (in
+part) on the relationship of inverse proportionality between
+TA and the estimated hash rate, Ĥ . The same relationship
+exists between the hash rate fluctuations and the solve times
+of newly mined blocks. As new solve times are added to
+TA, the result of these two relations is that Ĥ is adjusted
+directly proportional to the actual hash rate change. However,
+the oversight of this DA is that using a simple moving average
+implies solve times falling off the window (subtracted from
+TA) have an equal weight in the computation of Ĥ . Short solve
+times 144 blocks in the past cause a relative increase in TA
+which yields a lower-than-expected Ĥ . Similarly, long solve
+times falling off the window imply a relative decrease in TA
+and therefore produce a higher Ĥ . This influence constitutes
+positive feedback that results in correlation between solve
+times 144 blocks (24 hours) apart, as can be seen in Figure 2.
+0.0
+0.2
+0.4
+BC
+H
+Au
+to
+co
+rre
+la
+tio
+n
+0 20 40 60 80 100
+Lags (hours)
+0.0
+0.1
+BT
+C
+Au
+to
+co
+rre
+la
+tio
+n
+Fig. 2. The autocorrelation in number of blocks mined per hour in BCH and
+BTC since cw-144 was deployed.
+The second factor that contributes towards the positive
+feedback loop is the miners’ behavior as they try to maximize
+profit by engaging in coin-hopping [13], [9], [10]. Assume
+BCH experiences an increase in profitability which incen-
+tivizes a group of coin-hopping miners MCH to switch their
+computational power towards BCH. This causes an increase in
+hash rate and consequently a series of blocks with short solve
+times. As the difficulty adjusts upwards, BCH’s profitability
+drops until MCH leave the network and the hash rate returns
+to its original value. However, the difficulty is now too high
+for the network, so a series of blocks with long solve times
+is produced. The positive feedback of blocks falling off the
+window, causes this pattern of short solve times followed by
+long solve times to repeat forming a positive feedback loop.
+As can be seen from Figure 2, only BCH experiences such
+a feedback loop because its base hash rate is approx. 3% of
+BTC’s hash rate so coin-hopping miners have a much more
+significant impact. This phenomenon has also been examined
+by [20], [19], [17], [8].
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:15:04 UTC from IEEE Xplore.  Restrictions apply. 
+V. NEGATIVE EXPONENTIAL FILTER DIFFICULTY
+ALGORITHM
+In this section, we mathematically derive a negative expo-
+nential filter difficulty algorithm (NEFDA) based on a common
+technique for removing noise from time series data known
+as exponential smoothing. Throughout we make use of the
+following notation:
+Di ← difficulty of block i
+ti ← time of block i
+sti ← solve time of block i : sti = ti − ti−1
+T ← ideal block solve time (e.g. 10 minutes)
+S ← decay/smoothing factor (see Section V-B)
+Ĥi ← estimated hash rate at block i
+For simplicity, index 0 refers to the block at which the new
+DA is deployed, while index n refers to the next block to
+be appended. Thus, tn and Ĥn represent the current time
+and network hash rate, respectively. NEFDA uses real time
+targeting (RTT), i.e. the difficulty Dn of the block that is being
+mined dynamically adjusts as time passes.
+Dn = D0e
+t0+nT−tn
+S
+Considering RTT is not a popular technique, we argue at length
+for its safety in Section V-C. In the remainder of this section,
+we show how this formula is derived from first principles.
+1) Estimating Current Hash Rate: Difficulty algorithms are
+in the business of estimating the current network hash rate, Ĥn.
+As the actual function of hash rate cannot be known at any
+given time we rely on sampling when information is available,
+i.e. when blocks are mined. On average, the difficulty Di
+represents the number of hashes computed throughout the
+interval (ti−1, ti]. Approximating that Di hashes are computed
+at time ti we can estimate the current hash rate Ĥn using
+exponential smoothing over the series of block difficulties, i.e.
+by taking their exponentially weighted average.
+Ĥn =
+n−1∑
+i=0
+Die
+ti−tn
+S
+0∫
+−∞
+e
+x
+S dx
+=
+1
+S
+n−1∑
+i=0
+Die
+ti−tn
+S (3)
+2) Difficulty Computation: Therefore, the difficulty Dn of
+the next block is:
+Dn = T · Ĥn =
+T
+S
+n−1∑
+i=0
+Die
+ti−tn
+S (4)
+=
+T
+S
+n−1∑
+i=0
+Die
+ti−tn−1
+S e
+tn−1−tn
+S (5)
+= e
+−stn
+S
+(
+T
+S
+n−2∑
+i=0
+Die
+ti−tn−1
+S +
+T
+S
+Dn−1
+)
+(6)
+= e
+−stn
+S
+(
+Dn−1 +
+T
+S
+Dn−1
+)
+(7)
+= Dn−1
+(
+1 + T
+S
+)
+e
+−stn
+S (8)
+When unwinding the recurrence relation (8) all the way to
+D0 we obtain:
+Dn = D0
+(
+1 + T
+S
+)n n∏
+i=1
+e
+−sti
+S = D0
+(
+1 + T
+S
+)n
+e
+t0−tn
+S (9)
+3) Correction: Notice that when T � S we can approx-
+imate 1 + T/S ≈ eT/S . In fact, this is actually a correction
+needed to mitigate the bias introduced when considering a
+discrete series of difficulties instead of the continuous function
+of hash rate. To prove this, we replace the constant term:
+1 + T/S with c and compute its value when the DA operates
+under a simple theoretical scenario. Specifically, we assume
+the hash rate remains constant for many blocks between m
+and n. Thus, we expect the average rate of change in difficulty
+R = 1, indicating that on average the difficulty does not
+change. We take the geometric mean of ratios of consecutive
+difficulties from block m to n and use equation (9) with the
+c replacement:
+R = n−m
+√√√√ n∏
+i=m+1
+Di
+Di−1
+= n−m
+√
+Dn
+Dm
+(10)
+=
+n−m
+√
+D0c
+ne(t0−tn)/S
+D0cme(t0−tm)/S
+= c · e
+tm−tn
+(n−m)S (11)
+Assuming the DA is working correctly, the average solve time
+of blocks from m to n is (tn − tm)/(n−m) = T . Replacing
+in equation (11) we obtain: R = 1 = c · e
+−T
+S = 1 which
+implies c = eT/S .
+Therefore, the correction is indeed justified and applying
+it in equations (8) and (9), gives the following relative and
+absolute forms:
+Dn = Dn−1e
+T−stn
+S (12) Dn = D0e
+t0+nT−tn
+S (13)
+A. Properties
+1) History Agnosticism: The distribution of blocks in a
+given time period does not influence the difficulty of the block
+currently being mined. This property is desirable as block
+arrivals should be independent of each other so the difficulty
+of a block should not depend on the history of the chain.
+Equation (13) shows how the difficulty at time tα depends
+only on the blockchain height, regardless of whether blocks
+were mined a long time in the past, in the last hour, or equally
+distributed in time.
+2) Lack of Autocorrelation: Not only does this algorithm
+avoid the use of a sliding window, but the lack of autocorrela-
+tion is an emergent property entailed by history agnosticism.
+Sudden influxes or effluxes of hash rate may still produce
+temporary spikes or deserts, yet their duration will be much
+shorter. However, these will not create a positive feedback loop
+as the distribution of blocks in time has no influence on the
+future. Therefore, the inherent negative feedback present in
+NEFDA is the only force acting on solve times.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:15:04 UTC from IEEE Xplore.  Restrictions apply. 
+B. Smoothing Factor Considerations
+The smoothing factor S has the function of configuring
+the reactiveness of NEFDA by setting the maximum rate
+of upward adjustments for the difficulty. More specifically,
+the difficulty can increase by at most a factor of e in S/T
+blocks. Depending on the requirements of the application, S
+should be chosen carefully: blockchains that are expected to
+experience large hash rate fluctuations on a regular basis (e.g.
+BCH), should aim for smaller values of S to obtain a more
+reactive DA, while blockchains with a relatively stable hash
+rate (e.g. BTC) can choose larger values for S to reduce the
+difficulty’s volatility. There is no direct relationship between
+the smoothing factor of an exponential moving average and the
+sample size of the simple moving average used in cw-144, as
+their operation is considerably different, but our simulations
+as well as other empirical studies [21] suggest that in order to
+obtain similarly stable difficulties the smoothing factor should
+be chosen to represent (N + 1)/2 blocks where N is the
+length of the sliding window used in simple moving averages.
+Applying this heuristic to BCH which has a sliding window
+of 144 blocks, suggests S should be set at approx. 12 hours.
+C. Real Time Targeting Considerations
+Real time targeting DAs assume miners have no incentive
+to report incorrect timestamps. To prove this assumption we
+compare NEFDA’s RTT formulation with BCH’s cw-144
+and argue that NEFDA reduces the incentives for timestamp
+manipulation. In cw-144 reporting a dishonest timestamp,
+with a value in the future, would lower the difficulty for
+the next 144 blocks. This creates short term incentives for
+other miners to accept the dishonest block as they also benefit
+from the reduced difficulty even if they are not planning
+to be dishonest themselves. In contrast, NEFDA’s history
+agnosticism implies that only the difficulty of the block with
+dishonest timestamp is affected, so there are no incentives for
+other miners to accept it. In fact, building on a dishonest block
+(Bi) implies mining towards a difficulty that is eT/S times
+higher than that of the previous block (Bi−1). Thus, a miner
+would only accept this block if it is willing to report an even
+higher timestamp to mitigate the increase in difficulty. This
+behavior leads to an unstable chain as it could be replaced by a
+potentially shorter chain with more accumulated work (higher
+difficulty blocks), so honest miners would not risk accepting
+blocks with dishonest timestamps. Only an attack supported
+by a majority of the hash rate would be successful, which is
+no different than 51% attacks [16], [4], [18] that are currently
+possible in BCH or even BTC.
+VI. SIMULATION
+In this section, we empirically analyze the robustness of
+NEFDA, by comparing it with cw-144 over a 100 000 blocks
+period. We simulate the behavior of coin-hopping miners
+by adjusting the total hash rate in response to fluctuations
+in profitability. To stress test NEFDA, we consider a rather
+extreme scenario where greedy and variable coin-hopping
+miners have hash rates HG = HV = 4 ×HB (the base hash
+rate). Greedy miners allocate all their hash rate, HG, when
+profitability is 5% higher compared to the initial value while
+variable miners allocate their hash rate using a logistic curve:
+H = HV /(1 + e−6/0.15·x) where x represents the change in
+profitability.
+A brief analysis of the average solve times: 599.97 s for
+NEFDA and 604.34 s for cw-144, already reveals how
+NEFDA achieves a more appropriate value under this extreme
+scenario. Furthermore, Figure 3 plots the autocorrelation in
+number of blocks mined per hour in cw-144 and NEFDA.
+For the former, a significant amount of positive autocorrelation
+appears at multiples of 24 (the number of hours in BCH’s
+sliding window). The negative correlation between periods
+that are 12 hours apart is expected considering the effect of
+averaging over a sliding window is to estimate the middle
+value. This delay in estimation is what gives coin-hopping
+miners the necessary time to mine many blocks while the
+difficulty is still low. On the other hand, NEFDA shows
+negative correlation between consecutive hour-buckets which
+indicates that it responds rapidly to hash rate fluctuations.
+More importantly, no positive feedback is present which is
+what is expected given the properties of history agnosticism
+and lack of autocorrelation.
+0 20 40 60 80 100
+Lags (hours)
+0.5
+0.0
+0.5
+BC
+H
+Au
+to
+co
+rre
+la
+tio
+n
+0 20 40 60 80 100
+Lags (hours)
+0.2
+0.1
+0.0
+NE
+FD
+A-
+RT
+T
+Au
+to
+co
+rre
+la
+tio
+n
+Fig. 3. The autocorrelation in number of blocks mined per hour in cw-144
+(top) and NEFDA (bottom)
+VII. CONCLUSION
+We have showed how the behavior of economically rational
+miners can lead to severe instabilities in transaction throughput
+as a consequence of a positive feedback loop in cw-144.
+To mitigate periods of undesired (either too low or too high)
+transaction throughput, we derived NEFDA, a DA which does
+not lead to the formation of a positive feedback loop and
+can cope effectively with sudden hash rate fluctuations. We
+explained how NEFDA exhibits desirable properties in the
+form of history agnosticism and lack of significant positive
+autocorrelation and demonstrated through simulations how
+NEFDA reduces target volatility, and in turn high variations
+in block solve times. Ultimately, NEFDA constitutes a viable
+alternative for both large and small blockchains (in terms of
+baseline hash rate) when configured appropriately and may
+thus guarantee more stable transaction throughput.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:15:04 UTC from IEEE Xplore.  Restrictions apply. 
+REFERENCES
+[1] BitcoinABC. Difficulty Adjustment Algorithm Update. https://www.
+bitcoinabc.org/2017-11-01-DAA, 2017. Accessed: 2019-10-16.
+[2] BitcoinABC. Bitcoin ABC. https://www.bitcoinabc.org, 2020. Accessed:
+2020-03-02.
+[3] BitMEX Research. BCH’s hashrate volatility increase. https://blog.
+bitmex.com/bitcoin-cashs-october-2019-hashrate-volatility-increase/,
+2019. 2019-11-08.
+[4] A. Boverman. Timejacking & Bitcoin. https://culubas.blogspot.com/
+2011/05/timejacking-bitcoin 802.html, 2011. Accessed: 2019-11-15.
+[5] J. Eliosoff. Added ”ema” algos (exp moving avg). https://github.com/
+kyuupichan/difficulty/pull/26#issuecomment-342290398, 2017. Ac-
+cessed: 13-11-2020.
+[6] J. Eliosoff. Add wtema-72 weighted-target exponential
+moving average. https://github.com/kyuupichan/difficulty/pull/30#
+issuecomment-355854001, 2018. Accessed: 13-11-2020.
+[7] freetrader, J. Toomim, C. Culianu, and M. Lundeberg. 2020-nov-15
+ASERT difficulty adjustment algorithm (aserti3-2d), 2020. Accessed:
+13-11-2020.
+[8] jtoomim. BCH upgrade proposal: Use ASERT as the new DAA, 2020.
+[9] T. Király and L. Lomoschitz. Profitability of the coin-hopping strategy.
+EGRES quick proof, 3(2018), 2018.
+[10] Y. Kwon, H. Kim, J. Shin, and Y. Kim. Bitcoin vs. bitcoin cash: Coex-
+istence or downfall of bitcoin cash? arXiv preprint arXiv:1902.11064,
+2019.
+[11] M. B. Lundeberg. Static difficulty adjustments, with absolutely sched-
+uled exponentially rising targets (DA-ASERT). unpublished, 2019.
+[12] M. B. Lundeberg. Static difficulty adjustments, with absolutely sched-
+uled exponentially rising targets (DA-ASERT) — v.2. Accessed: 13-11-
+2020., 2020.
+[13] D. Meshkov, A. Chepurnoy, and M. Jansen. Short paper: Revisiting
+difficulty control for blockchain systems. In Data Privacy Management,
+Cryptocurrencies and Blockchain Technology, pages 429–436. Springer,
+2017.
+[14] S. Nakamoto. Bitcoin: A peer-to-peer electronic cash system. https:
+//bitcoin.org/bitcoin.pdf, Dec 2008. Accessed: 2015-07-01.
+[15] A. Sechet. Announcing the Grasberg DAA, 2020. Accessed: 13-11-
+2020.
+[16] P. Szalachowski. (short paper) Towards more reliable bitcoin timestamps.
+In 2018 Crypto Valley Conference on Blockchain Technology (CVCBT),
+pages 101–104. IEEE, 2018.
+[17] J. Toomim. The BCH difficulty adjustment algorithm is broken. here’s
+how to fix it. https://www.reddit.com/r/btc/comments/fanc6o/the bch
+difficulty adjustment algorithm is broken/, 2020. Accessed: 2020-03-
+01.
+[18] zawy12. Timestamp attacks on difficulty algorithms. https://github.com/
+zawy12/difficulty-algorithms/issues/30, 2018. Accessed: 2019-11-15.
+[19] zawy12. BCH needs a new Difficulty Algorithm. https://github.com/
+zawy12/difficulty-algorithms/issues/47, 2019. Accessed: 2019-10-01.
+[20] zawy12. Oscillations in simple moving averages. https://github.com/
+zawy12/difficulty-algorithms/issues/48, 2019. Accessed: 2019-10-01.
+[21] zawy12. Summary of Difficulty Algorithms. https://github.com/zawy12/
+difficulty-algorithms/issues/50, 2019. Accessed: 2020-03-02.
+[22] zawy12. Using EMA for BCH’s new DA. https://github.com/zawy12/
+difficulty-algorithms/issues/49, 2019. Accessed: 2020-03-02.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:15:04 UTC from IEEE Xplore.  Restrictions apply. 
+		2022-08-24T23:29:05-0400
+	Preflight Ticket Signature

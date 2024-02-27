@@ -1,0 +1,2107 @@
+Foundations of Coin Mixing Services
+Foundations of Coin Mixing Services
+Noemi Glaeser
+University of Maryland
+College Park, MD, USA
+Max Planck Insitute for Security and
+Privacy
+Bochum, Germany
+nglaeser@umd.edu
+Matteo Maffei
+TU Wien
+Christian Doppler Laboratory
+Blockchain Technologies for the
+Internet of Things
+Vienna, Austria
+matteo.maffei@tuwien.ac.at
+Giulio Malavolta
+Max Planck Institute for Security and
+Privacy
+Bochum, Germany
+giulio.malavolta@hotmail.it
+Pedro Moreno-Sanchez
+IMDEA Software Institute
+Madrid, Spain
+pedro.moreno@imdea.org
+Erkan Tairi
+TU Wien
+Christian Doppler Laboratory
+Blockchain Technologies for the
+Internet of Things
+Vienna, Austria
+erkan.tairi@tuwien.ac.at
+Sri AravindaKrishnan
+Thyagarajan
+Carnegie Mellon University
+Pittsburgh, PA, USA
+t.srikrishnan@gmail.com
+ABSTRACT
+Coin mixing services allow users to mix their cryptocurrency coins
+and thus enable unlinkable payments in a way that prevents track-
+ing of honest users’ coins by both the service provider and the users
+themselves. The easy bootstrapping of new users and backwards
+compatibility with cryptocurrencies (such as Bitcoin) with limited
+support for scripts are attractive features of this architecture, which
+has recently gained considerable attention in both academia and
+industry.
+A recent work of Tairi et al. [IEEE S&P 2021] formalizes the no-
+tion of a coinmixing service and proposes A
+2
+L, a new cryptographic
+protocol that simultaneously achieves high efficiency and interop-
+erability. In this work, we identify a gap in their formal model and
+substantiate the issue by showing two concrete counterexamples:
+we show how to construct two encryption schemes that satisfy
+their definitions but lead to a completely insecure system.
+To amend this situation, we investigate secure constructions of
+coin mixing services. First, we develop the notion of blind condi-
+tional signatures (BCS), which acts as the cryptographic core for
+coin mixing services. We propose game-based security definitions
+for BCS and propose A
+2
+L
++
+, a modified version of the protocol by
+Tairi et al. that satisfies our security definitions. Our analysis is in
+an idealized model (akin to the algebraic group model) and assumes
+the hardness of the one-more discrete logarithm problem. Finally,
+we propose A
+2
+L
+UC
+, another construction of BCS that achieves the
+stronger notion of UC-security (in the standard model), albeit with
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+© 2022 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-1-4503-9450-5/22/11. . . $15.00
+https://doi.org/10.1145/3548606.3560637
+a significant increase in computation cost. This suggests that con-
+structing a coin mixing service protocol secure under composi-
+tion requires more complex cryptographic machinery than initially
+thought.
+CCS CONCEPTS
+• Security and privacy → Cryptanalysis and other attacks;
+Mathematical foundations of cryptography.
+KEYWORDS
+blockchain, cryptocurrencies, coin mixing services, cryptanalysis,
+game-based security, universal composability
+ACM Reference Format:
+Noemi Glaeser, Matteo Maffei, Giulio Malavolta, Pedro Moreno-Sanchez,
+Erkan Tairi, and Sri AravindaKrishnan Thyagarajan. 2022. Foundations of
+Coin Mixing Services. In Proceedings of the 2022 ACM SIGSAC Conference
+on Computer and Communications Security (CCS ’22), November 7–11, 2022,
+Los Angeles, CA, USA. ACM, New York, NY, USA, 15 pages. https://doi.org/
+10.1145/3548606.3560637
+1 INTRODUCTION
+Bitcoin and cryptocurrencies sharing Bitcoin’s core principles have
+attained huge prominence as decentralized and publicly verifiable
+payment systems. They have attracted not only cryptocurrency
+enthusiasts but also banks [5], leading IT companies (e.g., Face-
+book and PayPal), and payment providers such as Visa [20]. At the
+same time, the initial perception of payment unlinkability based
+on pseudonyms has been refuted in numerous academic research
+works [40, 51], and the blockchain surveillance industry [31] demon-
+strates this privacy breach in practice. This has led to a large amount
+of work devoted to providing a privacy-preserving overlay to Bit-
+coin in the form of coin mixing protocols [6, 26].
+Decentralized coin mixing protocols such as CoinJoin [1] or
+CoinShuffle [45–47] allow a set of mutually distrusting users to
+mix their coins to achieve unlinkability: that is, the coins cannot
+be linked to their initial owners even by malicious participants.
+These protocols suffer from a common drawback, the bootstrapping
+1259
+https://orcid.org/0000-0002-6464-2534
+https://orcid.org/0000-0002-2283-4829
+https://doi.org/10.1145/3548606.3560637
+https://doi.org/10.1145/3548606.3560637
+https://doi.org/10.1145/3548606.3560637
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3548606.3560637&domain=pdf&date_stamp=2022-11-07
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+problem, i.e., how to find a set of participants to execute the protocol.
+In fact, while a high number of participants is desirable to improve
+the anonymity guarantees provided by the coin mixing protocol,
+such a high number is at the same time undesirable as it results in
+poor scalability and makes bootstrapping harder.
+An alternative mechanism is one in which a third party, referred
+to as the hub, alleviates the bootstrapping problem by connecting
+users that want to mix their coins. Moreover, the hub itself can
+provide a coin mixing service by acting as a tumbler. In more detail,
+users send their coins to the hub, which, after collecting all the
+coins, sends them back to the users in a randomized order, thereby
+providing unlinkability for an observer of such transfers (e.g., an
+observer of the corresponding Bitcoin transactions).
+Synchronization Puzzles. There are numerous reported cases
+of “exit scams” by mixing services which took in new payments
+but stopped providing the mixing service [52]. This has prompted
+the design of numerous cryptographic protocols [2, 14, 33, 54] to
+remove trust from the hub, providing a trade-off between trust
+assumptions, minimum number of transactions, and Bitcoin com-
+patibility [32]. Of particular interest is the work by Heilman et
+al. [32], which lays the groundwork for the core cryptographic
+primitive which can be used to build a mixing service. This primi-
+tive, referred to as a synchronization puzzle, enables unlinkability
+from even the view of a corrupt hub. However, Heilman et al. only
+present informal descriptions of the security and privacy notions
+of interest. Furthermore, the protocol proposed (TumbleBit) relies
+on hashed time-lock contracts (HTLCs), a smart contract incompat-
+ible with major cryptocurrencies such as Monero, Stellar, Ripple,
+MimbleWimble, and Zerocash (shielded addresses), lowering the
+interoperability of the solution.
+The recent work of Tairi et al. [53] attempts to overcome both of
+these limitations. It gives formal security notions for a synchroniza-
+tion puzzle in the universal composability (UC) framework [16]. It
+also provides an instantiation of the synchronization puzzle (called
+A
+2
+L) that is simultaneously more efficient and more interopera-
+ble than TumbleBit, requiring only timelocks and digital signature
+verification from the underlying cryptocurrencies.
+In this work, we identify a gap in their security analysis, and we
+substantiate the issue by presenting two concrete counterexamples:
+there exist two encryption schemes (secure under standard crypto-
+graphic assumptions) that satisfy the prerequisites of their security
+notions, yet yield completely insecure systems. This shows that
+our understanding of synchronization puzzles as a cryptographic
+primitive is still inadequate. Establishing firm foundations for this
+important cryptographic primitive requires us to rethink this object
+from the ground up.
+1.1 Our Contributions
+We summarize the contributions of this work below.
+Counterexamples. First, we identify a gap in the security model
+of the synchronization puzzle protocol A
+2
+L [53], presenting two
+concrete counterexamples (Section 3). Specifically, we show that
+there exist underlying cryptographic building blocks that satisfy
+the prerequisites stated in A
+2
+L, yet they allow for:
+• a key recovery attack, in which a user can learn the long-term
+secret decryption key of the hub;
+• a one-more signature attack, in which a user can obtain 𝑛 signed
+transactions from the hub while only engaging in 𝑛−1 successful
+instances of signing a transaction which pays the hub. In other
+words, the user obtains 𝑛 coins from the hub while the hub
+receives only 𝑛 − 1 coins.
+Both attacks run in polynomial time and succeed with overwhelm-
+ing probability.
+Definitions. To place the synchronization puzzle on firmer foun-
+dations, we propose a new cryptographic notion that we call blind
+conditional signatures (BCS). Our new notion intuitively captures
+the functionality of a synchronization puzzle from [32, 53]. BCS is a
+simple and easy-to-understand tool, and we formalize its security
+notions both in the game-based (Section 4.1) and universal compos-
+ability (Section 5) setting. The proposed game-based definitions
+for BCS are akin to the well-understood standard security notions
+for regular blind signatures [19, 48]. We hope that this abstraction
+may lay the foundations for further studies on this primitive in all
+cryptocurrencies, scriptless or not.
+Constructions.We give two constructions, one that satisfies our
+game-based security guarantees and one that is UC-secure. Both
+require only the same limited functionality as A
+2
+L from the under-
+lying blockchain. In more detail:
+• We give a modified version of A
+2
+L (Sections 4.2 and 4.3) which we
+refer to as A
+2
+L
++
+that satisfies the game-based notions (Section 4.1)
+of BCS, albeit in the linear-only encryption (LOE) model [30].
+In this model, the attacker does not directly have access to a
+homomorphic encryption scheme; instead, it can perform the
+legal operations by querying the corresponding oracles. This
+is a strong model with a non-falsifiable flavor, similar to the
+generic/algebraic group model [24, 38, 50].
+• We then provide a less efficient construction A
+2
+L
+UC
+that securely
+realizes the UC notion of BCS (Section 5). This scheme signif-
+icantly departs from the construction paradigm of A
+2
+L and is
+based on general-purpose cryptographic tools such as secure
+two-party computation (2PC).
+Our results hint at the fact that achieving UC-security for a syn-
+chronization puzzle requires a radical departure from current con-
+struction paradigms, and it is likely to lead to less efficient schemes.
+On the other hand, we view the game-based definitions (a central
+contribution of our work) as a reasonable middle ground between
+security and efficiency.
+1.2 Technical Overview
+To put our work into context, we give a brief overview of A
+2
+L [53]
+recast as a synchronization puzzle (a notion first introduced in [32]),
+and discuss how it can be used as a coin mixing protocol. We then
+outline the vulnerabilities in A
+2
+L and discuss how to fix them using
+the tools that we develop in this work.
+Synchronization Puzzles. A synchronization puzzle protocol is a
+protocol between three parties: Alice, Bob, andHub (refer to Figure 1
+for a pictorial description). The synchronization puzzle begins with
+Hub and Bob executing a puzzle promise protocol (step 1) with
+respect to some message,𝑚HB such that Bob receives a puzzle 𝜏
+that contains a signature 𝑠 (at this point still hidden) on𝑚HB. Bob
+wishes to solve the puzzle and obtain the embedded signature. To do
+1260
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+Hub
+1. Puzzle Promise
+Alice
+Bob
+3. Puzzle Solve
+Alice Bob
+2. Send Puzzle
+Alice Bob
+4. Send Solution
+Puzzle Promise
+Puzzle Promise
+Puzzle Solve
+Puzzle Solve
+Figure 1: Protocol flowof the synchronizationpuzzle, the un-
+derlying cryptographic mechanism of Tumblebit and A2L.
+Our approach in Blind Conditional Signatures follows a sim-
+ilar execution. Dotted double-edged arrows indicate 2-party
+protocols. Solid arrows indicate secure point-to-point com-
+munication.
+this, he sends the puzzle 𝜏 privately to Alice (step 2), who executes
+a puzzle solve protocol (step 3) with Hub with respect to some
+message𝑚AH such that, at the end of the protocol, Alice obtains
+the signature 𝑠 , whereas Hub obtains a signature 𝑠 ′ on𝑚AH . Alice
+then sends the signature 𝑠 privately to Bob (step 4). Such a protocol
+must satisfy the following properties.
+Blindness: The puzzle solve protocol does not leak any information
+to Hub about 𝜏 , and Hub blindly helps solve the puzzle. This ensures
+that Hub cannot link puzzles across interactions.
+Unlockability: If step 3 is successfully completed, then the secret
+𝑠 must be a valid secret for Bob’s puzzle 𝜏 . This guarantees that
+Hub cannot learn a signature on𝑚AH , without at the same time
+revealing a signature on𝑚HB.
+Unforgeability: Bob cannot output a valid signature on𝑚HB before
+Alice interacts with the Hub.
+Towards a Coin Mixing Service. As shown in [32, 53], the syn-
+chronization puzzle is the cryptographic core of a coin mixing
+service. First, Alice and Bob define the messages
+𝑚AH : (𝐴 𝑣−−→ 𝐻 ) and𝑚HB : (𝐻 𝑣−−→ 𝐵)
+where (𝑈𝑖
+𝑣−−→ 𝑈 𝑗 ) denotes a cryptocurrency payment (e.g., on-
+chain transaction or a payment over payment channels) that trans-
+fers 𝑣 coins from 𝑈𝑖 to 𝑈 𝑗 . Second, Alice and Bob run the syn-
+chronization puzzle protocol with Hub to synchronize the two
+aforementioned transfers. Here, the signatures 𝑠 and 𝑠 ′ are the
+ones required to validate the transactions defined by𝑚AH and𝑚HB.
+The anonymity of mixing follows from the fact that multiple pairs
+of users are executing the synchronization puzzle simultaneously
+with Hub, and Hub cannot link its interaction on the left to the
+corresponding interaction on the right. Throughout the rest of this
+work, we mainly focus on the synchronization puzzle as a crypto-
+graphic primitive. The application of a coin mixing protocol follows
+as prescribed in prior works [32, 53].
+The A2L System. In A
+2
+L, the blindness property is achieved by
+making use of a re-randomizable linearly homomorphic (CPA-
+secure) encryption. The puzzle𝜏 contains a ciphertext 𝑐 ← Enc(ek𝐻 ,
+𝑠) encrypting the signature 𝑠 under the encryption key ek𝐻 of Hub.
+During the puzzle solve step, Alice first re-randomizes the cipher-
+text (and the underlying plaintext)
+𝑐
+𝑟−−→ 𝑐 ′ = Enc(ek𝐻 , 𝑠 + 𝑟 )
+with a random scalar 𝑟 . Hub then decrypts 𝑐 ′ to obtain 𝑠 + 𝑟 , which
+in turn reveals a signature 𝑠 ′ on 𝑚AH .
+1
+Alice can then strip off
+the re-randomization factor 𝑟 and send 𝑠 to Bob later in step 4. In
+the analysis, it is argued that the CPA-security of the encryption
+scheme ensures unforgeability, whereas the re-randomization pro-
+cess guarantees blindness. Unfortunately, we show in this work
+that this claim is flawed.
+Counterexamples.We observe that the encryption scheme is only
+CPA-secure, and the Hub is offering a decryption oracle in disguise.
+In these settings, the right notion of security is the stronger CCA-
+security, which accounts exactly for this scenario. However, CCA-
+security is at odds with blindness, since we require the scheme to
+be (i) linearly homomorphic and (ii) publicly re-randomizable.
+2
+We
+then substantiate this concern by showing two counterexamples.
+Specifically, we show that there exist two encryption schemes that
+satisfy the prerequisites spelled out by A
+2
+L, but enable two concrete
+attacks against the protocol. Depending on the scheme, we can
+launch one of the following attacks:
+• A key recovery attack that completely recovers the long-term
+secret key of the hub, i.e., the decryption key dk𝐻 .
+• A one-more signature attack that allows one to obtain 𝑛 + 1
+signatures on transactions from Hub to Bob, while only revealing
+𝑛 signatures on transactions from Alice to Hub. Effectively, this
+allows one to steal coins from the hub.
+We stress that both these schemes are specifically crafted to make
+the protocol fail: their purpose is to highlight a gap in the security
+model of A
+2
+L. As such, they do not imply that A
+2
+L as implemented
+is insecure, although we cannot prove it secure either. For a detailed
+description of the attacks, we refer the reader to Section 3.2.
+Can We Fix This? In light of our attacks, the natural question is
+whether we can establish formally rigorous security guarantees for
+the (appropriately patched) A
+2
+L system. While it seems unlikely
+that A
+2
+L can achieve UC-security (more discussion on this later), we
+investigate whether it satisfies some weaker, but still meaningful,
+notion of security. Our main observation here is that a weak notion
+of CCA-security for encryption schemes suffices to provide formal
+guarantees for A
+2
+L. This notion, which we refer to as one-more CCA-
+security, (roughly) states that it is hard to recover the plaintexts
+of 𝑛 ciphertexts while querying a decryption oracle at most 𝑛 − 1
+times. Importantly, this notion is, in principle, not in conflict with
+1
+This is achieved via the notion of adaptor signatures, but for the sake of this overview
+we ignore the exact details of this aspect.
+2
+It is well known that no encryption scheme that satisfies either of these properties
+can be CCA-secure.
+1261
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+the homomorphism/re-randomization requirements, contrary to
+standard CCA-security.
+Towards establishing a formal analysis of A
+2
+L, we introduce the
+notion of blind conditional signatures (BCS) as the cryptographic
+cornerstone of a synchronization puzzle. We propose game-based
+definitions (Section 4.1) similar in spirit to the well-established secu-
+rity definitions of regular blind signatures [19, 48]. We then prove
+that A
+2
+L
++
+, our appropriately modified version of A
+2
+L, satisfies
+these definitions (Section 4.2). Our analysis comes with an impor-
+tant caveat: we analyze the security of our scheme in the linear-only
+encryption model. This is a model introduced by Groth [30] that
+only models adversaries that are restricted to perform “legal” op-
+erations on ciphertexts, similarly to the generic/algebraic group
+model. While this is far from a complete analysis, it increases our
+confidence in the security of the system.
+3
+UC-Security.The next question thatwe set out to answer is whether
+we can construct a synchronization puzzle that satisfies the strong
+notion of UC-security. We do not know how to prove that A
+2
+L (or
+A
+2
+L
++
+) is secure under composition, which is why we prove A
+2
+L
++
+secure only in the game-based setting. The technical difficulty in
+proving UC-security is that blindness is unconditional, and we lack
+a “trapdoor mechanism” that allows the simulator to link adversar-
+ial sessions during simulation in the security analysis; the proof
+of UC-security in [53] is flawed due to this same reason. Thus,
+in Section 5.2 we develop a different protocol (called A
+2
+L
+UC
+) that
+we can prove UC-secure in the standard model. The scheme relies
+on standard general-purpose cryptographic tools, such as 2PC, and
+incurs a significant increase in computation costs. We stress that
+we view this scheme as a proof-of-concept, and leave further im-
+provements for practical efficiency as an open problem. We hope
+that the scheme will shed some light on the barriers that need to
+be overcome in order to construct a practically efficient UC-secure
+synchronization puzzle.
+1.3 Related Work
+We recall some relevant related work in the literature.
+Unlinkable Transactions. CoinJoin [1], Coinshuffle [45–47], and
+Möbius [39] are coin mixing protocols that rely on interested users
+coming together and making an on-chain transactions to mix their
+coins. These proposals suffer from the bootstrapping problem (users
+having to find other interested users for the mix) in addition to
+requiring custom scripting language support from the underlying
+currency and completing the mix with on-chain transactions. Pe-
+run [23] andmixEth [49] aremixing solutions that rely on Ethereum
+smart contracts to resolve contentions among users. An alternate
+design choice is to incorporate coin unlinkability natively in the
+currency. Monero [36] and Zcash [10] are the two most popular
+examples of currencies that allow for unlinkable transactions with-
+out any special coin mixing protocol. This is enabled by complex
+on-chain cryptographic mechanisms that are not supported in other
+currencies.
+3
+We resort to the LOE model because of the seemingly inherent conflict between linear
+homomorphism and CCA-like security, both of which are needed for our application
+(in our setting, the adversary has access to something akin to a decryption oracle).
+Indeed, even proving that ElGamal encryption is CCA1-secure in the standard model is
+a long-standing open problem, and we believe that the A
+2
+L approach would inherently
+hit this barrier without some additional assumption.
+RCCA Security.A security notion related to one-more CCA is that
+of re-randomizable Replayable CCA (RCCA) encryption scheme [43].
+The notion guarantees security even if the adversary has access to
+a decryption oracle, but only for ciphertexts that do not decrypt
+to the challenge messages. This is slightly different from what
+we require in our setting, since in our application the adversary
+will always query the oracle on encryption of new (non-challenge)
+messages (because of the plaintext re-randomization). This makes
+it challenging to leverage the guarantees provided by this notion
+in our analysis.
+2 PRELIMINARIES
+We denote by 𝑛 ∈ N the security parameter and by 𝑥 ← A(in; 𝑟 )
+the output of the algorithm A on input in using 𝑟 ←$ {0, 1}∗ as its
+randomness. We often omit this randomness and only mention it
+explicitly when required. We say that an algorithm is (non-uniform)
+PPT if it runs in probabilistic polynomial time. We say that a func-
+tion is negligible if it vanishes faster than any polynomial.
+Digital Signature. A digital signature scheme ΠDS :=
+(KGen, Sign,Vf) has a key generation algorithm (vk, sk) ←
+KGen(1𝑛) that outputs a verification-signing key pair. The owner
+of the signing key sk can compute signatures on a message𝑚 by
+running 𝜎 ← Sign(sk,𝑚), which can be publicly verified using the
+corresponding verification key vk by running Vf (vk,𝑚, 𝜎). We re-
+quire that the digital signature scheme satisfies the standard notion
+of strong existential unforgeability [29].
+Hard Relations. We recall the notion of a hard relation 𝑅 with
+statement/witness pairs (𝑌,𝑦). We denote by L𝑅 the associated
+language defined as L𝑅 := {𝑌 | ∃𝑦, (𝑌,𝑦) ∈ 𝑅}. The relation is
+called a hard relation if the following holds: (i) There exists a PPT
+sampling algorithm GenR(1𝑛) that outputs a statement/witness
+pair (𝑌,𝑦) ∈ 𝑅; (ii) The relation is poly-time decidable; (iii) For all
+PPT adversaries A the probability of A on input 𝑌 outputting a
+witness𝑦 is negligible. In this work we use the discrete log language
+LDL defined with respect to a group G with generator 𝑔 and order
+𝑝 . The language is defined as LDL := {𝑌 | ∃𝑦 ∈ Z𝑝 , 𝑌 = 𝑔𝑦} with
+corresponding hard relation 𝑅DL.
+Adaptor Signatures. Adaptor signatures [3] let users generate a
+pre-signature on amessage𝑚which by itself is not a valid signature,
+but can later be adapted into a valid signature using knowledge
+of some secret value. More precisely, an adaptor signature scheme
+ΠADP := (KGen, PreSig, PreVf,Adapt,Vf, Ext) is defined with re-
+spect to a signature scheme ΠDS and a hard relation 𝑅. The key
+generation algorithm is the same as in ΠDS and outputs a key pair
+(vk, sk). The pre-signing algorithm PreSig(sk,𝑚,𝑌 ) returns a pre-
+signature �̃� (we sometimes also refer to this as a partial signature).
+The pre-signature verification algorithm PreVf (vk,𝑚,𝑌, �̃�) verifies
+if the pre-signature �̃� is correctly generated. The adapt algorithm
+Adapt(�̃�, 𝑦) transforms a pre-signature �̃� into a valid signature 𝜎
+given the witness 𝑦 for the instance 𝑌 of the language L𝑅 . The
+verification algorithm Vf is the same as in ΠDS. Finally, we have
+the extract algorithm Ext(�̃�, 𝜎, 𝑌 ) which, given a pre-signature �̃� , a
+signature 𝜎 , and an instance 𝑌 , outputs the witness 𝑦 for 𝑌 . This
+can be formalized as pre-signature correctness.
+Definition 2.1 (Pre-signature Correctness). An adaptor signature
+scheme ΠADP satisfies pre-signature correctness if for every 𝑛 ∈
+1262
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+aSigForgeA,ΠADP
+(𝑛)
+Q := ∅
+(sk, vk) ← KGen(1𝑛)
+𝑚 ← AOS (·),OpS (·,·) (vk)
+(𝑌, 𝑦) ← GenR(1𝑛)
+�̃� ← PreSig(sk,𝑚,𝑌 )
+𝜎 ← AOS (·),OpS (·,·) (�̃�, 𝑌 )
+return (𝑚 ∉ Q ∧ Vf (vk,𝑚, 𝜎))
+OS (𝑚)
+𝜎 ← Sign(sk,𝑚)
+Q := Q ∪ {𝑚}
+return 𝜎
+OpS (𝑚,𝑌 )
+�̃� ← PreSig(sk,𝑚,𝑌 )
+Q := Q ∪ {𝑚}
+return �̃�
+Figure 2: Unforgeability experiment of adaptor signatures
+N, every message𝑚 ∈ {0, 1}∗, and every statement/witness pair
+(𝑌,𝑦) ∈ 𝑅, the following holds:
+Pr
+
+PreVf (vk,𝑚,𝑌, �̃�) = 1
+∧
+Vf (vk,𝑚, 𝜎) = 1
+∧
+(𝑌,𝑦′) ∈ 𝑅
+����������
+(sk, vk) ← KGen(1𝑛)
+�̃� ← PreSig(sk,𝑚,𝑌 )
+𝜎 := Adapt(�̃�, 𝑦)
+𝑦′ := Ext(𝜎, �̃�, 𝑌 )
+
+= 1.
+In terms of security, we want standard unforgeability even when
+the adversary is given access to pre-signatures with respect to the
+signing key sk.
+Definition 2.2 (Unforgeability). An adaptor signature scheme
+ΠADP is aEUF-CMA secure if for every PPT adversary A there
+exists a negligible function negl such that
+Pr
+[
+aSigForgeA,ΠADP
+(𝑛) = 1
+]
+≤ negl(𝑛),
+where the experiment aSigForgeA,ΠADP
+is defined as in Figure 2.
+We also require that, given a pre-signature and a witness for
+the instance, one can always adapt the pre-signature into a valid
+signature (pre-signature adaptability).
+Definition 2.3 (Pre-signature Adaptability). An adaptor signature
+scheme ΠADP satisfies pre-signature adaptability if for any 𝑛 ∈ N,
+any message𝑚 ∈ {0, 1}∗, any statement/witness pair (𝑌,𝑦) ∈ 𝑅,
+any key pair (sk, vk) ← KGen(1𝑛), and any pre-signature �̃� ←
+{0, 1}∗ with PreVf (vk,𝑚,𝑌, �̃�) = 1, we have:
+Pr[Vf (vk,𝑚,Adapt(�̃�, 𝑦)) = 1] = 1.
+Finally, we require that, given a valid pre-signature and a signa-
+ture with respect to the same instance, one can efficiently extract
+the corresponding witness (witness extractability).
+Definition 2.4 (Witness Extractability). An adaptor signature
+scheme ΠADP is witness extractable if for every PPT adversary
+A, there exists a negligible function negl such that
+Pr
+[
+aWitExtA,ΠADP (𝑛) = 1
+]
+≤ negl(𝑛),
+where the experiment aWitExtA,ΠADP is defined as in Figure 3.
+Combining the three properties described above, we can define
+a secure adaptor signature scheme as follows.
+Definition 2.5 (Secure Adaptor Signature Scheme). An adaptor
+signature scheme ΠADP is secure if it is aEUF-CMA secure, pre-
+signature adaptable, and witness extractable.
+aWitExtA,ΠADP (𝑛)
+Q := ∅
+(sk, vk) ← KGen(1𝑛)
+(𝑚,𝑌 ) ← AOS (·),OpS (·,·) (vk)
+�̃� ← PreSig(sk,𝑚,𝑌 )
+𝜎 ← AOS (·),OpS (·,·) (�̃�)
+𝑦′ := Ext(𝜎, �̃�,𝑌 )
+return (𝑚 ∉ Q ∧ (𝑌, 𝑦′) ∉ 𝑅
+∧ Vf (vk,𝑚, 𝜎))
+OS (𝑚)
+𝜎 ← Sign(sk,𝑚)
+Q := Q ∪ {𝑚}
+return 𝜎
+OpS (𝑚,𝑌 )
+�̃� ← PreSig(sk,𝑚,𝑌 )
+Q := Q ∪ {𝑚}
+return �̃�
+Figure 3: Witness extractability experiment for adaptor sig-
+natures
+OGen (𝑖)
+ek𝑖 ←$ {0, 1}𝑛
+Enter (𝑖, ek𝑖 ) into table 𝐾
+return ek𝑖
+OEnc (ek𝑖 ,𝑚)
+𝑐 𝑗 ←$ {0, 1}𝑛
+Enter (𝑚,𝑐 𝑗 ) into table𝑀𝑖
+return 𝑐 𝑗
+ODec (ek𝑖 , 𝑐)
+if ( ·, 𝑐) ∉ 𝑀𝑖 then return ⊥
+else
+Look up𝑚 corresponding to 𝑐 in𝑀𝑖
+return𝑚
+OAdd (ek𝑖 , 𝑐0, 𝑐1)
+Look up𝑚0,𝑚1 corresponding to 𝑐0, 𝑐1 in table𝑀𝑖
+𝑐 ←$ {0, 1}𝑛
+Enter (𝑚0 +𝑚1, 𝑐) into table𝑀𝑖
+return 𝑐
+Figure 4: Linear-only encryption oracles
+Linear-Only Homomorphic Encryption. A public-key encryp-
+tion scheme ΠE := (KGen, Enc,Dec) allows one to generate a key
+pair (ek, dk) ← KGen(1𝑛) that allows anyone to encrypt messages
+as 𝑐 ← Enc(ek,𝑚) and allows only the owner of the decryption
+key dk to decrypt ciphertexts as𝑚 ← Dec(dk, 𝑐). We require that
+ΠE satisfies perfect correctness and the standard notion of CPA-
+security [28]. We say that an encryption scheme is linearly homo-
+morphic if there exists some efficiently computable operation ◦
+such that Enc(ek,𝑚0) ◦ Enc(ek,𝑚1) ∈ Enc(ek,𝑚0 +𝑚1), where
+addition is defined over Z𝑝 . The 𝛼-fold application of ◦ is denoted
+by Enc(ek,𝑚)𝛼 .
+Linear-only encryption (LOE) is an idealized model introduced
+by Groth [30] as “generic homomorphic cryptosystem”. Here, homo-
+morphic encryption is modeled by giving access to oracles instead
+of their corresponding algorithms. A formal description of the ora-
+cles is given in Figure 4. We note that although we do not model
+such an algorithm explicitly, this model allows for (perfect) cipher-
+text re-randomization by homomorphically adding 0 to the desired
+ciphertext.
+1263
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+Non-Interactive Zero-Knowledge. Let R : {0, 1}∗ × {0, 1}∗ →
+{0, 1} be an NP-witness-relation with corresponding NP-language
+L := {𝑥 | ∃𝑤 s.t. R(𝑥,𝑤) = 1}. A non-interactive zero-knowledge
+proof system NIZK := (Setup, P,V) for the relation R is initialized
+with a setup algorithm Setup(1𝑛) that, on input the security pa-
+rameter, outputs a common reference string crs and a trapdoor td.
+A prover can show the validity of a statement 𝑥 with a witness𝑤
+by invoking P(crs, 𝑥,𝑤), which outputs a proof 𝜋 . The proof 𝜋 can
+be efficiently checked by the verification algorithm V(crs, 𝑥, 𝜋). We
+require a NIZK system to be (1) zero-knowledge, i.e., there exists
+a simulator 𝜋 ← Sim(td, 𝑥) that computes valid proofs without
+the knowledge of the witness, (2) sound, i.e., it is infeasible for an
+adversary to output a valid proof for a statement 𝑥 ∉ L, and (3) UC-
+secure, i.e., one can efficiently extract from the proofs computed by
+the adversary a valid witness (with the knowledge of the trapdoor
+td), even in the presence of simulated proofs. For formal security
+definitions, we refer the reader to [15, 22].
+One-More DL.We recall the one-more discrete logarithm (OMDL)
+assumption [7, 9].
+Definition 2.6 (One-More Discrete Logarithm (OMDL) Assumption).
+Let G be a uniformly sampled cyclic group of prime order 𝑝 and 𝑔 a
+random generator of G. The one-more discrete logarithm (OMDL)
+assumption states that for all𝑛 ∈ N there exists a negligible function
+negl(𝑛) such that for all PPT adversaries A making at most 𝑞 =
+poly(𝑛) queries to DL(·), the following holds:
+Pr
+ ∀𝑖 : 𝑥𝑖 = 𝑟𝑖
+������
+𝑟1, . . . , 𝑟𝑞+1 ←$Z𝑝
+∀𝑖 ∈ [𝑞 + 1], ℎ𝑖 ← 𝑔𝑟𝑖
+{𝑥𝑖 }𝑖∈[𝑞+1] ← ADL( ·) (ℎ1, . . . , ℎ𝑞+1)
+
+≤ negl(𝑛),
+where the DL(·) oracle takes as input an element ℎ ∈ G and returns
+𝑥 such that ℎ = 𝑔𝑥 .
+3 COUNTEREXAMPLES OF A2L
+In the following, we recall the A
+2
+L system and present two coun-
+terexamples to their main theorem.
+3.1 Description of A2L
+A
+2
+L is defined over the following cryptographic schemes:
+• A digital signature scheme ΠDS, a hard relation 𝑅DL for a group
+(G, 𝑔, 𝑝) with generator 𝑔 and prime order 𝑝 , and the correspond-
+ing adaptor signature scheme ΠADP.
+• A linearly homomorphic re-randomizable CPA-secure encryption
+scheme ΠE.
+4
+• A NIZK proof system ΠNIZK := (Setup, P,V) for the language
+L := {(ek, 𝑌 , 𝑐) | ∃𝑠 s.t. 𝑐 ← ΠE .Enc(ek, 𝑠) ∧ 𝑌 = 𝑔𝑠 }.
+The protocol has three parties: Alice, Bob, and Hub. At the begin-
+ning of the system, Hub runs the setup (as described in Figure 9) to
+generate its keys, which are the keys for the (CPA-secure) encryp-
+tion scheme ΠE. The protocol then consists of a promise phase and
+a solving phase.
+4
+Technically, [53] uses a different abstraction called “re-randomizable puzzle”. However,
+it is not hard to see that a re-randomizable linearly homomorphic encryption scheme
+satisfies this notion. For completeness, we show this in the full version [27].
+Puzzle Promise. In the promise phase (as described in [53]), Hub
+generates a pre-signature �̃�𝐻HB on a common message 𝑚HB with
+respect to a uniformly sampled instance 𝑌 := 𝑔𝑠 . Hub also encrypts
+the witness 𝑠 in the ciphertext 𝑐 ← ΠE .Enc(ek𝐻 , 𝑠) under its own
+encryption key ek𝐻 . Hub gives Bob the tuple (𝑌, 𝑐, 𝜋, �̃�𝐻HB), where
+𝜋 is a NIZK proof that certifies the ciphertext 𝑐 encrypts 𝑠 . Bob
+verifies that the NIZK proof and the pre-signature are indeed valid.
+If so, he chooses a random 𝑟 ←$Z𝑞 and re-randomizes the instance
+𝑌 to 𝑌 ′ := 𝑌 · 𝑔𝑟 and also re-randomizes the ciphertext 𝑐 as 𝑐 ′ ←
+ΠE .Rand(𝑐, 𝑟 ). The puzzle is set to 𝜏 := (𝑟,𝑚HB, �̃�
+𝐻
+HB, (𝑌, 𝑐), (𝑌
+′, 𝑐 ′)).
+Puzzle Solve. Bob sends the puzzle 𝜏 privately to Alice, who now
+executes the puzzle solve protocol with Hub (as described in [53]).
+Alice samples a random 𝑟 ′ and further re-randomizes the instance
+𝑌 ′ as 𝑌 ′′ := 𝑌 ′ · 𝑔𝑟 ′ and the ciphertext 𝑐 ′ as 𝑐 ′′ ← ΠE .Rand(𝑐 ′, 𝑟 ′).
+She then generates a pre-signature �̃�𝐴AH on a commonmessage𝑚AH
+with respect to the instance 𝑌 ′′. She sends the tuple (𝑌 ′′, 𝑐 ′′, �̃�𝐴AH )
+to Hub, who decrypts 𝑐 ′′ using the decryption key dk𝐻 to obtain 𝑠 ′′.
+Hub then adapts the pre-signature �̃�𝐴AH to 𝜎𝐴AH using 𝑠 ′′ and ensures
+its validity. It then sends the signature𝜎𝐴AH to Alice, who extracts the
+witness for 𝑌 ′′ as 𝑠 ′′ ← ΠADP .Ext(�̃�𝐴AH , 𝜎
+𝐴
+AH , 𝑌
+′′). Alice removes
+the re-randomization factor to obtain the solution 𝑠 ′ := 𝑠 ′′ − 𝑟 ′ for
+the instance 𝑌 ′. Alice finally sends 𝑠 ′ privately to Bob, who opens
+the puzzle 𝜏 by computing the witness 𝑠 := 𝑠 ′ − 𝑟 and adapting
+the pre-signature �̃�𝐻HB (given by Hub in the promise phase) to the
+signature 𝜎𝐻HB.
+3.2 Counterexamples
+Next, we describe two cryptographic instantiations of A
+2
+L that
+satisfy the formal definitions, yet enable two attacks. For the pur-
+pose of these attacks, it suffices to keep in mind that Hub offers
+the sender party (Alice) access to the following oracle, which we
+refer to as OA2L
+dk,ΠE,ΠADP
+. On input a verification key vk, a message
+𝑚, a group element ℎ, a ciphertext 𝑐 , and a partial signature �̃� , the
+oracle behaves as follows:
+• Compute 𝑥 ← ΠE .Dec(dk, 𝑐).
+• Compute 𝜎 ′ ← ΠADP .Adapt(�̃�, 𝑥).
+• If ΠADP .Vrfy(vk,𝑚, 𝜎 ′) = 1, return 𝜎 ′.
+• Else return ⊥.
+Note that returning 𝜎 ′ implicitly reveals 𝑥 , since
+ΠADP .Ext(�̃�, 𝜎 ′, ℎ) = 𝑥 . It is also useful to observe that pro-
+viding a valid pre-signature to the A
+2
+L oracle is trivial for an
+adversary: generating a pre-signature that is valid when adapted
+with a value 𝑥 requires only knowledge of the party’s own signing
+key and of a value ℎ = 𝑔𝑥 . The leakage offered by this oracle (and
+indeed the existence of this leakage) is not addressed in A
+2
+L’s
+proof of security.
+Key Recovery Attack. In our first attack, we completely recover
+the decryption key dk of the hub by simply querying the oracle
+OA2L
+sk,ΠE,ΠADP
+𝑛 times. For this attack, we assume that the encryption
+scheme ΠE is (in addition to being re-randomizable and CPA-secure
+as required by A
+2
+L):
+• Linearly homomorphic over Z𝑝 .
+1264
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+• Circular secure for bit encryption, i.e., the scheme is CPA-
+secure even given the bitwise encryption of the decryption key
+Enc(ek, dk1), . . . , Enc(ek, dk𝑛).
+• The above-mentioned ciphertexts (𝑐1, . . . , 𝑐𝑛) := (Enc(ek, dk1),
+. . . , Enc(ek, dk𝑛)) are included in the encryption key ek.
+Such schemes can be constructed from a variety of standard as-
+sumptions [13]. It is easy to see that these additional requirements
+do not contradict the initial prerequisites of the scheme.
+Algorithm 1 Key Recovery Attack
+Input: Hub’s ek along with the cipheretexts (𝑐1, . . . , 𝑐𝑛)
+1: Initialize key guess dk′ := 0
+𝑛
+2: for 𝑖 ∈ 1 . . . 𝑛 do
+3: Sample 𝑥 ←$Z𝑝 and compute ℎ := 𝑔𝑥
+4: Sample a fresh signing key (vk, sk) ← KGen(1𝑛)
+5: Set 𝑐′
+𝑖
+:= ΠE .Enc(ek, 𝑥) ◦ 𝑐𝑖 = ΠE .Enc(ek, 𝑥 + dk𝑖 )
+6: Compute �̃�𝑖 ← ΠADP .PreSig(sk,𝑚,ℎ)
+7: Query 𝑦 ← OA2L
+dk,ΠE,ΠADP
+(vk,𝑚,ℎ, 𝑐′
+𝑖
+, �̃�𝑖 )
+8: If 𝑦 = ⊥ set dk′𝑖 := 1
+9: end for
+10: return dk′
+The attack is shown in Algorithm 1. Note that, for a signing key
+pair in the 𝑖-th iteration, if theOA2L
+oracle returns𝑦 ≠ ⊥, this means
+that in the coinmixing layer, the Hub has obtained a valid𝑦 and thus
+obtains Alice’s (adversary’s) signature on a transaction. Due to one-
+time use of keys in this (cryptocurrency) layer, the attacker therefore
+cannot reuse the same signing key pair in another iteration for a
+different message (transaction). Therefore, it is necessary that the
+attacker (Alice) sample 𝑛 signing keys to account for every iteration
+being a non-⊥ query to OA2L
+. This is realized in the real world by
+the attacker having 𝑛 different sessions (of coin mixing), one for
+each vk𝑖 , with Hub.
+Observe that the response of the oracle is⊥ if and only if dk𝑖 = 1,
+since ℎ = 𝑔𝑥 ≠ 𝑔𝑥+1. On the other hand, if dk𝑖 = 0, then the
+oracle always returns a valid adapted signature 𝜎 ′. Thus, the attack
+succeeds with probability 1.
+One-More SignatureAttack.Wepresent a different attack, where
+we impose different assumptions on the encryption scheme ΠE. We
+discuss later in the section why these assumptions do not contradict
+the pre-requisites of the A
+2
+L scheme. Specifically, in addition to
+A
+2
+L’s requirement that the scheme is perfectly re-randomizable
+and CPA-secure, we assume that it is:
+• Linearly homomorphic over Z𝑝 .
+• Supports homomorphic evaluation of the conditional bit flip
+(CFlip) function, defined as
+ΠE .CFlip(ek, 𝑖, Enc(ek, 𝑥)) := Enc(ek, 𝑦)
+where
+{
+𝑦 = 𝑥 if 𝑥𝑖 = 0
+𝑦 = 𝑥 ⊕ 𝑒𝑖 if 𝑥𝑖 = 1
+and 𝑒𝑖 is the 𝑖-th unit vector.
+The objective of the attack is to steal coins from the hub in the
+coin mixing protocol. Specifically, at the A
+2
+L level, the attacker
+will solve 𝑞 + 1 puzzles by querying the puzzle solver interface
+successfully only 𝑞 times. Note that we do not count unsuccessful
+(i.e., the oracle returns⊥) queries, since those non-accepting queries
+do not correspond to any payment from Alice’s side.
+Algorithm 2 One-More Signature Attack
+Input: Bob’s ciphertexts (𝑐1, . . . , 𝑐𝑞+1) and group elements (ℎ1, . . . , ℎ𝑞+1) ,
+where 𝑐 𝑗 = ΠE .Enc(ek, 𝑥 𝑗 ) and ℎ 𝑗 := 𝑔
+𝑥 𝑗
+, and Hub’s ek
+1: Initialize guess 𝑥′
+1
+:= 0
+𝑛
+and a counter 𝑖 := 1
+2: for 𝑖 = 1 . . . 𝑛 do
+3: Sample a fresh signing key (vk, sk) ← KGen(1𝑛)
+4: Compute 𝑐′
+1
+← ΠE .CFlip(ek, 𝑖, 𝑐1)
+5: Sample (𝑟 (𝑖 )
+1
+, . . . , 𝑟
+(𝑖 )
+𝑞+1) ←$Z
+𝑞+1
+𝑝
+6: Compute 𝑐′ := (𝑐′
+1
+)𝑟
+(𝑖 )
+1 ◦ (𝑐2)𝑟
+(𝑖 )
+2 · · · ◦ (𝑐𝑞+1)
+𝑟
+(𝑖 )
+𝑞+1
+7: Compute ℎ′ :=
+∏𝑞+1
+𝑗=1
+ℎ
+𝑟
+(𝑖 )
+𝑗
+𝑗
+8: Sign �̃� ← ΠADP .PreSig(sk,𝑚,ℎ′)
+9: Query 𝑦𝑖 ← OA2L
+dk,ΠE,ΠADP
+(vk,𝑚,ℎ′, 𝑐′, �̃�)
+10: If 𝑦𝑖 = ⊥ set 𝑥′
+1,𝑖
+:= 1
+11: end for
+12: Continue querying (without updating 𝑥′
+1
+) until 𝑞 non-⊥ queries have
+been made
+13: For all 𝑖 corresponding to a non-⊥ query, set 𝐸𝑖 to be the equation
+𝑦𝑖 − 𝑟 (𝑖 )
+1
+𝑥′
+1
+= 𝑟
+(𝑖 )
+2
+𝑥′
+2
++ . . . + 𝑟 (𝑖 )
+𝑞+1𝑥
+′
+𝑞+1
+14: Solve (𝐸1, . . . , 𝐸𝑞) for (𝑥′
+2
+, . . . , 𝑥′
+𝑞+1)
+15: return (𝑥′
+1
+, 𝑥′
+2
+, . . . , 𝑥′
+𝑞+1)
+The attack is shown in Algorithm 2.We assume (for convenience)
+that 𝑞 ≥ 𝑛 and that Z𝑝 ≤ 2
+𝑛
+and therefore 𝑥 𝑗 ∈ {0, 1}𝑛 . Observe
+that the attack makes at most 𝑞 successful queries to the oracle, so
+all we need to show is that the success probability is high enough.
+First, we argue that the attack recovers the correct 𝑥 ′
+1
+= 𝑥1 with
+probability 1. If the 𝑖-th bit 𝑥1,𝑖 = 0, then the CFlip operation does
+not alter the content of the ciphertext and therefore
+𝑐 ′ = Enc ©­«ek,
+𝑞+1∑
+𝑗=1
+𝑟
+(𝑖)
+𝑗
+· 𝑥 𝑗
+ª®¬ and ℎ′ =
+𝑞+1∏
+𝑗=1
+ℎ
+𝑟
+(𝑖 )
+𝑗
+𝑗
+= 𝑔
+∑𝑞+1
+𝑗=1
+𝑟
+(𝑖 )
+𝑗
+·𝑥 𝑗
+so the oracle always returns a non-⊥ response. On the other hand,
+if 𝑥1,𝑖 = 1, then the above equality does not hold and therefore
+OA2L
+sk,ΠE,ΠADP
+always returns ⊥.
+This querying strategy is repeated for every bit of 𝑥 ′
+1
+and con-
+tinued on 𝑥2, etc., until 𝑞 non-⊥ queries have been made. Because
+𝑞 ≥ 𝑛, the attacker will have learned all 𝑛 bits of 𝑥 ′
+1
+by this point.
+Thus, the set of equations (𝐸1, . . . , 𝐸𝑞) has exactly 𝑞 unknowns.
+Since the coefficients are uniformly chosen, the equations are, with
+all but negligible probability, linearly independent. Since Z𝑝 is a
+field, the solution is uniquely determined and can be found effi-
+ciently via Gaussian elimination.
+N-More Signatures. The described attack is in fact even stronger
+than shown. Using this method, an attacker A can use 𝑞 queries,
+where ⌊𝑞⌋ = 𝑁𝑛, to recover 𝑁 + 𝑞 plaintexts. A does this by using
+𝑁𝑛 queries to recover the first 𝑁 plaintexts 𝑥1, . . . , 𝑥𝑁 and 𝑁𝑛
+equations as described previously (once it has flipped all 𝑛 bits
+in 𝑥1, it starts flipping bits in 𝑥2, and so on). Using its remaining
+queries, it obtains 𝑞 − 𝑁𝑛 more equations (either by continuing to
+flip bits in further ciphertexts, which are however wasted, or by
+simply choosing new values 𝑟𝑖 for the linear combinations) for a
+1265
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+total of 𝑞 equations. Using Gaussian elimination, it can recover the
+remaining 𝑞 plaintexts 𝑥𝑁+1, . . . , 𝑥𝑁+𝑞 . Taken with the plaintexts
+𝑥1, . . . , 𝑥𝑁 that were recovered bit-by-bit, the attacker has learned
+𝑁 + 𝑞 plaintexts.
+Instantiations. We now justify our additional assumptions on
+the encryption scheme ΠE by describing suitable instantiations
+that satisfy all the requirements. Clearly, if the scheme is fully-
+homomorphic [25] then it supports both linear functions over Z𝑝
+and conditional bit flips. However, we show that even a linear ho-
+momorphic encryption (over Z𝑝 ) can suffice to mount our attack.
+Specifically, given a CPA-secure linearly homomorphic encryp-
+tion scheme (KGen∗, Enc∗,Dec∗), we define a bitwise encryption
+scheme (KGen, Enc,Dec) as follows:
+• KGen(1𝑛): Return the output of KGen∗ (1𝑛).
+• Enc(ek, 𝑥): Parse 𝑥 as (𝑥 (1) , . . . , 𝑥 (𝑛) ) and return
+(Enc∗ (ek, 𝑥 (1) ), . . . , Enc∗ (ek, 𝑥 (𝑛) )).
+• Dec(dk, 𝑐): Parse 𝑐 as (𝑐 (1) , . . . , 𝑐 (𝑛) ) and return
+∑𝑛
+𝑖=1 2
+𝑖−1 ·
+Dec∗ (dk, 𝑐 (𝑖) ).
+It is easy to show that the new scheme is CPA-secure via a standard
+hybrid argument.
+Next, we argue that one can efficiently implement the conditional
+bit flip operation (CFlip) over such ciphertexts. Given a ciphertext
+𝑐 = (𝑐 (1) , . . . , 𝑐 (𝑛) ), we can conditionally flip the 𝑖-th bit by com-
+puting
+(𝑐 (1) , . . . , Enc∗ (ek, 0)︸       ︷︷       ︸
+𝑖-th ciphertext
+, . . . , 𝑐 (𝑛) ).
+This is a correctly formed ciphertext, since the conditional bit flip al-
+ways sets the 𝑖-th bit to 0 and leaves the other positions untouched.
+Finally, we need to argue that the encryption scheme is still
+linearly homomorphic over Z𝑝 . Note that this does not follow im-
+mediately from the fact that (KGen∗, Enc∗,Dec∗) is linearly ho-
+momorphic, since the new encryption algorithm decomposes the
+inputs bitwise. Nevertheless, we show this indeed holds for the
+case of two ciphertexts 𝑐 = (𝑐 (1) , . . . , 𝑐 (𝑛) ) and 𝑑 = (𝑑 (1) , . . . , 𝑑 (𝑛) )
+encrypting 𝑥 and 𝑦, respectively. The general case follows analo-
+gously. To homomorphically compute 𝛼𝑥 + 𝛽𝑦, where (𝛼, 𝛽) ∈ Z2𝑝 ,
+we compute( (
+𝑛
+⃝
+𝑖=1
+(𝑐 (𝑖) )2
+𝑖−1
+)𝛼
+◦
+(
+𝑛
+⃝
+𝑖=1
+(𝑑 (𝑖) )2
+𝑖−1
+)𝛽
+, Enc∗ (ek, 0),
+. . . , Enc∗ (ek, 0)
+)
+.
+A routine calculation shows that this ciphertext correctly decrypts
+to the desired result 𝛼𝑥 + 𝛽𝑦.
+4 BLIND CONDITIONAL SIGNATURES
+In the following we formally define and instantiate blind condi-
+tional signatures, the central cryptographic notion for coin mixing
+services. Our goal here is to give a simple and easy-to-understand
+formalization of a synchronization puzzle.
+4.1 Definitions
+A blind conditional signature (BCS) is executed among users Alice,
+Bob, and Hub. The interfaces and associated security properties are
+defined below.
+Definition 4.1 (Blind Conditional Signature). A blind conditional
+signature ΠBCS := (Setup, PPromise, PSolver,Open) is defined
+with respect to a signature scheme ΠDS := (KGen, Sign,Vf) and
+consists of the following efficient algorithms.
+• ( ˜ek, ˜dk) ← Setup(1𝑛): The setup algorithm takes as input the
+security parameter 1
+𝑛
+and outputs a key pair ( ˜ek, ˜dk).
+• (⊥, {𝜏,⊥}) ← PPromise
+〈
+𝐻
+(
+˜dk, sk𝐻 ,𝑚HB
+)
+B
+(
+˜ek, vk𝐻 ,𝑚HB
+) 〉: The puzzle
+promise algorithm is an interactive protocol between two users
+𝐻 (with inputs the decryption key
+˜dk, the signing key sk𝐻 , and
+a message𝑚HB) and B (with inputs the encryption key
+˜ek, the
+verification key vk𝐻 , and a message𝑚HB) and returns ⊥ to 𝐻
+and either a puzzle 𝜏 or ⊥ to 𝐵.
+• ({(𝜎∗, 𝑠),⊥}, {𝜎∗,⊥}) ← PSolver
+〈
+A
+(
+sk𝐴, ˜ek,𝑚AH , 𝜏
+)
+𝐻
+(
+˜dk, vk𝐴,𝑚AH
+) 〉
+: The
+puzzle solving algorithm is an interactive protocol between two
+users A (with inputs the signing key sk𝐴 , the encryption key
+˜ek, a message𝑚AH , and a puzzle 𝜏) and 𝐻 (with inputs the de-
+cryption key
+˜dk, the verification key pk𝐴 , and a message𝑚AH )
+and returns to both users either a signature 𝜎∗ (A additionally
+receives a secret 𝑠) or ⊥.
+• {𝜎,⊥} ← Open(𝜏, 𝑠): The open algorithm takes as input a puzzle
+𝜏 and a secret 𝑠 and returns a signature 𝜎 or ⊥.
+Next, we define correctness.
+Definition 4.2 (Correctness). A blind conditional signature ΠBCS
+is correct if for all 𝑛 ∈ N, all ( ˜ek, ˜dk) in the support of Setup(1𝑛),
+all (vk𝐻 , sk𝐻 ) and (vk𝐴, sk𝐴) in the support of ΠDS .KGen(1𝑛), and
+all pairs of messages (𝑚HB,𝑚AH ), it holds that
+Pr
+[
+Vf (vk𝐻 ,𝑚HB,Open(𝜏, 𝑠)) = 1
+]
+= 1
+and
+Pr
+[
+Vf (vk𝐴,𝑚AH , 𝜎
+∗) = 1
+]
+= 1
+where
+• 𝜏 ← PPromise
+〈
+𝐻
+(
+˜dk, sk𝐻 ,𝑚HB
+)
+B
+(
+˜ek, vk𝐻 ,𝑚HB
+) 〉 and
+• ((𝜎∗, 𝑠), 𝜎∗) ← PSolver
+〈
+A
+(
+sk𝐴, ˜ek,𝑚AH , 𝜏
+)
+𝐻
+(
+˜dk, vk𝐴,𝑚AH
+) 〉
+.
+We now present the security guarantees of BCS in the game-
+based setting. Our definition of blindness is akin to the strong
+blindness notion of standard blind signatures [19], in which the
+adversary picks the keys (as opposed to the weak version in which
+1266
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+ExpBlndAΠBCS
+(𝑛)
+( ˜ek, vk𝐻
+0
+, vk𝐻
+1
+, (𝑚HB,0,𝑚AH ,0), (𝑚HB,1,𝑚AH ,1)) ← A(1𝑛)
+(vk𝐴
+0
+, sk𝐴
+0
+) ← KGen(1𝑛)
+(vk𝐴
+1
+, sk𝐴
+1
+) ← KGen(1𝑛)
+𝜏0 ← PPromise
+〈
+A(vk𝐴
+0
+, vk𝐴
+1
+), B( ˜ek, vk𝐻
+0
+,𝑚HB,0)
+〉
+𝜏1 ← PPromise
+〈
+A(vk𝐴
+0
+, vk𝐴
+1
+), B( ˜ek, vk𝐻
+1
+,𝑚HB,1)
+〉
+𝑏 ← {0, 1}
+(𝜎∗
+0
+, 𝑠0) ← PSolver
+〈
+A
+(
+sk𝐴
+0
+, ˜ek,𝑚AH ,0, 𝜏0⊕𝑏
+)
+,A
+〉
+(𝜎∗
+1
+, 𝑠1) ← PSolver
+〈
+A
+(
+sk𝐴
+1
+, ˜ek,𝑚AH ,1, 𝜏1⊕𝑏
+)
+,A
+〉
+if (𝜎∗
+0
+= ⊥) ∨ (𝜎∗
+1
+= ⊥) ∨ (𝜏0 = ⊥) ∨ (𝜏1 = ⊥)
+𝜎0 := 𝜎1 := ⊥
+else
+𝜎
+0⊕𝑏 ← Open(𝜏
+0⊕𝑏 , 𝑠0)
+𝜎
+1⊕𝑏 ← Open(𝜏
+1⊕𝑏 , 𝑠1)
+𝑏′ ← A(𝜎0, 𝜎1)
+return (𝑏 = 𝑏′)
+Figure 5: Blindness experiment
+they are chosen by the experiment)
+5
+. Roughly speaking, it says that
+two promise/solve sessions cannot be linked together by the hub.
+6
+Definition 4.3 (Blindness). A blind conditional signature ΠBCS is
+blind if there exists a negligible function negl(𝑛) such that for all
+𝑛 ∈ N and all PPT adversaries A, the following holds:
+Pr
+[
+ExpBlndAΠpuzzle
+(𝑛) = 1
+]
+≤ 1
+2
++ negl(𝑛)
+where ExpBlnd is defined in Figure 5.
+7
+Next, we define unlockability, which says that it should be hard
+for Hub to create a valid signature on Alice’s message that does
+not allow Bob to unlock the full signature in the corresponding
+promise session.
+Definition 4.4 (Unlockability). A blind conditional signature
+ΠBCS is unlockable if there exists a negligible function negl(𝑛)
+such that for all 𝑛 ∈ N and all PPT adversaries A, the following
+holds:
+Pr
+[
+ExpUnlockAΠBCS
+(𝑛) = 1
+]
+≤ negl(𝑛)
+where ExpUnlock is defined in Figure 6.
+Our definition of unforgeability is inspired by the unforgeabil-
+ity of blind signatures [19]. We require that Alice and Bob cannot
+recover 𝑞 signatures from Hub while successfully querying the
+5
+We opt for this stronger version since we want to provide anonymity even in the
+case of a fully malicious hub, which can pick its keys adversarially to try to link a
+sender/receiver pair.
+6
+We do not consider the case in which Hub colludes with either Alice or Bob, since
+deanonymization is trivial (Alice (resp. Bob) simply reveals the identity of Bob (resp.
+Alice) to Hub); this is in line with [53].
+7
+In previous works, descriptions of unlinkability assume an explicit step for blinding
+the puzzle 𝜏 between PPromise and PSolver. Here, we assume that PSolver performs
+this blinding functionality.
+ExpUnlockAΠBCS
+(𝑛)
+( ˜ek, vk𝐻 ,𝑚HB,𝑚AH ) ← A(1𝑛)
+(vk𝐴, sk𝐴) ← KGen(1𝑛)
+𝜏 ← PPromise
+〈
+A(vk𝐴), B( ˜ek, vk𝐻 ,𝑚HB)
+〉
+if 𝜏 = ⊥
+(�̂�, �̂�) ← A
+𝑏0 := (Vf (vk𝐴, �̂�, �̂�) = 1)
+if 𝜏 ≠ ⊥
+(𝜎∗, 𝑠) ← PSolver
+〈
+A
+(
+sk𝐴, ˜ek,𝑚AH , 𝜏
+)
+,A
+〉
+(�̂�, �̂�) ← A
+𝑏1 := (Vf (vk𝐴, �̂�, �̂�) = 1) ∧ (�̂� ≠𝑚AH )
+𝑏2 := (Vf (vk𝐴, 𝜎∗,𝑚AH ) = 1)
+𝑏3 := (Vf (vk𝐻 ,𝑚HB,Open(𝜏, 𝑠)) ≠ 1)
+return 𝑏0 ∨ 𝑏1 ∨ (𝑏2 ∧ 𝑏3)
+Figure 6: Unlockability experiment
+solving oracle at most 𝑞 − 1 times. Since each successful query
+reveals a signature from Alice’s key (which in turn corresponds to
+a transaction from Alice to Hub), this requirement implicitly cap-
+tures the fact that Alice and Bob cannot steal coins from Hub. The
+winning condition 𝑏0 captures the scenario where the adversary
+forges a signature of the hub on a message previously not used
+in any promise oracle query. The remaining conditions 𝑏1, 𝑏2 and
+𝑏3 together capture the scenario in which the adversary outputs 𝑞
+valid distinct key-message-signature tuples while having queried
+for solve only 𝑞 − 1 times. Hence, in the second condition, the at-
+tacker manages to complete 𝑞 promise interactions with only 𝑞 − 1
+solve interactions, whereas in the first winning condition, the ad-
+versary computes a fresh signature that is not the completion of any
+promise interaction. These conditions are technically incomparable:
+an attacker that succeeds under one condition does not imply an
+attacker succeeding on the other. It is important to note that this is
+different from the unforgeability notion of blind signatures (where
+the attacker only has access to a single signing oracle), since in our
+case the hub is offering the attacker two oracles: promise and solve.
+Definition 4.5 (Unforgeability). A blind conditional signature
+ΠBCS is unforgeable if there exists a negligible function negl(𝑛)
+such that for all 𝑛 ∈ N and all PPT adversaries A, the following
+holds:
+Pr
+[
+ExpUnforgAΠBCS
+(𝑛) = 1
+]
+≤ negl(𝑛)
+where ExpUnforg is defined in Figure 7.
+We define security as the collection of all properties.
+Definition 4.6 (Security). A blind conditional signature ΠBCS is
+secure if it is blind, unlockable, and unforgeable.
+1267
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+ExpUnforgAΠBCS
+(𝑛)
+L := ∅,𝑄 := 0
+( ˜ek, ˜dk) ← Setup(1𝑛)
+(vk𝐻
+1
+,𝑚1, 𝜎1), . . . , (vk𝐻𝑞 ,𝑚𝑞, 𝜎𝑞) ← AOPP(·),OPS(·) ( ˜ek)
+𝑏0 := ∃𝑖 ∈ [𝑞 ] s.t. (vk𝐻𝑖 , ·) ∈ L ∧ (vk𝐻𝑖 ,𝑚𝑖 ) ∉ L
+∧ Vf (vk𝐻𝑖 ,𝑚𝑖 , 𝜎𝑖 ) = 1
+𝑏1 := ∀𝑖 ∈ [𝑞 ], (vk𝐻𝑖 ,𝑚𝑖 ) ∈ L ∧ Vf (vk𝐻𝑖 ,𝑚𝑖 , 𝜎𝑖 ) = 1
+𝑏2 :=
+∧
+𝑖,𝑗∈[𝑞 ],𝑖≠𝑗
+(vk𝐻𝑖 ,𝑚𝑖 , 𝜎𝑖 ) ≠ (vk𝐻𝑗 ,𝑚 𝑗 , 𝜎 𝑗 )
+𝑏3 := (𝑄 ≤ 𝑞 − 1)
+return 𝑏0 ∨ (𝑏1 ∧ 𝑏2 ∧ 𝑏3)
+OPP(𝑚)
+(vk𝐻 , sk𝐻 ) ← ΠADP .KGen(1𝑛)
+L := L ∪ {(vk𝐻 ,𝑚) }
+⊥ ← PPromise⟨𝐻 ( ˜dk, sk𝐻 ,𝑚),A(vk𝐻 ) ⟩
+OPS(vk𝐴,𝑚′)
+𝜎∗ ← PSolver⟨A, 𝐻 ( ˜dk, vk𝐴,𝑚′) ⟩
+if 𝜎∗ ≠ ⊥ then𝑄 := 𝑄 + 1
+Figure 7: Unforgeability experiment
+4.2 The A2L+ Protocol
+In the following we describe our A
+2
+L
++
+construction. Our scheme
+is a provable variant of A
+2
+L (Section 3.1) and therefore we only
+describe the differences with respect to the original protocol. The
+concrete modifications are as follows:
+• Augment the public key of Hub ek𝐻 with a NIZK proof that
+certifies that ek𝐻 ∈ Supp(ΠE .KGen(1𝑛)). All parties verify this
+proof during their first interaction with Hub.
+• In PSolver (of [53]), Hub additionally checks if vk𝐴AH is in the
+support of ΠADP .KGen(1𝑛) before the decryption (line 6). Fur-
+thermore, we replace the condition (line 8) with
+ΠADP .PreVf (vk𝐴AH ,𝑚AH , 𝑌
+′′, �̃�𝐴AH ) ≠ 1 ∨ 𝑔𝑠
+′′
+≠ 𝑌 ′′.
+4.3 Security Analysis
+In this section we present our security results and defer the proofs
+to the full version [27]. Before proving our main theorem, we define
+a property which is going to be useful for our analysis.
+Definition 4.7 (OM-CCA-A2L). An encryption scheme ΠE is one-
+more CCA-A2L-secure (OM-CCA-A2L) if there exists a negligible
+function negl(𝑛) such that for all 𝑛 ∈ N, all polynomials 𝑞 = 𝑞(𝑛),
+and all PPT adversaries A, the following holds:
+Pr
+[
+OM-CCA-A2L
+A
+ΠE,𝑞
+(𝑛) = 1
+]
+≤ negl(𝑛),
+where OM-CCA-A2L is defined in Figure 8.
+OM-CCA-A2L
+A
+ΠE,𝑞
+𝑄 := 0
+(ek, dk) ← ΠE .KGen(1𝑛)
+𝑟1, . . . , 𝑟𝑞+1 ←$ {0, 1}𝑛
+𝑐𝑖 ← ΠE .Enc(ek, 𝑟𝑖 )
+(𝑟 ′
+1
+, . . . , 𝑟 ′𝑞+1) ← A
+OA2Ldk,ΠE,ΠADP (ek, (𝑐1, 𝑔𝑟1 ), . . . , (𝑐𝑞+1, 𝑔𝑟𝑞+1 ))
+if 𝑟 ′𝑖 = 𝑟𝑖 ∀𝑖 ∈ 1, . . . , 𝑞 + 1 ∧𝑄 ≤ 𝑞 then return 1
+else return 0
+OA2L
+dk,ΠE,ΠADP
+(vk,𝑚,ℎ, 𝑐, �̃�)
+check if vk ∈ Supp(ΠADP .KGen(1𝑛))
+�̃� ← ΠE .Dec(dk, 𝑐)
+if ΠADP .PreVf (vk,𝑚,ℎ, �̃�) = 1 and 𝑔�̃� = ℎ
+𝑄 := 𝑄 + 1
+return 𝜎′ ← ΠADP .Adapt(�̃�, �̃�)
+else return ⊥
+Figure 8: OM-CCA-A2L game
+The following technical lemma shows that an LOE scheme satis-
+fies this property, assuming the hardness of the OMDL problem. The
+formal analysis of the below lemma is deferred to the full version
+of the paper [27].
+Lemma 4.8. Let ΠE be an LOE scheme. Assuming the hardness of
+OMDL, ΠE is OM-CCA-A2L secure.
+Main Theorem. We are now ready to give the main theorem of
+this section. The formal analysis is deferred to the full version of
+the paper [27].
+Theorem 4.9. Let ΠE be an LOE scheme, ΠADP a secure adaptor
+signature scheme, and ΠNIZK a sound NIZK proof system. Assuming
+the hardness of OMDL, the A2L+ protocol is a secure blind conditional
+signature scheme.
+5 UC-SECURE BLIND CONDITIONAL
+SIGNATURES
+We now model security in the universal composability framework
+from Canetti [16] extended to support a global setup [17] in order
+to capture concurrent executions. We refer the reader to [16] for a
+comprehensive discussion. We consider static corruptions, where
+the adversary announces at the beginning which parties it corrupts.
+We denote the environment by E. For a real protocol Π and an
+adversary A we write EXECΠ,A,E to denote the ensemble corre-
+sponding to the protocol execution. For an ideal functionality F
+and an adversary S we write EXECF,S,E to denote the distribution
+ensemble of the ideal world execution.
+Definition 5.1 (Universal Composability). A protocol Π UC-
+realizes an ideal functionality F if for any PPT adversary A there
+exists a simulatorS such that for any environment E the ensembles
+EXECΠ,A,E ≈ EXECF,S,E are computationally indistinguishable.
+1268
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+In our protocol, we assume the existence of a general-purpose
+UC-secure 2-party computation (2PC) protocol [18, 34], where two
+parties interact with the ideal functionality to compute a function
+𝑓 (𝑥,𝑦) over their private inputs 𝑥 and 𝑦.
+5.1 Ideal functionality
+We describe the ideal functionality FBCS that captures the function-
+ality and security of BCS in the UC framework. We refer the reader
+to the full version of the paper [27] for the formal description of
+FBCS. The ideal functionality has three routines, namely for puz-
+zle promise, puzzle solver, and open, which intuitively capture the
+functionality of BCS as discussed in Section 4. On a high level, FBCS
+captures blindness by sampling the puzzle identifiers pid and pid′,
+which correspond to puzzle promise and puzzle solve interactions,
+locally together, but never revealing them together to the hub. FBCS
+captures atomicity by returning a successful message (not aborting)
+for pid during open if and only if it sent a successful solved mes-
+sage during the puzzle solve interaction for the puzzle identifier
+pid′ (where pid and pid′ correspond to each other). Note that the
+above atomicity guarantee implies the game-based definitions of
+unlockability and unforgeability.
+Our functionality FBCS is taken verbatim from the FA2L function-
+ality in [53] except that we do not consider user registrations (as
+done in FA2L) to tackle griefing attacks [44] in the coin mixing layer.
+These attacks are mounted by Bob starting many puzzle promise
+operations, each of which requires Hub to lock coins, whereas the
+corresponding puzzle solver interactions are never carried out. As a
+consequence, all of Hub’s coins are locked and no longer available,
+which results in a form of denial of service attack. We argue that
+the issue does not concern the functionality or security of BCS as
+a cryptographic tool, but only affects the coin mixing protocol at
+the transaction layer. We emphasize that griefing attacks can be
+thwarted at this layer in both the formal model and the construction
+using the same ideas as in [53].
+5.2 Our Protocol: A2LUC
+We now describe our protocol A
+2
+L
+UC
+that realizes the ideal func-
+tionality FBCS. We assume the following cryptographic building
+blocks:
+• An adaptor signature scheme ΠADP defined with respect to ΠDS
+and a hard relation 𝑅DL.
+• A UC-secure NIZK proof system ΠNIZK for the language
+L := {(ek, 𝑌 , 𝑐) | ∃𝑠, s.t. 𝑐 ← ΠE .Enc(ek, 𝑠) ∧ 𝑌 = 𝑔𝑠 }.
+• A UC-secure 2PC protocol.
+• A CCA-secure [8] encryption scheme ΠE := (KGen, Enc,Dec)
+with unique decryption keys.
+The property of unique decryption keys is formalized below.
+Definition 5.2 (Unique Decryption Keys). An encryption scheme
+ΠE has unique decryption keys if the KGen algorithm is of the
+following form:
+• Sample dk←$ {0, 1}𝑛 .
+• Run ek← Gen(dk).
+Furthermore, for all ek output by KGen, there exists a unique dk
+such that ek = Gen(dk). In other words, Gen is injective.
+Setup(1𝑛)
+(ek𝐻 , dk𝐻 ) ← ΠE .KGen(1𝑛)
+set ˜pk := ek𝐻 , ˜sk := dk𝐻
+return ( ˜pk, ˜sk)
+Open(𝜏, 𝑠)
+parse 𝜏 := ( ·, �̃�, ·)
+𝜎 ← ΠADP .Adapt(�̃�, 𝑠)
+return 𝜎
+Figure 9: Setup and Open algorithms of our conditional puz-
+zle construction
+This property is already satisfied by most natural public-key en-
+cryption schemes, but it can be generically achieved by augmenting
+the encryption key with a perfectly binding commitment com(dk)
+to the decryption key dk.
+Protocol Description. We assume Alice and Hub have a key pair
+for the signature scheme ΠDS. Specifically, we have the verification-
+signing key pairs (vk𝐻HB, sk
+𝐻
+HB) and (vk
+𝐴
+AH , sk
+𝐴
+AH ), belonging to Hub
+and Alice, respectively. We then have two messages𝑚 :=𝑚HB and
+𝑚′ :=𝑚AH for which the users wish to generate blind conditional
+signatures. The setup and open algorithms are formally described
+in Figure 9. The puzzle promise and puzzle solver of A
+2
+L
+UC
+are
+formally described in Figure 10 and Figure 11, respectively. For ease
+of understanding, we briefly describe below our A
+2
+L
+UC
+protocol in
+terms of the differences with the A
+2
+L protocol (given in [53]).
+• The setup algorithm (Figure 9) of A
+2
+L
+UC
+generates the keys of
+Hub, which are the keys for the (CCA-secure) encryption scheme
+ΠE.
+• In PPromise of A2
+L
+UC
+(Figure 10),
+– The NIZK proof system is UC-secure.
+– Bob no longer re-randomizes the instance or the ciphertext.
+Therefore, we drop the re-randomization steps (line 12) of
+PPromise in A
+2
+L ([53, Figure 2]). Simply set the puzzle to
+𝜏 := (𝑚HB, �̃�
+𝐻
+HB, (𝑌, 𝑐)).
+• In PSolver of A2
+L
+UC
+(Figure 11),
+– Alice no longer sends the ciphertext to Hub (line 4) of [53,
+Figure 3]. We therefore remove the local decryption step (line
+5) of [53, Figure 3], and replace it with a 2PC protocol (line 6
+of Figure 11).
+– At the end of the 2PC protocol, Alice receives ⊥, while Hub
+receives the value 𝑧. Hub additionally checks if 𝑌 ′ = 𝑔𝑧 (line
+7) and uses 𝑧 to adapt the pre-signature �̃�𝐴AH to signature 𝜎𝐴AH .
+– We add a check for Alice (line 10) that 𝜎𝐴AH is a valid signature
+before extracting the witness 𝑧′ in line 12.
+• The Open algorithm (Figure 9) is the same as in [53, Figure 4]
+of A
+2
+L, except we skip removing the randomness factor. The
+algorithm in Figure 9 now simply adapts a pre-signature �̃� to a
+valid signature 𝜎 which it returns as output.
+5.3 Security Analysis
+We now show that A
+2
+L
+UC
+satisfies UC-security. In favor of a simpler
+analysis, we assume that the verification keys of all parties are
+honestly generated. In practice, this can be enforced by augmenting
+keys with NIZKs that certify their validity [12, 37].We state here our
+security theorem and defer the formal proof to the full version [27]
+due to space constraints.
+1269
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+Public parameters: group description (G, 𝑔, 𝑞), message𝑚HB
+PPromise⟨𝐻 (dk𝐻 , sk𝐻HB), ·⟩ PPromise⟨·, 𝐵 (ek𝐻 , vk𝐻HB) ⟩
+1 : 𝑠 ←$Z𝑝 , 𝑌 := 𝑔𝑠
+2 : 𝑐 ← ΠE .Enc(ek𝐻 , 𝑠)
+3 : 𝜋𝑠 ← NIZK.P( (ek𝐻 , 𝑌 , 𝑐), 𝑠)
+4 : �̃�𝐻HB ← ΠADP .PreSig(sk𝐻HB,𝑚HB, 𝑌 )
+5 :
+𝑌, 𝑐, 𝜋𝑠 , �̃�
+𝐻
+HB
+6 : If NIZK.V( (ek𝐻 , 𝑌 , 𝑐), 𝜋𝑠 ) ≠ 1 then return ⊥
+7 : If ΠADP .PreVf (vk𝐻HB,𝑚HB, 𝑌 , �̃�
+𝐻
+HB) ≠ 1 then
+8 : return ⊥
+9 : set 𝜏 := (𝑚HB, �̃�
+𝐻
+HB, (𝑌, 𝑐))
+10 : return ⊥ return 𝜏
+Figure 10: Puzzle promise protocol of A2LUC
+Public parameters: group description (G, 𝑔, 𝑞), message𝑚AH
+PSolver⟨𝐴(sk𝐴AH , ek𝐻 , 𝜏), ·⟩ PSolver⟨·, 𝐻 (dk𝐻 , vk𝐴AH ) ⟩
+1 : parse 𝜏 := ( ·, ·, (𝑌, 𝑐))
+2 : 𝑟 ←$Z𝑝 , 𝑌
+′
+:= 𝑌 · 𝑔𝑟
+3 : �̃�𝐴AH ← ΠADP .PreSig(sk𝐴AH ,𝑚AH , 𝑌
+′)
+4 :
+𝑌 ′, �̃�𝐴AH
+5 : If ΠADP .PreVf (vk𝐴AH ,𝑚AH , 𝑌
+′, �̃�𝐴AH ) ≠ 1 then
+return ⊥
+6 : 2PC( (𝑟, 𝑐), (dk𝐻 ))
+1 : if ek𝐻 ≠ ΠE .Gen(dk𝐻 )
+2 : then abort
+3 : 𝑠∗ ← ΠE .Dec(dk𝐻 , 𝑐)
+4 : 𝑧 := 𝑠∗ + 𝑟
+5 : return ( (⊥), (𝑧))
+7 : If 𝑌 ′ ≠ 𝑔𝑧 then return ⊥
+8 : 𝜎𝐴AH ← ΠADP .Adapt(�̃�𝐴AH , 𝑧)
+9 :
+𝜎𝐴AH
+10 : If ΠADP .Vf (vk𝐴AH ,𝑚AH , 𝜎
+𝐴
+AH ) ≠ 1 then
+11 : return ⊥
+12 : 𝑧′ ← ΠADP .Ext(�̃�𝐴AH , 𝜎
+𝐴
+AH , 𝑌
+′)
+13 : 𝑠 := 𝑧′ − 𝑟
+14 : return (𝜎𝐴AH , 𝑠) return 𝜎𝐴AH
+Figure 11: Puzzle solver protocol of A2LUC
+Theorem 5.3. Let ΠE be a CCA-secure encryption scheme, ΠADP
+a secure adaptor signature scheme, 2PC a UC-secure two-party com-
+putation protocol, and ΠNIZK a UC-secure NIZK for the language L
+above. Then the A2LUC protocol UC-realizes FBCS.
+6 EFFICIENCY
+6.1 A2L+
+Recall that we use an encryption scheme ΠE in the LOE model.
+Below we present an instantiation of such a ΠE.
+Instantiating Linear-Only Encryption. As shown in [11] it is
+not sufficient to instantiate this with any linearly homomorphic
+encryption (e.g., ElGamal). Though the scheme may not support
+homomorphic operations beyond linear, it may still have obliviously
+sampleable ciphertexts, i.e., the ability to sample a ciphertext with-
+out knowing the underlying plaintext. Note that this falls outside
+the LOE model, since there is no oracle that implements this func-
+tionality. Thus, as suggested in [11] we implement an additional
+safeguard needed to prevent oblivious sampling. Given a linearly
+homomorphic encryption scheme Π∗E := (KGen∗, Enc∗,Dec∗) over
+Z𝑝 , we define a candidate LOE ΠE := (KGen, Enc,Dec) as follows:
+• KGen(1𝑛): Sample (ek∗, dk∗) ← KGen∗ (1𝑛) and some 𝛼 ←$Z𝑝 .
+Return dk := (dk∗, 𝛼) as the decryption key and ek :=
+(ek∗, Enc∗ (ek∗, 𝛼)) as the encryption key.
+• Enc(ek∗, 𝑥): Compute 𝑐 as (Enc∗ (ek∗, 𝑥), Enc∗ (ek∗, 𝛼 ·𝑥)), where
+Enc∗ (ek∗, 𝛼 · 𝑥) is computed homomorphically using ek.
+• Dec(dk∗, 𝑐): Parse 𝑐 as (𝑐0, 𝑐1) and compute 𝑥0 ← Dec∗ (dk∗, 𝑐0)
+and 𝑥1 ← Dec∗ (dk∗, 𝑐1). If 𝑥1 = 𝛼 · 𝑥0 return 𝑥0, else return ⊥.
+We note that the security of ΠE follows from the security of Π∗E.
+Intuitively, we prevent oblivious ciphertext sampling, since it is
+1270
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+Table 1: Operations in A2L and A2L+ when instantiated with Schnorr or ECDSA adaptor signatures [4]. We give the number group exponen-
+tiations (Exp) and group operations (Op) in both class groups (CL) and groups of prime order 𝑝 (G), where log𝑝 = 𝑛. Group element inversions
+(Inv) only occur in class groups. Modular multiplications (×) and additions (+) are performed modulo 𝑞. We denote by #H the number of hash
+computations. Decryption of a CL ciphertext also involves solving a discrete logarithm in a class group, which we denote by DLog.
+Protocol Signature Exp (CL) Op (CL) Inv (CL) DLog (CL) Exp (G) Op (G) × mod 𝑞 + mod 𝑞 #H
+A
+2
+L Schnorr 18 12 1 1 13 8 4 9 6
+(insecure) ECDSA 18 12 1 1 27 8 17 10 11
+A
+2
+L
++
+Schnorr 28 20 2 2 14 9 5 9 6
+ECDSA 28 20 2 2 32 10 21 12 11
+infeasible for an adversary to sample a ciphertext component 𝑐0
+that is consistent with 𝑐1 without knowing the plaintext of 𝑐0.
+Added Costs. The new consistency check by the hub in PSolver
+adds 1 group operation and group exponentiation (Schnorr) or 5
+group operations and 2 group exponentiations (ECDSA). The check
+on Alice’s verification key vk𝐴AH adds 3 modular multiplications and
+2 modular additions in the ECDSA case. Furthermore, applying the
+LOE transformation described above to the CL encryption scheme
+results in a doubled ciphertext size and a corresponding increase
+in the operation count for decryption. We summarize the costs of
+A
+2
+L and A
+2
+L
++
+in Table 1.
+6.2 A2LUC
+Compared to A
+2
+L
++
+, our A
+2
+L
+UC
+protocol removes the check on vk𝐴AH ,
+adds a signature verification, and moves the re-randomization and
+decryption into the 2PC. Additionally, ΠE is now required to be
+CCA-secure and the NIZK used must be UC-secure. The cost of the
+first two changes is minimal (net 1 group exponentiation, 1 group
+operation, and 1 hash computation); the most significant overhead
+is the result of the 2PC computation and the NIZK.
+Assuming the CCA-secure ΠE in the 2PC is instantiated with
+the (prime-order-based) Cramer-Shoup cryptosystem [21] with
+SHA3-256 [42] as the hash function, this incurs an overhead of
+11 exponentiations, 9 multiplications, and 1 division in a group of
+prime order 𝑝 and
+⌈
+3𝑛
+1088
+⌉
+· 38400 binary (AND) operations, where
+the security parameter 𝑛 equals log𝑝 . Because the 2PC requires
+a mix of arithmetic and binary operations, a mixed-circuit 2PC
+protocol as implemented e.g. in [35] could be used. Additionally,
+UC security of the NIZK can be achieved by replacing the use
+of the Fiat-Shamir transform in A
+2
+L (and A
+2
+L
++
+) with the Fischlin
+transform, incurring a cost of roughly𝑂 (log(𝑛)) parallel repetitions
+of the base Fiat-Shamir NIZK. We stress that we view A
+2
+L
+UC
+as
+a proof-of-concept protocol showing the feasibility of achieving
+UC-secure blind conditional signatures and leave the problem of
+constructing an efficient UC-secure realization as an interesting
+direction for future work.
+7 CONCLUSIONS
+We investigate the notion of synchronization puzzles, the crypto-
+graphic building blocks at the core of hub-enabled coin mixing
+services. We find that the previous formalization of a synchroniza-
+tion puzzle in [53] is flawed. In fact, we identify several issues in its
+formal model which can be easily exploited to break the security
+of the resultant coin mixing protocol. We conclude that tighter
+formalization of the functionality and security of synchronization
+puzzles is necessary.
+To fill this gap, we introduce the notion of blind conditional
+signatures (BCS). Additionally, we provide different security for-
+malizations for BCS at varying levels of strength (game-based and
+in the UC framework) accompanied by a provably secure variant
+of A
+2
+L called A
+2
+L
++
+and a new provably UC-secure construction
+A
+2
+L
+UC
+. Our performance evaluation results show an efficiency vs.
+security trade-off in the case of our constructions, yet show with
+A
+2
+L
++
+that provably secure coin mixing services are practical.
+Acknowledgements. This work was partially supported by the
+European Research Council (ERC) under the European Union’s
+Horizon 2020 research (grant agreement 771527-BROWSEC), by
+the Austrian Science Fund (FWF) through the projects PROFET
+(grant agreement P31621) and the project W1255-N23, by the Aus-
+trian Research Promotion Agency (FFG) through COMET K1 SBA
+and COMET K1 ABC, by the Vienna Business Agency through
+the project Vienna Cybersecurity and Privacy Research Center
+(VISP), by the Austrian Federal Ministry for Digital and Eco-
+nomic Affairs, the National Foundation for Research, Technol-
+ogy and Development and the Christian Doppler Research As-
+sociation through the Christian Doppler Laboratory Blockchain
+Technologies for the Internet of Things (CDL-BOT). This work
+has been also partially supported by the Madrid regional govern-
+ment as part of the program S2018/TCS-4339 (BLOQUES-CM) co-
+funded by EIE Funds of the European Union, by grant IJC2020-
+043391-I/MCIN/AEI/10.13039/501100011033 and European Union
+NextGenerationEU/PRTR, by SCUM Project (RTI2018-102043-B-
+I00) MCIN/AEI/10.13039/501100011033/ERDF A way of making
+Europe, and by the project HACrypt. Additionally, this material
+is based upon work supported by the National Science Founda-
+tion Graduate Research Fellowship Program under Grant No. DGE
+1840340. Any opinions, findings, and conclusions or recommen-
+dations expressed in this material are those of the author(s) and
+do not necessarily reflect the views of the National Science Foun-
+dation. The work was also made possible through the support of
+the David and Lucile Packard Foundation (award #202071730), SRI
+International (award #53978) / Prime: Defense Advanced Research
+Projects Agency (award #HR00110C0086), and the National Science
+Foundation (award #2212746). G.M. was partially supported by the
+German Federal Ministry of Education and Research (BMBF) (grant
+16K15K042, project 6GEM).
+1271
+CCS ’22, November 7–11, 2022, Los Angeles, CA, USA Noemi Glaeser et al.
+REFERENCES
+[1] Accessed on May 2022. CoinJoin - Bitcoin Wiki. https://en.bitcoin.it/wiki/CoinJ
+oin.
+[2] Accessed on May 2022. Coinswap. https://coinswap.space.
+[3] Lukas Aumayr, Oguzhan Ersoy, Andreas Erwig, Sebastian Faust, Kristina
+Hostakova, Matteo Maffei, Pedro Moreno-Sanchez, and Siavash Riahi. 2020.
+Generalized Bitcoin-Compatible Channels. Cryptology ePrint Archive, Report
+2020/476. https://eprint.iacr.org/2020/476.
+[4] Lukas Aumayr, Oguzhan Ersoy, Andreas Erwig, Sebastian Faust, Kristina
+Hostakova, Matteo Maffei, Pedro Moreno-Sanchez, and Siavash Riahi. 2020. Gen-
+eralized Channels from Limited Blockchain Scripts and Adaptor Signatures.
+Cryptology ePrint Archive, Report 2020/476. https://ia.cr/2020/476.
+[5] European Central Bank. 2021. Digital Euro. https://www.ecb.europa.eu/paym/d
+igital_euro/html/index.en.html
+[6] Simon Barber, Xavier Boyen, Elaine Shi, and Ersin Uzun. 2012. Bitter to Better
+— How to Make Bitcoin a Better Currency. Advances in Water Resources - ADV
+WATER RESOUR 7397. https://doi.org/10.1007/978-3-642-32946-3_29
+[7] Balthazar Bauer, Georg Fuchsbauer, and Antoine Plouviez. 2021. The One-More
+Discrete Logarithm Assumption in the Generic Group Model. Cryptology ePrint
+Archive, Report 2021/866. https://ia.cr/2021/866.
+[8] M. Bellare, A. Desai, E. Jokipii, and P. Rogaway. 1997. A concrete security
+treatment of symmetric encryption. In Proceedings 38th Annual Symposium on
+Foundations of Computer Science. 394–403. https://doi.org/10.1109/SFCS.1997.64
+6128
+[9] Mihir Bellare, Chanathip Namprempre, David Pointcheval, and Michael Semanko.
+2003. The One-More-RSA-Inversion Problems and the Security of Chaum’s Blind
+Signature Scheme. Journal of Cryptology 16, 3 (June 2003), 185–215. https:
+//doi.org/10.1007/s00145-002-0120-1
+[10] Eli Ben-Sasson, Alessandro Chiesa, Christina Garman, Matthew Green, Ian Miers,
+Eran Tromer, and Madars Virza. 2014. Zerocash: Decentralized Anonymous
+Payments from Bitcoin. In 2014 IEEE Symposium on Security and Privacy. IEEE
+Computer Society Press, 459–474. https://doi.org/10.1109/SP.2014.36
+[11] Nir Bitansky, Alessandro Chiesa, Yuval Ishai, Rafail Ostrovsky, and Omer Paneth.
+2013. Succinct Non-interactive Arguments via Linear Interactive Proofs. In
+TCC 2013 (LNCS, Vol. 7785), Amit Sahai (Ed.). Springer, Heidelberg, 315–333.
+https://doi.org/10.1007/978-3-642-36594-2_18
+[12] Alexandra Boldyreva. 2003. Threshold Signatures, Multisignatures and Blind Sig-
+natures Based on the Gap-Diffie-Hellman-Group Signature Scheme. In PKC 2003
+(LNCS, Vol. 2567), Yvo Desmedt (Ed.). Springer, Heidelberg, 31–46. https:
+//doi.org/10.1007/3-540-36288-6_3
+[13] Dan Boneh, Shai Halevi, Michael Hamburg, and Rafail Ostrovsky. 2008. Circular-
+Secure Encryption from Decision Diffie-Hellman. In CRYPTO 2008 (LNCS,
+Vol. 5157), David Wagner (Ed.). Springer, Heidelberg, 108–125. https://doi.
+org/10.1007/978-3-540-85174-5_7
+[14] Joseph Bonneau, Arvind Narayanan, Andrew Miller, Jeremy Clark, Joshua A.
+Kroll, and Edward W. Felten. 2014. Mixcoin: Anonymity for Bitcoin with Account-
+able Mixes. Technical Report 077.
+[15] Jan Camenisch, Stephan Krenn, and Victor Shoup. 2011. A Framework for
+Practical Universally Composable Zero-Knowledge Protocols. InASIACRYPT 2011
+(LNCS, Vol. 7073), Dong Hoon Lee and XiaoyunWang (Eds.). Springer, Heidelberg,
+449–467. https://doi.org/10.1007/978-3-642-25385-0_24
+[16] Ran Canetti. 2001. Universally composable security: A new paradigm for cryp-
+tographic protocols. In Proceedings 42nd IEEE Symposium on Foundations of
+Computer Science. IEEE, 136–145.
+[17] Ran Canetti, Yevgeniy Dodis, Rafael Pass, and Shabsi Walfish. 2007. Universally
+Composable Security with Global Setup. In TCC 2007 (LNCS, Vol. 4392), Salil P.
+Vadhan (Ed.). Springer, Heidelberg, 61–85. https://doi.org/10.1007/978-3-540-
+70936-7_4
+[18] Ran Canetti, Yehuda Lindell, Rafail Ostrovsky, and Amit Sahai. 2002. Universally
+composable two-party and multi-party secure computation. In 34th ACM STOC.
+ACM Press, 494–503. https://doi.org/10.1145/509907.509980
+[19] David Chaum. 1982. Blind Signatures for Untraceable Payments. In CRYPTO’82,
+David Chaum, Ronald L. Rivest, and Alan T. Sherman (Eds.). Plenum Press, New
+York, USA, 199–203.
+[20] Mihai Christodorescu, Erin English, Wanyun Catherine Gu, David Kreissman,
+Ranjit Kumaresan, Mohsen Minaei, Srinivasan Raghuraman, Cuy Sheffield, Ar-
+juna Wijeyekoon, and Mahdi Zamani. 2021. Universal Payment Channels: An
+Interoperability Platform for Digital Currencies. arXiv:2109.12194 [cs] (Sept. 2021).
+arXiv:2109.12194 [cs]
+[21] Ronald Cramer and Victor Shoup. 1998. A Practical Public Key Cryptosystem
+Provably Secure Against Adaptive Chosen Ciphertext Attack. In CRYPTO’98
+(LNCS, Vol. 1462), Hugo Krawczyk (Ed.). Springer, Heidelberg, 13–25. https:
+//doi.org/10.1007/BFb0055717
+[22] Alfredo De Santis, Silvio Micali, and Giuseppe Persiano. 1987. Non-interactive
+zero-knowledge proof systems. In Conference on the Theory and Application of
+Cryptographic Techniques. Springer, 52–72.
+[23] Stefan Dziembowski, Lisa Eckey, Sebastian Faust, and Daniel Malinowski. 2019.
+Perun: Virtual Payment Hubs over Cryptocurrencies. In 2019 IEEE Symposium on
+Security and Privacy. IEEE Computer Society Press, 106–123. https://doi.org/10
+.1109/SP.2019.00020
+[24] Georg Fuchsbauer, Eike Kiltz, and Julian Loss. 2018. The Algebraic Group Model
+and its Applications. In CRYPTO 2018, Part II (LNCS, Vol. 10992), Hovav Shacham
+and Alexandra Boldyreva (Eds.). Springer, Heidelberg, 33–62. https://doi.org/10
+.1007/978-3-319-96881-0_2
+[25] Craig Gentry. 2009. Fully homomorphic encryption using ideal lattices. In 41st
+ACM STOC, Michael Mitzenmacher (Ed.). ACM Press, 169–178. https://doi.org/
+10.1145/1536414.1536440
+[26] Simin Ghesmati, Walid Fdhila, and Edgar Weippl. 2021. SoK: How Private Is
+Bitcoin? Classification and Evaluation of Bitcoin Mixing Techniques. Technical
+Report 629.
+[27] Noemi Glaeser, Matteo Maffei, Giulio Malavolta, Pedro Moreno-Sanchez, Erkan
+Tairi, and Sri AravindaKrishnan Thyagarajan. 2022. Foundations of Coin Mixing
+Services. Cryptology ePrint Archive, Paper 2022/942. https://doi.org/10.1145/35
+48606.3560637 https://eprint.iacr.org/2022/942.
+[28] Shafi Goldwasser and Silvio Micali. 1984. Probabilistic encryption. J. Comput.
+System Sci. 28, 2 (1984), 270–299. https://doi.org/10.1016/0022-0000(84)90070-9
+[29] Shafi Goldwasser, Silvio Micali, and Ronald L. Rivest. 1988. A Digital Signature
+Scheme Secure Against Adaptive Chosen-message Attacks. SIAM J. Comput. 17,
+2 (April 1988), 281–308.
+[30] Jens Groth. 2004. Rerandomizable and Replayable Adaptive Chosen Ciphertext
+Attack Secure Cryptosystems. In TCC 2004 (LNCS, Vol. 2951), Moni Naor (Ed.).
+Springer, Heidelberg, 152–170. https://doi.org/10.1007/978-3-540-24638-1_9
+[31] Bernhard Haslhofer, Rainer Stütz, Matteo Romiti, and Ross King. 2021. Graph-
+Sense: A General-Purpose Cryptoasset Analytics Platform. CoRR abs/2102.13613
+(2021). arXiv:2102.13613
+[32] Ethan Heilman, Leen Alshenibr, Foteini Baldimtsi, Alessandra Scafuro, and
+Sharon Goldberg. 2017. TumbleBit: An Untrusted Bitcoin-Compatible Anony-
+mous Payment Hub. In NDSS 2017. The Internet Society.
+[33] Ethan Heilman, Foteini Baldimtsi, and Sharon Goldberg. 2016. Blindly Signed
+Contracts: Anonymous On-Blockchain and Off-Blockchain Bitcoin Transactions.
+Technical Report 056.
+[34] Omer Horvitz and Jonathan Katz. 2007. Universally-Composable Two-Party
+Computation in Two Rounds, See [41], 111–129. https://doi.org/10.1007/978-3-
+540-74143-5_7
+[35] Marcel Keller. 2020. MP-SPDZ: A Versatile Framework for Multi-Party Com-
+putation. In Proceedings of the 2020 ACM SIGSAC Conference on Computer and
+Communications Security. https://doi.org/10.1145/3372297.3417872
+[36] Russell W. F. Lai, Viktoria Ronge, Tim Ruffing, Dominique Schröder, Sri Ar-
+avinda Krishnan Thyagarajan, and Jiafan Wang. 2019. Omniring: Scaling Private
+Payments Without Trusted Setup. In ACM CCS 2019, Lorenzo Cavallaro, Jo-
+hannes Kinder, XiaoFeng Wang, and Jonathan Katz (Eds.). ACM Press, 31–48.
+https://doi.org/10.1145/3319535.3345655
+[37] Steve Lu, Rafail Ostrovsky, Amit Sahai, Hovav Shacham, and Brent Waters. 2006.
+Sequential Aggregate Signatures and Multisignatures Without Random Oracles.
+In EUROCRYPT 2006 (LNCS, Vol. 4004), Serge Vaudenay (Ed.). Springer, Heidelberg,
+465–485. https://doi.org/10.1007/11761679_28
+[38] Ueli M. Maurer. 2005. Abstract Models of Computation in Cryptography (Invited
+Paper). In 10th IMA International Conference on Cryptography and Coding (LNCS,
+Vol. 3796), Nigel P. Smart (Ed.). Springer, Heidelberg, 1–12.
+[39] Sarah Meiklejohn and Rebekah Mercer. 2017. Möbius: Trustless Tumbling for
+Transaction Privacy. Proceedings on Privacy Enhancing Technologies 2018 (2017),
+105 – 121.
+[40] Sarah Meiklejohn, Marjori Pomarole, Grant Jordan, Kirill Levchenko, Damon
+McCoy, Geoffrey M. Voelker, and Stefan Savage. 2016. A Fistful of Bitcoins:
+Characterizing Payments among Men with No Names. Commun. ACM 59, 4
+(March 2016), 86–93. https://doi.org/10.1145/2896384
+[41] Alfred Menezes (Ed.). 2007. CRYPTO 2007. LNCS, Vol. 4622. Springer, Heidelberg.
+[42] National Institute of Standards and Technology. 2015. SHA-3 Standard:
+Permutation-Based Hash and Extendable-Output Functions. http://dx.doi
+.org/10.6028/NIST.FIPS.202
+[43] Manoj Prabhakaran and Mike Rosulek. 2007. Rerandomizable RCCA Encryption,
+See [41], 517–534. https://doi.org/10.1007/978-3-540-74143-5_29
+[44] D. Robinson. 2019. HTLCs considered harmful. https://cbr.stanford.edu/sbc19/.
+[45] Tim Ruffing and Pedro Moreno-Sanchez. 2017. ValueShuffle: Mixing Confidential
+Transactions for Comprehensive Transaction Privacy in Bitcoin. In Financial
+Cryptography and Data Security - FC 2017 International Workshops, WAHC, BIT-
+COIN, VOTING, WTSC, and TA, Sliema, Malta, April 7, 2017, Revised Selected Papers
+(Lecture Notes in Computer Science, Vol. 10323), Michael Brenner, Kurt Rohloff,
+Joseph Bonneau, Andrew Miller, Peter Y. A. Ryan, Vanessa Teague, Andrea Brac-
+ciali, Massimiliano Sala, Federico Pintore, and Markus Jakobsson (Eds.). Springer,
+133–154. https://doi.org/10.1007/978-3-319-70278-0_8
+[46] TimRuffing, PedroMoreno-Sanchez, andAniket Kate. 2014. CoinShuffle: Practical
+Decentralized Coin Mixing for Bitcoin. In Computer Security - ESORICS 2014 -
+19th European Symposium on Research in Computer Security, Wroclaw, Poland,
+September 7-11, 2014. Proceedings, Part II (Lecture Notes in Computer Science,
+Vol. 8713), Miroslaw Kutylowski and Jaideep Vaidya (Eds.). Springer, 345–364.
+1272
+https://en.bitcoin.it/wiki/CoinJoin
+https://en.bitcoin.it/wiki/CoinJoin
+https://coinswap.space
+https://eprint.iacr.org/2020/476
+https://ia.cr/2020/476
+https://www.ecb.europa.eu/paym/digital_euro/html/index.en.html
+https://www.ecb.europa.eu/paym/digital_euro/html/index.en.html
+https://doi.org/10.1007/978-3-642-32946-3_29
+https://ia.cr/2021/866
+https://doi.org/10.1109/SFCS.1997.646128
+https://doi.org/10.1109/SFCS.1997.646128
+https://doi.org/10.1007/s00145-002-0120-1
+https://doi.org/10.1007/s00145-002-0120-1
+https://doi.org/10.1109/SP.2014.36
+https://doi.org/10.1007/978-3-642-36594-2_18
+https://doi.org/10.1007/3-540-36288-6_3
+https://doi.org/10.1007/3-540-36288-6_3
+https://doi.org/10.1007/978-3-540-85174-5_7
+https://doi.org/10.1007/978-3-540-85174-5_7
+https://doi.org/10.1007/978-3-642-25385-0_24
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.1145/509907.509980
+https://arxiv.org/abs/2109.12194
+https://doi.org/10.1007/BFb0055717
+https://doi.org/10.1007/BFb0055717
+https://doi.org/10.1109/SP.2019.00020
+https://doi.org/10.1109/SP.2019.00020
+https://doi.org/10.1007/978-3-319-96881-0_2
+https://doi.org/10.1007/978-3-319-96881-0_2
+https://doi.org/10.1145/1536414.1536440
+https://doi.org/10.1145/1536414.1536440
+https://doi.org/10.1145/3548606.3560637
+https://doi.org/10.1145/3548606.3560637
+https://eprint.iacr.org/2022/942
+https://doi.org/10.1016/0022-0000(84)90070-9
+https://doi.org/10.1007/978-3-540-24638-1_9
+https://arxiv.org/abs/2102.13613
+https://doi.org/10.1007/978-3-540-74143-5_7
+https://doi.org/10.1007/978-3-540-74143-5_7
+https://doi.org/10.1145/3372297.3417872
+https://doi.org/10.1145/3319535.3345655
+https://doi.org/10.1007/11761679_28
+https://doi.org/10.1145/2896384
+http://dx.doi.org/10.6028/NIST.FIPS.202
+http://dx.doi.org/10.6028/NIST.FIPS.202
+https://doi.org/10.1007/978-3-540-74143-5_29
+https://cbr.stanford.edu/sbc19/
+https://doi.org/10.1007/978-3-319-70278-0_8
+Foundations of Coin Mixing Services CCS ’22, November 7–11, 2022, Los Angeles, CA, USA
+https://doi.org/10.1007/978-3-319-11212-1_20
+[47] Tim Ruffing, Pedro Moreno-Sanchez, and Aniket Kate. 2016. P2P Mixing and
+Unlinkable Bitcoin Transactions. Technical Report 824.
+[48] Dominique Schröder and Dominique Unruh. 2017. Security of Blind Signatures
+Revisited. Journal of Cryptology 30, 2 (April 2017), 470–494. https://doi.org/10.1
+007/s00145-015-9225-1
+[49] István András Seres, Dániel A. Nagy, Chris Buckland, and Péter Burcsi. 2019.
+MixEth: Efficient, Trustless Coin Mixing Service for Ethereum. In International
+Conference on Blockchain Economics, Security and Protocols, Tokenomics, Vol. 71.
+13:1–13:20.
+[50] Victor Shoup. 1997. Lower Bounds for Discrete Logarithms and Related Problems.
+In EUROCRYPT’97 (LNCS, Vol. 1233), Walter Fumy (Ed.). Springer, Heidelberg,
+256–266. https://doi.org/10.1007/3-540-69053-0_18
+[51] Johann Stockinger, Bernhard Haslhofer, Pedro Moreno-Sanchez, and Matteo
+Maffei. 2021. Pinpointing and Measuring Wasabi and Samourai CoinJoins in the
+Bitcoin Ecosystem. arXiv:2109.10229 [cs.CR]
+[52] Jeff Stone. Accessed onMay 2022. Evolution Downfall: Insider ’Exit Scam’ Blamed
+For Massive Drug Bazaar’s Sudden Disappearance. https://www.ibtimes.com/
+evolution-downfall-insider-exit-scam-blamed-massive-drug-bazaars-sudden-
+disappearance-1856190.
+[53] E. Tairi, P. Moreno-Sanchez, and M. Maffei. 2021. A2L: Anonymous Atomic Locks
+for Scalability in Payment Channel Hubs. In 2021 IEEE Symposium on Security
+and Privacy (SP). IEEE Computer Society, Los Alamitos, CA, USA, 1834–1851.
+https://doi.org/10.1109/SP40001.2021.00111
+[54] Luke Valenta and Brendan Rowan. 2015. Blindcoin: Blinded, Accountable Mixes
+for Bitcoin. In Financial Cryptography and Data Security (Lecture Notes in Com-
+puter Science), Michael Brenner, Nicolas Christin, Benjamin Johnson, and Kurt
+Rohloff (Eds.). Springer, Berlin, Heidelberg, 112–126. https://doi.org/10.1007/978-
+3-662-48051-9_9
+1273
+https://doi.org/10.1007/978-3-319-11212-1_20
+https://doi.org/10.1007/s00145-015-9225-1
+https://doi.org/10.1007/s00145-015-9225-1
+https://doi.org/10.1007/3-540-69053-0_18
+https://arxiv.org/abs/2109.10229
+https://www.ibtimes.com/evolution-downfall-insider-exit-scam-blamed-massive-drug-bazaars-sudden-disappearance-1856190
+https://www.ibtimes.com/evolution-downfall-insider-exit-scam-blamed-massive-drug-bazaars-sudden-disappearance-1856190
+https://www.ibtimes.com/evolution-downfall-insider-exit-scam-blamed-massive-drug-bazaars-sudden-disappearance-1856190
+https://doi.org/10.1109/SP40001.2021.00111
+https://doi.org/10.1007/978-3-662-48051-9_9
+https://doi.org/10.1007/978-3-662-48051-9_9
+	Abstract
+	1 Introduction
+	1.1 Our Contributions
+	1.2 Technical Overview
+	1.3 Related Work
+	2 Preliminaries
+	3 Counterexamples of A2L
+	3.1 Description of A2L
+	3.2 Counterexamples
+	4 Blind Conditional Signatures
+	4.1 Definitions
+	4.2 The A2L+ Protocol
+	4.3 Security Analysis
+	5 UC-secure blind conditional signatures
+	5.1 Ideal functionality
+	5.2 Our Protocol: A2LUC
+	5.3 Security Analysis
+	6 Efficiency
+	6.1 A2L+
+	6.2 A2LUC
+	7 Conclusions
+	References

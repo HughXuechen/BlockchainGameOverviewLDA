@@ -1,0 +1,1453 @@
+Environmentally Friendly Composable Multi-party Computation in the Plain Model from Standard (Timed) Assumptions
+Environmentally Friendly Composable
+Multi-party Computation in the Plain
+Model from Standard (Timed)
+Assumptions
+Brandon Broadnax1, Jeremias Mechler2(B), and Jörn Müller-Quade2
+1 Robert Bosch GmbH, Stuttgart, Germany
+broadnax@ira.uka.de
+2 KASTEL, Karlsruhe Institute of Technology, Karlsruhe, Germany
+{mechler,mueller-quade}@kit.edu
+Abstract. Starting with the work of Rivest et al. in 1996, timed assump-
+tions have found many applications in cryptography, building e.g. the
+foundation of the blockchain technology. They also have been used in
+the context of classical MPC, e.g. to enable fairness. We follow this line
+of research to obtain composable general MPC in the plain model.
+This approach comes with a major advantage regarding environmental
+friendliness, a property coined by Canetti et al. (FOCS 2013). Informally,
+this means that our constructions do not “hurt” game-based security
+properties of protocols that hold against polynomial-time adversaries
+when executed alone.
+As an additional property, our constructions can be plugged into any
+UC-secure protocol without loss of security.
+Towards proving the security of our constructions, we introduce a
+variant of the UC security notion that captures timed cryptographic
+assumptions. Combining standard timed commitment schemes and stan-
+dard polynomial-time hardness assumptions, we construct a composable
+commitment scheme in the plain model. As this construction is constant-
+round and black-box, we obtain the first fully environmentally friendly
+composable constant-round black-box general MPC protocol in the plain
+model from standard (timed) assumptions.
+1 Introduction
+In order to achieve the very strong notion of universally composable (UC)
+security [Can01], trusted setups are required [CF01]. However, in prac-
+tice, trusted setups are often hard to come by. Therefore, a long line
+of research (e.g. [Pas03,BS05,LPV09,Gar+12,GKP18,Dac+13,PS04,CLP10,
+CLP13,Bro+17]) has investigated how composable multi-party computation
+(MPC) can be achieved in the plain model, i.e. only assuming authenticated
+communication.
+For the full version [BMM21], see https://eprint.iacr.org/2021/843.
+c© International Association for Cryptologic Research 2021
+K. Nissim and B. Waters (Eds.): TCC 2021, LNCS 13042, pp. 750–781, 2021.
+https://doi.org/10.1007/978-3-030-90459-3_25
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-90459-3_25&domain=pdf
+https://eprint.iacr.org/2021/843
+https://doi.org/10.1007/978-3-030-90459-3_25
+Environmentally Friendly Composable Multi-party Computation 751
+Common to their techniques is that the simulation is environmentally
+unfriendly, i.e. “hurts” the security of protocols that run along-side and that
+rely on polynomial-time hardness assumptions.
+Formally, this is captured by the notion of environmental friendliness as
+defined by Canetti, Lin, and Pass [CLP13], which considers all game-based secu-
+rity properties of a protocol against polynomial-time adversaries.
+The typical reason for limited environmental friendliness is a super-
+polynomial simulation, which can break polynomial-time assumptions used in
+other protocols, therefore impacting their security properties. This holds even if
+the super-polynomial resources are restricted by e.g. an angel.
+However, super-polynomial simulation techniques are not the only danger to
+the security of other protocols: Non-uniform advice given to the simulator (e.g.
+as in [LPV09]) may impact the security of previously started protocols—even
+if they are concurrently composable and secure against non-uniform adversaries.
+This additional property is not considered by the definition of environmental
+friendliness.
+Ever since composable MPC in the plain model has been investigated, the
+following question has been left unanswered:
+Can we achieve composable MPC in the plain model that is friendly to pro-
+tocols that are executed along-side and may have started previously?
+Previous results suggest that a simulation technique that runs in polynomial-
+time and does not rely on non-uniform advice is needed. Such a simulation
+cannot be achieved, in principle, even by previous advanced approaches like
+Angel-based security or shielded oracles. Therefore, new techniques to overcome
+the impossibility results of UC security are needed.
+With the advent of the blockchain era, timed cryptographic assumptions
+have seen widespread use in the real world. A very popular example is the proof
+of work protocol of the Bitcoin blockchain. Even though its hardness is not
+based on some well-understood cryptographic assumption, it has proven to work
+nevertheless for many years.
+Timed variants of classic cryptographic primitives such as commitment
+schemes can be constructed from timed assumptions that are inspired by well-
+understood standard assumptions. Rivest, Shamir, and Wagner [RSW96] have
+initiated this study and proposed a time-lock puzzle based on the hardness
+of factoring and the time required to square modulo a composite. Based on
+such assumptions, timed cryptographic primitives such as time-lock puzzles and
+timed-release encryption [RSW96] or timed signatures and timed commitment
+schemes [BN00] can be constructed in the plain model. More recently, stronger
+primitives such as non-malleable time-lock puzzles and commitment schemes
+have been constructed [Eph+20,KLX20] using a setup.
+As timed assumptions and primitives can be broken in polynomial-time by
+definition, they seem destined to solve the problem of limited friendliness exhib-
+ited by previous approaches for composable MPC in the plain model. In the
+following, we thus investigate the following questions:
+752 B. Broadnax et al.
+Can we use timed assumptions to achieve composable MPC in the plain
+model? What are the advantages and disadvantages of such an approach?
+We answer the first question affirmatively and propose a new approach for
+general MPC in the plain model based on asymmetries that are only temporary
+and much smaller compared to previous approaches. Namely, these asymmetries
+consist of only a polynomial number of computation steps sufficient to lever-
+age timed cryptographic assumptions. The very feasibility of this approach may
+seem surprising as timed cryptographic primitives eventually lose their security.
+For example, timed commitments will eventually leak their secret by definition.
+Previous constructions crucially rely on this not to happen, i.e. the complexity
+asymmetry and the ensuing security to hold throughout the whole execution.
+We side-step this problem by using timed assumptions to merely set up short-
+lived trapdoors that can only be used while the assumptions still hold. After
+their security has expired, the (now possibly leaked) trapdoor is useless for the
+adversary. Yet, a simulator can use it to establish a long-lived trapdoor based
+on some classical polynomial-time assumption.
+We introduce the notion of TLUC (“time-lock UC”) security, which is based
+on UC security and cast in the unmodified UC framework. With TLUC, honest
+parties may set up timers with some timeout � ∈ N that expire when all entities
+have spent more than � steps in total. This allows to capture the security of
+(stand-alone) timed primitives such as time-lock puzzles or timed commitment
+schemes. While computations performed by protocol parties, environment and
+adversary are counted against timers, computations performed by the simulator
+are not. This allows simulators to break timed assumptions “at no cost” in terms
+of time accounting, while remaining polynomially bounded. Such a simulator
+can then, for example, extract a timed commitment while it is still hiding for
+environment and adversary.
+With respect to the question of environmental friendliness, it suffices to see
+that the notion of TLUC security is a meaningful special case of UC security,
+which is fully environmentally friendly. This already implies that our notion also
+features full environmental friendliness as defined by [CLP13].
+In order to be friendly to previously started protocols, a uniform simulation,
+i.e. one that does not rely on non-uniform advice, is needed. Looking ahead, this
+is indeed the case for our composable commitment scheme.
+To the best of our knowledge, we are the first to achieve both of these prop-
+erties simultaneously.
+Leveraging timed assumptions for composability comes with a number of
+additional advantages. Namely, our notion is UC-compatible in the sense that if
+π UC-emulates φ for arbitrary protocols π and φ, then π also TLUC-emulates φ.
+TLUC security allows the reuse of UC protocols in the sense that one can take
+a UC-secure protocol ρ making one subroutine call to F that UC-realizes some
+ideal functionality G and replace F with its TLUC realization π. The composite
+protocol ρπ is then guaranteed to TLUC-realize G. These properties are not gen-
+Environmentally Friendly Composable Multi-party Computation 753
+erally offered in full by other notions that allow composable general MPC in the
+plain model and are not implied by (limited) environmental friendliness. What
+is more, TLUC security is meaningful for ideal functionalities that rely on (even
+uniform) polynomial-time assumptions. This is in contrast to e.g. SPS security,
+where such functionalities are affected by the super-polynomial simulator.
+Unfortunately, TLUC security is not closed under composition. Thus, one has
+to manually prove that multiple instances of π TLUC-realize multiple instances
+of F (i.e. π̂ TLUC-realizes F̂).
+Like previous approaches for general MPC in the plain model and even UC
+security, TLUC security is not friendly to timed game-based properties of other
+protocols, e.g. the timed hiding property of a timed commitment scheme. This
+property is neither captured by the definition of environmental friendliness nor
+fulfilled by any previous notion that allows composable MPC—not even UC
+security.
+Towards realizing composable general MPC, we first construct a commit-
+ment scheme that TLUC-realizes the ideal functionality for multiple commit-
+ments FMCOM. In more detail, we combine a (possibly malleable) timed com-
+mitment with a non-malleable commitment to construct a commitment that
+is equivocal and concurrently simulation-sound, i.e. retains its binding prop-
+erty even if the adversary sees equivocated commitments. We show that this
+suffices to replace the CRS of the UC-secure commitment scheme of Canetti
+and Fischlin [CF01] with coin-tosses, assuming that trapdoor one-way per-
+mutations with dense public description [DP92] exist. The resulting compos-
+able commitment scheme is constant-round, black-box, in the plain model
+and makes use of standard polynomial-time and standard timed assumptions
+only. We note that our approach is conceptually different from recent results
+[Eph+20,KLX20,Bau+21,Bau+20] which define non-malleable or composable
+timed primitives and realize them using a trusted setup.
+Due to the reusability of UC protocols, we can plug our construction into
+any UC protocol in the FMCOM-hybrid model while maintaining TLUC security.
+Using e.g. a variant of the MPC protocol of Hazay and Venkitasubramaniam
+[HV15], we are the first to obtain a composable constant-round, black-box and
+environmentally friendly general MPC protocol from standard polynomial-time
+and timed assumptions that does not impact the security of other protocols
+relying on (non-timed) polynomial-time hardness assumptions.
+1.1 Related Work
+Towards achieving composable MPC in the plain model, a number of approaches
+have been proposed.
+SPS Security, introduced by [Pas03], considers simulators that may have a super-
+polynomial run-time, giving them an advantage over the polynomially-bounded
+environment at the expense of environmental friendliness and UC reusability.
+754 B. Broadnax et al.
+While earlier approaches such as [Pas03,BS05] require (non-standard) super-
+polynomial hardness assumptions, newer approaches such as [LPV09,Gar+12,
+GKP18] require only standard polynomial-time hardness assumptions.
+Due to the complexity asymmetry between environment and simulator, these
+constructions do not offer general composition. The transitivity of SPS security
+holds only with respect to protocols whose security is not “hurt” by the stronger
+simulator, e.g. protocols that are information-theoretically secure such as [IPS08].
+Thus, (general) reusability of UC protocols is lost.
+[LPV09] have generalized the notion of UC security to (Cenv, Csim)-security,
+where Cenv and Csim denote the complexity classes of environment resp. simu-
+lator. They present a construction for non-malleable zero-knowledge from UC
+puzzles that can be plugged into an appropriate general MPC protocol. For
+their construction in the plain model, [LPV09] assume simulators that run in
+non-uniform polynomial-time while the environment runs in uniform polynomial-
+time. However, the non-uniform simulation may impact the security of protocols
+that have started in the past. Also, if Csim is non-uniform polynomial-time, then
+the security notion is not meaningful for ideal functionalities that rely on uniform
+polynomial-time hardness assumptions.
+[Dac+13] have extended the work of [LPV09] by considering adaptive secu-
+rity. Starting with a UC puzzle, they construct a commitment scheme satisfy-
+ing their new and strong notion of non-malleability from simulatable public-key
+encryption. This non-black-box and non-constant-round construction can then
+be plugged into an appropriate protocol, yielding adaptively secure composable
+general MPC.
+Recently, [GKP18] have presented a SPS-secure black-box OT protocol from
+constant-round semi-honest OT and collision-resistant hash functions, i.e. stan-
+dard polynomial-time hardness assumptions only. Their construction is secure
+against static corruptions and has a lower round complexity than other constant-
+round constructions such as [Bro+17].
+Angel-Based Security and Environmental Friendliness. The weak composition
+properties of SPS security have subsequently been improved upon by notions
+where the simulator itself remains polynomially bounded, but is aided by some
+super-polynomial entity that is also available to the environment. Such frame-
+works include Angel-based security [PS04], or UC with super-polynomial helpers
+[CLP10]. [CLP10] construct a non-constant-round CCA commitment scheme
+from one-way functions and use it to realize the ideal functionality for commit-
+ments. Their construction can be plugged into any constant-round UC protocol
+ρ in the FCOM-hybrid model without losing security. This property, called round
+robustness, has been generalized by [CLP13] to the property of environmental
+friendliness. The helper of [CLP13] is environmentally friendly for protocols
+whose security is proven via black-box reductions to game-based cryptographic
+hardness assumptions with bounded polynomial round complexity.
+Shielded Oracles. [Bro+17] have introduced the notion of UC security with
+shielded oracles that strictly lies between SPS security and Angel-based security.
+Environmentally Friendly Composable Multi-party Computation 755
+Their construction for a composable commitment scheme makes use of standard
+polynomial-time hardness assumptions only, is constant-round and black-box.
+While their notion is not environmentally friendly, they showed that the con-
+structions can be plugged into a special class of UC-secure protocols without
+loss of security.
+Other Models and Notions. There have been proposed a number of different
+models which enable (composable) MPC in the plain model. The timing model
+introduced by [KLP05] considers a communication network with time bounds
+and parties that have access to a local clock with little drift. There, non-constant-
+round non-black-box MPC secure under general composition is possible. This is
+done by delaying other protocols that are executed concurrently and incompa-
+rable to our approach.
+The notion of input indistinguishability, first defined by [MPR06] and gen-
+eralized and strengthened by [Gar+12], is another security notion capturing
+concurrent self-composition that can be achieved in the plain model. However,
+the constructions of [MPR06,Gar+12] are non-black-box. Also, input indistin-
+guishability is weaker than UC security.
+Non-malleable Time-Lock Puzzles and Commitments. [Eph+20] have introduced
+the notion of non-malleable time-lock puzzles and timed commitments and
+present constructions in the random oracle model. Similar results have been
+obtained by [KLX20] in the algebraic group model. While both results can pos-
+sibly be used as building blocks in our constructions, they are not in the plain
+model.
+TARDIS and CRAFT. TARDIS [Bau+21] extends the GUC framework
+[Can+07] to include a notion of abstract time and ticked functionalities whose
+behavior can depend on the elapsed time. In this setting, universally compos-
+able abstractions of time-lock puzzles can be defined and realized in the random
+oracle model. We note that the goal of [Bau+21] is different than ours. We use
+stand-alone-secure and possibly malleable timed primitives such as (malleable)
+timed commitments in order to achieve composability in the plain model. In
+contrast to TARDIS, we do not aim to define composable security notions for
+timed primitives. CRAFT [Bau+20] realizes composable MPC in the TARDIS
+framework with additional guarantees such as output-independent abort, also
+relying on a random oracle.
+1.2 Our Results
+New Security Notion for Composable Security. The notion of UC security con-
+siders entities that are polynomially bounded and inherently unaware of other
+computations going on. Thus, timed assumptions cannot be properly used in UC
+protocols. With TLUC security, we consider a variant of UC security that allows
+a party P to set up timers associated with a number of steps �. At any point,
+P may query if the execution experiment in total (including the environment,
+756 B. Broadnax et al.
+adversary and other protocol parties) has performed � or more steps. This allows
+the use of timed cryptographic primitives such as timed commitments.
+Similar to SPS security, our security notion is not closed under composition
+and features the single-instance composition theorem only (Theorem2).
+Environmental Friendliness. Very informally, environmental friendliness, intro-
+duced by Canetti, Lin, and Pass [CLP13], deals with the problem of negative
+“side-effects” a protocol π may have on game-based properties of another proto-
+col π′ that runs along-side (where neither protocol is a subroutine of the other)
+and relies on polynomial-time hardness assumptions. Formally, this is captured
+in a stand-alone model for game-based security properties. Previous notions that
+feature general MPC in the plain model suffer from limited environmental friend-
+liness because super-polynomial simulation, e.g. due to use of a super-polynomial
+helper, may break polynomial-time hardness assumptions of other protocols that
+run along-side, resulting in limited environmental friendliness. While not consid-
+ered by the definition of environmental friendliness, giving the simulator non-
+uniform advice may hurt the security of (even non-uniformly) secure protocols
+or protocols that have been previously executed. Being a special case of UC
+security, TLUC security is fully environmentally friendly (Proposition 5).
+We note that the established notion does not consider timed game-based
+properties such as the timed hiding property of a timed commitment scheme.
+As such, our notion as well as all previous notions such as e.g. SPS security,
+Angel-based security and even UC security are not fully friendly in this respect.
+UC Compatibility and Reusability. As all UC protocols retain their security
+under our notion (UC compatibility, Proposition 3) and TLUC simulators run
+in strict polynomial-time, we can realize a UC-complete functionality F in TLUC
+and plug it into any existing UC-secure protocol making one subroutine call to
+F without loss of security (UC reusability, Corollary 3). This is not implied by
+environmental friendliness per se. As the simulation is always polynomial-time,
+(even uniformly only) computationally secure ideal functionalities are meaningful
+in our framework.
+Composable Commitment Scheme in the Plain Model. Combining a timed com-
+mitment scheme and a pCCA-secure commitment scheme, we construct a non-
+malleable and partially simulatable coin-toss that is sufficient to “bootstrap”
+the CRS of a UC-secure commitment scheme such as the UCCOneTime scheme
+of Canetti and Fischlin [CF01] in the plain model. The resulting commitment
+scheme is concurrently composable and TLUC-realizes the ideal functionality
+for multiple commitments FMCOM (Theorem 4). As the simulation is uniform,
+πMCOM does not hurt the security of any protocol making use of polynomial-time
+assumptions, including uniform ones.
+Composable Constant-Round General MPC in the Plain Model. Plugging our
+construction for FMCOM into a variant of the general MPC protocol due to
+Environmentally Friendly Composable Multi-party Computation 757
+[HV15], we obtain a constant-round black-box and environmentally friendly gen-
+eral MPC protocol from standard polynomial and standard timed assumptions
+in the plain model (Theorem 5). We remark that our results are in the static
+corruption setting.
+1.3 Outline
+We first cover important definition and technical aspects in the preliminaries
+(Sect. 2). In Sect. 3, we introduce the notion of timed simulation-soundness for
+commitment schemes and present a construction. We continue with a short intro-
+duction into TLUC security (Sect. 4), which is a variant of UC security that cap-
+tures timed assumptions and fulfilled by our composable commitment scheme
+in the plain model (Sect. 5). Finally, we show how we can use this commitment
+scheme to achieve composable general MPC in Sect. 6. For details, we refer the
+reader to the full version [BMM21].
+2 Preliminaries
+2.1 Notation
+Let n ∈ N. Then, [n] denotes the set {1, . . . , n}. Let Hi be some hybrid. Then
+outi denotes the output of Hi. negl(κ) denotes an unspecified negligible function
+in the security parameter κ ∈ N. x
+$← Y denotes that x is drawn uniformly
+at random from the set Y . x ← Y denotes that x is either the output of the
+probabilistic algorithm Y or sampled according to the probability distribution
+Y . Let π1, π2 be protocols. Then, π1 ≥UC π2 denotes that π1 UC-emulates π2
+and ππ2
+1 denotes that π1 makes at least one subroutine call to π2.
+2.2 Machine Model, Notion of Time
+When considering polynomial-time hardness assumptions, the particularities of
+machine models rarely matter. This is because different (classical) machine mod-
+els can be usually emulated by each other with polynomial run-time overhead
+or speedup. With polynomial-time being closed under addition and multiplica-
+tion, polynomial-time hardness assumptions do not become insecure if there is a
+machine model where some problem can be solved (polynomially) more efficient.
+In this paper, we consider timed primitives such as timed commitment
+schemes. For timed primitives, security often is only guaranteed against adver-
+saries adhering to some kind of (concrete) run-time bound in a fixed machine
+model. For such assumptions, changing the machine model can make the differ-
+ence between security and insecurity. This is obvious for stark differences, e.g.
+when going from a sequential to a parallel machine model when considering
+timed assumptions that hold only against sequential adversaries. However, this
+problem also manifests with more subtle changes like allowing a larger alphabet
+for Turing machines, which may result in a linear speedup.
+758 B. Broadnax et al.
+More problems arise during security reductions that require the emulation of
+Turing machines. Suppose that we want to show the security of some protocol π
+by using a �-bounded timed assumption. We call � the timed security parameter.
+In the security proof, the adversary A′ against the timed assumption has to
+internally emulate the �-bounded adversary A as well as (parts of) the protocol
+π. Just internally emulating the �-bounded adversary may incur an overhead
+that does not allow the reduction to go through, because A′ may always require
+more than � steps due to its emulation overhead, even when just running the code
+of A and relaying messages. Additional overhead may occur e.g. for extracting
+the correct answer based on the internally emulated adversary’s output. These
+caveats have to be accounted for.
+Later on, we use timed primitives in the UC framework (cf. Sect. 4). While
+UC security can be stated using various machine models [Can01], we adhere to
+the standard model of interactive Turing machines. However, as e.g. the partic-
+ular alphabet or the number of work tapes is left unspecified1, so is the exact
+notion of run-time in that particular model. In order to argue about the security
+of timed assumptions in our security notion, we thus have to map the under-
+specified notion of run-time of interactive Turing machines as defined in the
+UC framework to the (possibly also underspecified) notion of run-time for the
+timed assumption. Following the Cobham-Edmonds thesis (see e.g. [Gol08]) or
+the extended Church-Turing thesis, we assume that this is always possible with
+a polynomial overhead or speedup in a classical setting, i.e. when not considering
+quantum computations.
+For common machine models such as Turing machines, Boolean circuits or
+(parallel) random access machines, explicit emulation constructions and bounds
+for the overhead resp. speedup are known.
+When constructing a protocol with security against �(κ)-bounded adversaries,
+we thus require the timed building blocks to be secure against adversaries with
+timed security parameter �′(�(κ), κ)2 where �′ is a sufficiently large polynomial
+that accounts for possible run-time mismatches due to emulation overhead, reduc-
+tion overhead or (polynomial) efficiency changes between machine models. As
+we do not want to make assumptions about the machine models being used, we
+do not explicitly specify �′. However, as soon as all machine models and reduc-
+tions are fixed, �′ is well-defined. Also, for our constructions, we show that �′
+is sufficiently generic and e.g. is independent of the TLUC environment under
+consideration.
+Note that the timed security parameter generally grows with increasing pro-
+tocol nesting depth, similar to the tightness loss in standard reductions.
+In our protocols, we use timer messages parameterized by an ID id to allow
+protocol parties later check if more steps than allowed by the timed security
+parameter � have been elapsed by sending a message (notify, id). If the answer
+1 Newer versions of the UC framework such as UC2020 explicitly allow multiple work
+tapes, allowing the emulation of other Turing machines with only additive overhead.
+2 In order to capture the setting where �(κ) is constant but e.g. the reduction overhead
+depends on κ, we parameterize �′ with both values.
+Environmentally Friendly Composable Multi-party Computation 759
+is (notify, id , 1), then more than � steps have passed and we say that the “timer
+has timed out” or “expired”. Conversely, (notify, id , 0) denotes that the timer
+has not expired. Later on, we will only consider adversaries (or environments)
+that handle such messages correctly.
+As the default machine model and execution experiment of UC are inherently
+sequential, we refer to computation steps instead of run-time, as the latter may
+capture many steps performed in parallel, which we want to count individually.
+2.3 Timed Commitment Schemes
+Boneh and Naor [BN00] have introduced the notion of timed commitment
+schemes. Instead of the hiding property holding against all polynomial-time
+adversaries, a (T, �, ε)-timed commitment scheme guarantees the hiding prop-
+erty to hold only for some bound of steps � performed by an adversarial receiver,
+except with probability ε.
+However, the (�, ε)-hiding property does not guarantee that there exists a
+value T ∈ N such that a valid timed commitment can be opened “forcefully”
+in at most T > � steps. To this end, the definition of [BN00] also requires the
+existence of a forced-open algorithm that runs in time T , takes the transcript
+of a successful commit phase and outputs the unique value v ∈ M committed
+to, where M is the message space of the commitment scheme. In other words,
+in addition to the binding property, a malicious committer must not be able
+to open its commitment to a value that is inconsistent with the output of the
+forced-open algorithm. This extractability is crucial for our simulation later on,
+as it guarantees that simulators can extract timed commitments in polynomial
+time (if T is bounded by a polynomial in κ).
+In the definition of [BN00], timed commitment schemes have to exhibit a
+soundness property which requires that at the end of the commit phase, the
+receiver is “convinced” that running the forced-open algorithm will produce
+the value v committed to. While not formally defined, the definition of [BN00]
+also requires valid commitments to be efficiently recognizable by the receiver.
+Looking ahead to our construction, we do not need valid timed commitments
+to be efficiently recognizable. In particular, we can deal with the over-extraction
+of invalid commitments, i.e. the case where forced-open outputs a value v ∈ M ,
+even if the commitment cannot be unveiled. We call this property weak extractabil-
+ity and will account for this in the following definition.
+Also, the hiding property informally described in [BN00] seems to be rel-
+atively weak, considering honestly created commitments only. Moreover, the
+adversary’s steps are only counted after it is provided the transcript of a success-
+ful commit phase. Our definition of timed hiding (Definition 2) is standard and
+stronger in the sense that the commitment receiver may act maliciously. Also,
+we count the adversary’s steps from the very beginning on. It is easy to see that
+the scheme due to [BN00] satisfies this stronger notion.
+With [BN00] not giving a formal definition, we define weakly extractable
+timed commitment schemes as follows.
+760 B. Broadnax et al.
+Definition 1 (Weakly Extractable Timed Commitment Scheme). A
+tuple of ITMs TCOM = 〈C,R〉 is called a (T, �, ε)-weakly extractable timed com-
+mitment scheme with message space M if 〈C,R〉 is a (�, ε)-hiding commitment
+scheme for which there exists a deterministic algorithm forced-open that, given
+a transcript c of a successful commit phase, outputs the unique value v ∈ M com-
+mitted to in at most T steps.
+We say that TCOM is perfectly correct if for all κ ∈ N and all v ∈ M ,
+Pr[v� = v′ = v |(zC, zR, c) ← out〈C(v),R(ε)〉(1κ, Commit),
+v′ ← outR〈C(zC),R(zR)〉(Unveil), v� = forced-open(c)] = 1
+The perfect correctness can be naturally relaxed to statistical correctness.
+Definition 2 ((Timed) Hiding). For an interactive commitment scheme
+COM = 〈C,R〉, the timed hiding experiment is defined as:
+Experiment ExpHiding
+A,COM (κ, z)
+(m0,m1, state) ← A(1κ, find, z)
+b
+$← {0, 1}
+if |m0| �= |m1|
+return b
+b′ ← outA〈C(mb),A(guess, state)〉(1κ, Commit)
+return b = b′
+The advantage of a possibly malicious receiver A is given by
+AdvHiding
+A,COM(κ, z) :=
+∣
+∣
+∣
+∣
+Pr[ExpHiding
+A,COM(κ, z) = 1] − 1
+2
+∣
+∣
+∣
+∣
+.
+The probability is over the randomness of A, R and the choice bit b. An adversary
+A is called valid if m0,m1 ∈ M and A eventually outputs a single bit. We say
+that COM is (�(κ), ε(κ))-hiding if �(κ) is an upper bound for the number of steps
+performed by A on input guess and for all κ ∈ N and �(κ)-bounded valid A and
+for all z ∈ {0, 1}∗, AdvHiding
+A,COM(κ, z) ≤ ε(κ).
+We say that TCOM is perfectly binding and weakly extractable if for all (mali-
+cious) committers C∗, all κ ∈ N and all z ∈ {0, 1}∗, it holds that
+Pr[v� = v′ | (zC∗ , zR, c) ← out〈C∗(z),R(ε)〉(1κ, Commit),
+v′ ← outR〈C∗(zC∗),R(zR)〉(Unveil), v� = forced-open(c) ∧ v′ ∈ M ] = 1
+While the aforementioned properties do not state any requirements for the output
+of forced-open on invalid commitments (i.e. allow over-extraction), it implies
+the soundness requirement of [BN00] for valid commitments.
+Environmentally Friendly Composable Multi-party Computation 761
+Definition 1 is not concerned with the committer’s run-time, which may
+depend on all parameters, in particular T and �. This is important for (prov-
+ing) security properties that consider more than one commitment, e.g. the timed
+simulation-soundness (Definition 5).
+Boneh and Naor [BN00] also present a constant-round construction based on
+the generalized BBS assumption that does not make use of black-box techniques.
+Also, their construction admits a super-polynomial gap between the number
+of steps needed to perform the commitment and the number of steps � the
+commitment is secure against.
+While [BN00] consider a machine model that admits parallel computations,
+we consider (weaker) sequential models of computation only.
+Recently, Ephraim et al. [Eph+20] and Katz, Loss, and Xu [KLX20] have
+re-visited timed commitment schemes, providing formal definitions and new
+constructions. However, as they consider (non-interactive) timed commitment
+schemes with setups, their definitions are not easily applicable to our setting.
+Timed commitments can also be constructed by combining sequential func-
+tions [MMV13] and universal hash functions. However, such a construction has
+the drawback that both commit and unveil phase are computation-intensive.
+Still, it suffices for a feasibility result with a symmetric assumption.
+Looking ahead to our constructions, we remark that using timed commit-
+ments with non-malleability properties in the plain model will not lead to easier
+definitions or proofs due to the power of the simulator. We leave it as an open
+question whether there are advantages if the simulator is restricted like e.g. in
+the Angel-based setting.
+2.4 pCCA Security
+For non-timed commitment schemes, we consider a stronger variant of the hid-
+ing property called security under parallel chosen-commitment attack (pCCA)
+[Kiy14,Bro+17,Bro+18]. In the pCCA hiding experiment, the adversary may
+additionally interact with an (inefficient) oracle O to perform an unbounded
+number of commitments in parallel, with O acting as receiver. After all commit
+phases with O have finished, O outputs, for each commitment, the unique value
+committed to. If no such value exists, a special symbol ⊥ is returned for this
+commitment. The challenge commitment where the adversary acts as receiver
+must remain hiding, even with access to O. pCCA security constitutes a stronger
+variant of parallel one-left many-right non-malleability.
+762 B. Broadnax et al.
+Definition 3 (pCCA security). For a commitment scheme COM = 〈C,R〉,
+the pCCA hiding experiment is defined as
+Experiment ExppCCA-Hiding
+A,COM,O (κ, z)
+(m0,m1, tag , state) ← AO(1κ, find, z)
+b
+$← {0, 1}
+if |m0| �= |m1|
+return b
+b′ ← outA〈C(mb),AO(guess, state)〉(Commit, tag)
+return b = b′
+O acts as honest receiver R for multiple sessions in parallel. When all commit
+phases have finished, the oracle returns the unique values committed to. If no
+such unique value exists, a special symbol ⊥ is output for these commitments.
+An adversary A is valid if it eventually outputs a bit and never interacts with
+O on the challenge tag. We say that COM is pCCA-secure if for all valid PPT
+adversaries A, there exists a negligible function negl such that for all κ ∈ N and
+all z ∈ {0, 1}∗,
+AdvpCCA-Hiding
+A,COM (κ, z) :=
+∣
+∣
+∣
+∣
+Pr[ExppCCA-Hiding
+A,COM (κ, z) = 1] − 1
+2
+∣
+∣
+∣
+∣
+≤ negl(κ)
+2.5 Ideal Functionality for Multiple Commitments
+The ideal functionality for multiple commitments FMCOM in Fig. 1, introduced
+by [CF01], models ideal bilateral commitments for multiple parties and instances.
+Individual commitments are distinguished by their commitment ID cid .
+Fig. 1. The ideal commitment functionality for multiple commitments FMCOM
+(adapted from [CF01])
+Environmentally Friendly Composable Multi-party Computation 763
+3 Timed Simulation-Sound Commitment Schemes
+Looking ahead to our construction of a composable commitment scheme (Sect. 5),
+we need a commitment scheme that is equivocal for a polynomial-time simula-
+tor. At the same time, commitments created by a malicious committer must
+remain binding sufficiently long. To this end, we first define the security notion
+of timed simulation-soundness. Also, we present the construction SSCOM (where
+SS denotes simulation-sound) that combines a possibly malleable timed commit-
+ment scheme with a non-timed commitment scheme that is secure under parallel
+chosen-commitment attacks (pCCA) [Kiy14,Bro+17,Bro+18] and satisfies the
+notion of timed simulation-soundness.
+3.1 Timed Simulation-Soundness
+Based on the established notion of simulation-soundness [MY04,GMY03] and
+inspired by the non-malleability notion of Dachman-Soled et al. [Dac+13], we
+define a concurrent and timed variant of simulation-soundness that is suitable for
+commitments where the binding property only holds temporarily (Definition 5).
+Intuitively, this timed simulation-soundness ensures that commitments produced
+by a malicious committer remain binding for a bounded adversary even if it
+concurrently receives equivocated commitments. While somewhat similar to the
+notion of non-malleability with respect to unveil or opening or decommitment
+([DIO98,PR05,OPV08]), our definition is stronger in the sense that commit and
+unveil phases may overlap (similar to the definition of [Dac+13]).
+The Experiment. In the experiment for timed simulation-soundness, a man-in-
+the-middle adversary acts as receiver in an unbounded number of instances (“left
+sessions”) of some trapdoor commitment scheme. The adversary starts left ses-
+sions by providing a tag of its choice, along with an efficiently samplable and
+length-normal (cf. Definition 4) distribution. Only considering distributions facil-
+itates easier proofs and more general definitions and is sufficient for our applica-
+tion. In each left session, the code of the trapdoor committer Ctrap is executed.
+After the commit phase of a session has finished, the adversary may, at some
+point of its choice, start the unveil phase. At its onset, a value from the provided
+distribution is sampled and unveiled by the trapdoor committer.
+In addition, the adversary acts as committer in one session (“right session”),
+again using a tag of its choice that must be unique compared to all other tags that
+will eventually be used in the experiment. The scheduling between all sessions
+and their messages is fully controlled the adversary.
+When the commit phase of the single right session has finished, the experi-
+ment determines the value committed to. The commitment scheme is secure if
+the adversary cannot unveil its single commitment to a value different from the
+committed one, even when presented with equivocated commitments.
+Timer-Related Parameters. In our setting, we do not consider simulation-
+soundness against arbitrary polynomial-time adversaries. Indeed, our construc-
+tion SSCOM is (intentionally) not simulation-sound or even binding against
+764 B. Broadnax et al.
+polynomial-time adversaries: If a corrupted receiver manages to break a timed
+commitment it receives from the (honest) sender early enough, the commitment
+becomes equivocal. In our setting, protocol parties may set up timers and inquire
+at some point whether the timer has expired. The timed simulation-soundness
+experiment is thus parameterized with a timed security parameter �. This timed
+security parameter denotes how many steps experiment and adversary may per-
+form before a timer set up by the honest receiver in the right session is considered
+to have timed out. If no timeout occurs, the binding property of the single right
+commitment should hold, even if left commitments are equivocated.
+Timed simulation-sound commitments that use timed building blocks such
+as timed commitment schemes must choose their timed security parameter �′
+relative to �. To account for reduction overhead, e.g. to the timed hiding prop-
+erty of a timed commitment scheme, �′ must be chosen sufficiently large. As
+the reduction overhead may depend on the security parameter κ but �(κ) might
+be constant, �′ is also parameterized with κ. Depending on the construction,
+increasing � may lead to the timer always expiring, e.g. because a sub-protocol
+protected by the timer requires more than � steps to execute (e.g. the commit
+phase of a timed commitment scheme, which may take longer for larger �) for
+some values of �. In this case, proving security becomes trivial as the adversary
+cannot win the game. However, this also implies that scheme is secure in this
+case. When using appropriate building blocks, e.g. non-interactive timed com-
+mitments or a timed commitment scheme with a sufficiently large gap (e.g. the
+scheme of [BN00] has an exponential gap between the time needed to create the
+commitment and its timed security), this problem does not occur for sufficiently
+large �′.
+In order to notify parties about timeouts, we require the adversary to obey
+the following rules: When receiving a message (notify, id) for some ID id, it must
+immediately answer (notify, id, 1) if it has previously received (timeout, id) and
+the whole execution experiment, including the adversary and honest committers
+in left sessions, has performed � or more steps, where � is the timed security
+parameter. For our construction, this can be easily computed as the run-time of
+the involved algorithms do not depend on their internal randomness or secrets.
+If an exact calculation is not possible, the adversary must use an appropriate
+upper bound.
+This is in contrast to e.g. Definition 2 where only the steps of the adversary
+are counted. There, this is possible as only one commitment session is considered.
+Here, we consider an unbounded number of sessions. In a reduction to some timed
+property, all the left sessions will have to be emulated by the reduction adversary,
+counting against its time limit in the reduction.
+As the guarantees of timed cryptographic assumptions are only for honest
+parties, the experiment does not answer notify messages.
+In real life, one can of course not expect that a possibly malicious party obeys
+these rules. However, if a timed primitive is believed to be secure for e.g. several
+days considering the computation power available to the other party, assuming
+a timeout after, say, one minute, should be sufficiently secure.
+Environmentally Friendly Composable Multi-party Computation 765
+Relationship to Other Non-malleability Notions. Similar to the simulation-based
+non-malleability notion of [Dac+13], security must hold if the commit and unveil
+phases on the left side are interleaved with the right session. However, in con-
+trast to [Dac+13], we do not require the commitment on the right side to be
+concurrently extractable and also do not consider adaptive corruptions, leading
+to a different security notion.
+Formal Definition. First, we define length-normal probability distributions as
+distributions where all elements of the sample space are of equal length.3
+Definition 4 (Length-normal Probability Distribution). Let D be a prob-
+ability distribution over {0, 1}∗ with sample space Ω. D is called length-normal
+if for all x, y ∈ Ω, it holds that |x| = |y|. Let |D| denote |x| for x ∈ Ω.
+An example for a length-normal distribution is the uniform distribution Un
+over {0, 1}n with |Un| = n.
+Definition 5 (Timed Simulation-Soundness). A trapdoor commitment
+scheme TRAPCOM with message space M ⊆ {0, 1}∗ is called �(κ)-timed
+simulation-sound if for all legal PPT adversaries A, there exists a negligible
+function negl such that for all κ ∈ N and for all z ∈ {0, 1}∗, it holds that
+AdvSIMSOUND
+A,TRAPCOM(κ, �(κ), z) := Pr[ExpSIMSOUND
+A,TRAPCOM(κ, �(κ), z) = 1] ≤ negl(κ)
+where the probability is over the random coins of the experiment and the adver-
+sary. An adversary A is called legal if i) it immediately sends the message
+(notify, id, 1) after receiving (notify, id) and the experiment (including the
+adversary) has performed more than or equal to �(κ) steps after having received
+a message (timer, id)4, where steps performed by the committer on left sides are
+counted as of the honest committer C and ii) A sends commit-left messages
+only parameterized with efficiently samplable and length-normal distributions (cf.
+Definition 4) where the sample space Ω is a subset of the message space M and
+iii) the tag used in the right commitment has never been used in a left commit-
+ment.
+The random variable ExpSIMSOUND
+A,TRAPCOM(κ, �(κ), z) is defined as follows:
+1. Start the adversary A with input (1κ, �(κ), z).
+2. Upon receiving (commit-left, tag ,Dtag) from the adversary: Start the com-
+mit phase of TRAPCOM with common input (1κ, commit, tag , �(κ)), acting as
+trapdoor committer Ctrap with private input |Dtag |, unless there already is a
+session with tag tag.
+3. Upon receiving (commit-right, tag) from the adversary: Start the commit
+phase of the right session with common input (1κ, commit, tag , �(κ), κ), acting
+as honest receiver R, unless the right session already exists or there is a left
+session with tag tag. Let v′ ∈ M denote the unique value committed to in the
+right session. If no such unique value exists, set v′ = ⊥.
+3 When considering an appropriate encoding, the definition can be extended to e.g.
+group elements.
+4 We assume unique timer IDs within a protocol throughout this paper.
+766 B. Broadnax et al.
+4. Upon receiving (unveil-left, tag) from the adversary: Sample vtag ← Dtag
+and start the unveil phase of the i-th left session with common input
+(unveil, tag) and private input vtag for the trapdoor committer, unless the
+commit phase with tag tag has not finished or the unveil phase has already
+started.
+5. Upon receiving (unveil-right) from the adversary: Start the unveil phase of
+the right session with common input (unveil, tag), acting as honest receiver
+where tag is the tag specified in the commit phase. Let u denote the value
+accepted by the receiver or ⊥ in case of an abort.
+6. Upon receiving (message, tag ,m) from the adversary, forward the message m
+to the session with tag tag. Conversely, forward messages to the adversary.
+7. After the right unveil phase has finished, output 1 if the receiver in the right
+session has accepted and u �= v′ ∧ u �= ⊥. Otherwise, output 0.
+For the sake of brevity, we also say that a commitment scheme fulfilling the
+above definition is �(κ)-simulation-sound.
+Like [Dac+13], we call an adversary that wins the above experiment with
+at most negligible probability non-abusing, i.e. if its commitments remain bind-
+ing even when presented with equivocated commitments. Note that this notion
+is only meaningful for commitments where the value committed to is uniquely
+determined (except with negligible probability) if the receiver accepts. To cap-
+ture the general case, the definition has to be changed slightly.
+3.2 Construction SSCOM
+In the following, we present the construction SSCOM (Construction 1) for a timed
+simulation-sound string commitment scheme, which is based on the commitment
+scheme due to [Bro+17], which is inspired by [DS13]. Roughly, the scheme works
+as follows: Committer and receiver perform a commitment to a random index
+vector I ∈ {0, 1}κ chosen by the receiver. They then perform 2κ commitments
+to pair-wise shares of the secret. In the unveil phase, the committer first sends
+its shares without unveiling the share commitments. Then, the receiver unveils
+the commitment to I. Finally, the committer unveils the share commitments
+denoted by I, while the other commitments remain unopened. If the commit-
+ment scheme used for I is extractable, the constructed commitment is equivocal.
+As inconsistent share commitments remain unopened and hiding, a malicious
+receiver cannot distinguish between an equivocated and a honest commitment.
+In order to achieve concurrent security, we require the share commitment scheme
+to be pCCA-secure (Definition 3).
+In contrast to the original construction of [Bro+17], we use a timed commit-
+ment scheme for the commitment to the index vector I, which allows polynomial-
+time equivocation of SSCOM commitments. Also, we move this timed commit-
+ment to I to the end of the commit phase. For the sake of simpler proofs, we
+assume that the commitment scheme for the shares is perfectly binding. However,
+this requirement can be relaxed to statistically binding.
+Environmentally Friendly Composable Multi-party Computation 767
+To facilitate easy integration with our composable commitment scheme and
+the timed simulation-soundness definitions, SSCOM includes explicit messages to
+set up timers and to check if they have expired. Again, the party answering the
+timer status inquiry checks if both parties have performed � or more steps since
+the timer has been set up and answers accordingly. In the simulation-soundness
+experiment, the answer is given by the adversary that is required to answer
+truthfully. Again, it would have been possible to only count steps by the party
+that has not set up the timer. However, counting the steps of both parties is
+more consistent with our other definitions and more convenient in reductions.
+Construction 1 (Commitment Scheme SSCOM). Parameterized by a security
+parameter κ, a timed security parameter �(κ), a pCCA-secure and perfectly
+binding commitment scheme COMpCCA and a (T, �′(�(κ), κ), negl(κ))-weakly
+extractable timed commitment scheme TCOM.
+Commit Phase. On common input (1κ, commit, tag , �(κ)), committer and
+receiver interact as follows:
+1. The committer creates 2κ shares s1,0, s1,1, . . . , sκ,0, sκ,1 of its private input v
+by sampling sm,0
+$← {0, 1}|v| and setting sm,1 = v ⊕ sm,0, m = 1, . . . , κ.
+2. For m = 1, . . . , κ, n = 0, 1, committer and receiver start 2κ instances of
+COMpCCA on common input (1κ, commit, (tag ,m, n)) in parallel. The commit-
+ter’s private input in the instance with tag (tag ,m, n) is sm,n.
+3. The receiver samples an index vector I
+$← {0, 1}κ and sends (timer, tag)
+to the committer. Then, committer and receiver start an instance of TCOM
+with common input (1κ, commit, �(�′(κ), κ)). The receiver of SSCOM acts as
+committer with private input I.
+Unveil Phase. On common input (unveil, tag), committer and receiver interact
+as follows:
+1. The committer sends the shares (s1,0, . . . , sκ,1) to the receiver.
+2. The receiver sends (notify, tag) to the committer, which the receiver answers
+with (notify, tag , b) where b = 1 if committer and receiver have spent more
+than or equal to �(κ) steps since the timer has been set up. Otherwise, b = 0
+indicates that less than �(κ) steps in total have elapsed. If the committer
+answers with (notify, tag , 1), the receiver aborts. Otherwise, the receiver
+checks that s1,0 ⊕ s1,1 = · · · = sκ,0 ⊕ sκ,1 and aborts if this does not hold.
+Then, committer and receiver perform the unveil phase of TCOM. The com-
+mitter also makes sure of the TCOM commitment being extractable (to the
+value I) in at most T steps, e.g. by using the forced-open algorithm. If this
+check fails, the committer aborts.
+3. Committer and receiver perform κ unveil phases of COMpCCA as follows:
+For m = 1, . . . , κ, the commitment to sm,I[m] with tag (tag ,m, I[m]) is
+unveiled. Let s′
+m,I[m] denote the unveiled value of the commitment with tag
+(tag ,m, I[m]).
+768 B. Broadnax et al.
+4. After all unveil phases have finished, the receiver checks that s′
+m,I[m] = sm,I[m],
+m = 1, . . . , κ. If this holds, the receiver outputs s1,0⊕s1,1. Otherwise, it aborts.
+Algorithm of the Trapdoor Committer Ctrap.
+1. On private input l in the commit phase, commit honestly to 0l.
+2. On private input v ∈ {0, 1}l in the unveil phase, extract the timed com-
+mitment using the forced-open algorithm to obtain the index vector I. If
+forced-open fails, sample I
+$← {0, 1}κ uniformly at random. For m =
+1, . . . , κ, send sm,1−I[m] = v ⊕ sm,I[m] as shares that will not be unveiled.
+Continue the unveil phase like the honest committer.
+Theorem 1. Let COMpCCA be a pCCA-secure and perfectly binding commitment
+scheme with message space M ⊆ {0, 1}∗. Let TCOM be a (T, �′(�(κ), κ), negl(κ))-
+weakly extractable timed commitment scheme for some polynomially bounded
+T > �′(�(κ), κ), sufficiently large timed security parameter �′(�(κ), κ) and negligi-
+ble function negl with message space {0, 1}κ. Then, SSCOM is an �(κ)-simulation-
+sound and trapdoor commitment scheme with message space M .
+It is easy to see that a successful commit phase of SSCOM statistically
+determines the value committed to. Looking ahead to the security proof of
+our composable commitment scheme, we will additionally need this value to
+be extractable in the presence of concurrently equivocated left sides. For the
+definition of extractability and the proof of Theorem1, see the full version.
+Possible Instantiations. Our construction SSCOM makes use of a weakly
+extractable timed commitment scheme TCOM as well as a pCCA-secure and
+perfectly binding commitment scheme COMpCCA. A possible instantiation for the
+latter is the commitment scheme of Goyal et al. [Goy+14] which is pCCA-secure
+[Bro+17], constant-round, non-black-box, parallel extractable and perfectly bind-
+ing if using e.g. the commitment scheme due to Blum [Blu81] based on one-way
+permutations as elementary commitment. By instead using a perfectly binding
+and homomorphic commitment scheme, the construction becomes perfectly bind-
+ing and black-box [Bre+15,Bro+17].
+Corollary 1. Assume that constant-round, perfectly binding and homomorphic
+commitment schemes exist. Assume that constant-round, timed commitment
+schemes with appropriate parameters exist. Then, SSCOM is a constant-round
+timed simulation-sound commitment scheme from standard assumptions that
+makes black-box use of its building blocks only.
+An example for a constant-round homomorphic commitment scheme is the
+ElGamal commitment scheme based on the DDH assumption [ElG84], which
+does not use non-black-box techniques. With respect to the timed commitment
+scheme, we can e.g. use the scheme due to Boneh and Naor [BN00] based on
+the generalized BBS assumption, which is constant-round and also does not use
+non-black-box techniques.
+Environmentally Friendly Composable Multi-party Computation 769
+Corollary 2. Assume that the DDH assumption and the generalized BBS
+assumption hold. Then, there exists a constant-round, timed simulation-sound
+commitment scheme that does not use non-black-box techniques.
+4 TLUC Security in a Nutshell
+Timed primitives such as timed commitment schemes can be meaningfully used
+in practice. Consider performing a coin-toss using a timed commitment scheme
+secure for, say, t = 1015 steps. Assuming that the adversary can perform at most
+1010 steps per second (equating 10 GHz, assuming that steps equate cycles)5,
+a coin-toss using this timed commitment should be considered secure if the
+adversary’s second-round message comes within e.g. one second of receiving the
+timed commitment, with plenty time left as security margin.
+TLUC Security. Unfortunately, this intuition is not easily captured in the UC
+framework, which neither offers a notion of time nor makes assumptions with
+respect to the (concrete) computational power of entities. Instead of considering
+a model with time or modifying the framework, we propose a variant of UC
+security, called TLUC security, that enables honest parties to check if more than
+� steps have been performed since a certain point in the execution. This allows to
+capture the security guarantees of timed primitives and to use them in protocols.
+With TLUC, parties can set up timers parameterized by an ID and a number
+of computation steps � by sending (timer, id, �) to the adversary6. At any point,
+a party that has set up a timer may check if it has expired, i.e. if the whole
+execution experiment has performed � or more steps since the timer has been
+set up. This is done by sending (notify, id) to the adversary. The adversary
+queries the environment if the timer has expired answers with (notify, id, b),
+where b = 1 denotes an expired timer and b = 0 an unexpired one.
+Mechanisms. The correct handling of timers is ensured by considering only
+legal environments and legal adversaries. Intuitively, legal environments correctly
+account for timers set up by honest parties by never under-estimating the num-
+ber of computation steps performed by the execution experiment relative to a
+presumptive execution of a protocol π (counting obliviously of the parties’ inputs
+and outputs) and adversary A, denoted by Z[π,A]. This guarantees that timed
+assumptions protect against environment and adversary, but can be broken by
+the simulator in polynomial time (as the environment Z[π,A] always counts rel-
+ative to π and A, even when interacting with φ and S). For technical reasons, we
+5 This is even more plausible when using cryptographic assumptions that are believed
+to be hard even for parallel adversaries.
+6 In contrast to stand-alone experiments where timer messages are not parameterized
+with the timed security parameter, we have chosen to do so in the TLUC setting
+because the mechanism should be agnostic of the currently executed protocol and
+its timed security parameter.
+770 B. Broadnax et al.
+require handling of timers and inquiries to go through the adversary. An adver-
+sary is legal if it immediately and correctly forwards timer setup messages or
+status inquiries by honest parties, as well as the environment’s responses. Based
+on this, we define TLUC emulation as a special case of UC emulation, and con-
+sider legal adversaries and environments only. At first glance, this might seem
+restrictive, but when considering standard UC protocols without timers, then
+all UC environments and adversaries are legal under our definition. Thus, the
+restrictions only apply for classes of protocols that are not considered by UC
+security.
+Properties of TLUC Security. As we consider only a subset of the UC environ-
+ments and adversaries, properties of UC security do not necessarily carry over to
+TLUC security, at least for protocols using timers. To the contrary, even prop-
+erties such as the completeness of the dummy adversary are difficult to prove
+if concrete time bounds must be adhered to. We show several properties such
+as transitivity with UC protocols, i.e. protocols whose security does not rely on
+timers7, completeness of the dummy adversary or full compatibility with UC
+security as well as UC reusability, meaning that all UC-secure protocols are also
+TLUC-secure and can be composed with TLUC protocols without loss of security.
+With respect to the latter, we state the single instance composition theorem.
+The ability of the simulator to break timed assumptions while environment
+and real-world adversary are unable to do is sufficient to construct a composable
+commitment scheme in the plain model. When, e.g., combining our commitment
+scheme with a UC-secure general MPC protocol in the FCOM- or FMCOM-hybrid
+model8, we obtain a composable general MPC protocol in the plain model.
+While composable MPC in the plain model is already possible in a number
+of other frameworks, previous approaches rely on some sort of super-polynomial
+or non-uniform simulation. The first may affect the security of concurrently
+executed protocols relying on polynomial-time hardness assumptions, resulting
+in limited environmental friendliness as defined by [CLP13]. TLUC security only
+considers entities that run in strict polynomial time. The second may affect the
+security of protocols that have been previously started, even ones that are secure
+against non-uniform adversaries. Our feasibility results also hold for uniform
+simulators.
+Thus, TLUC security is the first notion that features composable constant-
+round black-box MPC in the plain model from standard (timed) assumptions as
+well as full environmental friendliness and does not hurt the security of previously
+started protocols relying on polynomial-time assumptions.
+This informal description is sufficient to understand the properties of TLUC
+security as well as the construction in Sect. 5. For a full treatment of TLUC
+security, see the full version.
+7 A UC protocol π that UC-realizes an ideal functionality F may of course send timer
+messages. However, as UC emulation also considers environments that handle these
+messages arbitrarily, the security of π cannot rely on them.
+8 FMCOM and the multi-session extension F̂COM of FCOM are equivalent [CR03].
+Environmentally Friendly Composable Multi-party Computation 771
+4.1 Protocol Emulation
+We define TLUC emulation in analogy to UC emulation.
+Definition 6 (TLUC Emulation). Let π and φ be protocols. We say that
+π TLUC-emulates φ if for all legal PPT adversaries A, there exists a PPT
+simulator S such that for all legal PPT environments Z[π,A] there exists a
+negligible function negl such that for all κ ∈ N, a ∈ {0, 1}∗ it holds that
+|Pr[Exec
+(
+π,A,Z[π,A]
+)
+(κ, a) = 1] − Pr[Exec
+(
+φ,S,Z[π,A]
+)
+(κ, a) = 1]| ≤ negl(κ)
+If π TLUC-emulates φ, we write π ≥TLUC φ. When omitting the non-uniform
+input a, the notion of protocol emulation is uniform.
+Note that in Definition 6, the environment Z is supposed to count the steps
+according to the execution with π and A even if it is actually interacting with
+φ and S. This allows the PPT-bounded simulator S to perform more steps
+than the adversary A without triggering a time-out, allowing it to break timed
+assumptions. If φ is an UC protocol, its security is not affected by such a powerful
+simulator. In contrast, if φ is a protocol making use of timers, honest parties of
+the protocol φ may not rely on timing assumptions as the adversary S is allowed
+to violate them unnoticed.
+Meaningfulness of TLUC Security. When introducing a new security notion, it
+is important to argue that it does not allow to prove the security of “obviously”
+insecure protocols. The basic idea behind TLUC security is the very same as
+behind established simulation-based security notions, where a protocol’s secu-
+rity is defined through the ideal functionality it realizes. For simulation-based
+security notions, care has to be taken that the simulator’s capabilities do not
+affect the security guarantees of the ideal functionality. For example, SPS security
+is not meaningful for ideal functionalities that use a polynomial-time hardness
+assumption like a signature scheme that can be broken by the super-polynomial
+simulator. As TLUC simulations are always polynomial-time, they do not affect
+an ideal functionality that makes use of polynomial-time assumptions. What is
+more, we show that non-trivial functionalities can be realized using a uniform
+polynomial-time simulation.
+In total analogy to both UC security and other composable security notions
+that admit general MPC in the plain model, we can show strong impossibility
+results. This underlines that the new mechanism of timers does not help the
+simulator per se.
+4.2 Properties of TLUC Security
+Having defined protocol emulation, we can state important properties of TLUC
+security in analogy to properties of UC security.
+Proposition 1 (Legality of the Dummy Adversary). The dummy adver-
+sary D is legal.
+772 B. Broadnax et al.
+Proposition 1 immediately follows from the definition of the dummy adversary
+in the UC framework.
+As in UC security, it is sufficient to show protocol emulation with respect to
+the dummy adversary.
+Proposition 2 (Completeness of the Dummy Adversary). Let π and φ
+be protocols. Then, π ≥TLUC φ if and only if π TLUC-emulates φ with respect
+to the dummy adversary.
+TLUC security is also compatible with UC security, meaning that UC-secure
+protocols are also TLUC-secure.
+Proposition 3 (Compatibility with UC Security). Let π, φ be protocols
+such that π ≥UC φ. Then, π ≥TLUC φ.
+In contrast to UC security, TLUC security is not transitive. This means that
+there exist protocols π1, π2, π3 such that π1 ≥TLUC π2 and π2 ≥TLUC π3, but
+π1 �≥TLUC π3. For an example, see the full version.
+However, TLUC emulation is transitive in conjunction with UC emulation.
+Proposition 4 (TLUC-UC Transitivity). Let π1, π2, π3 be protocols. If
+π1 ≥TLUC π2 and π2 ≥UC π3, then it holds that π1 ≥TLUC π3.
+In the following, we consider the case of a protocol ρ that makes one subrou-
+tine call to a protocol φ.
+Theorem 2 (Single Instance Composition Theorem). Let π, φ be
+subroutine-respecting protocols such that π ≥TLUC φ. Let ρ be a protocol that
+makes one subroutine call to φ. Then, ρπ ≥TLUC ρφ.
+Let ρ be a protocol that UC-emulates the ideal protocol IDEAL(G) of
+some ideal functionality G and makes one subroutine call to the ideal proto-
+col IDEAL(F) of some ideal functionality F . Using Propositions 3 and 4 and
+Theorem 2, we can import ρ into TLUC, replace IDEAL(F) with an appropri-
+ate TLUC protocol while preserving security and conclude that the resulting
+composite protocol TLUC-emulates IDEAL(G).
+Corollary 3 (UC Reusability). Let π and φ be subroutine-respecting proto-
+cols such that π ≥TLUC φ. Let ρ be a protocol that makes one subroutine call to
+φ such that ρφ ≥UC σ. Then, ρπ ≥TLUC σ.
+Unfortunately, TLUC security is not closed under general composition. More
+concretely, this means that there exist subroutine-respecting protocols π and φ
+such that π ≥TLUC φ holds, but ρπ �≥TLUC ρφ, where ρ makes multiple subrou-
+tine calls to φ. For an example, see the full version.
+UC security has the desirable property of environmental friendliness [CLP13],
+which, informally, ensures that game-based security properties of protocols run-
+ning along UC protocols (“in the environment”) are not impacted by the UC
+execution. Unfortunately, this property does not hold for all game-based security
+Environmentally Friendly Composable Multi-party Computation 773
+properties for many notions that allow composable MPC in the plain model due
+to the use of super-polynomial simulation. What is more, determining whether
+the game-based property holds may be non-trivial, requiring e.g. to consider
+the security proof of the protocol in question. However, as TLUC security is a
+special case of UC security with polynomial-time simulation only, it inherits the
+environmental friendliness of UC security.
+For an explanation and definition of environmental friendliness, see [CLP13]
+and the full version.
+Proposition 5 (Environmental Friendliness of TLUC Security). Let π
+be a protocol that TLUC-emulates the ideal protocol of some functionality G.
+Then π is friendly to every (non-timed) game-based property P of a protocol Π
+with property P .
+Protocols running alongside composable MPC protocols may not only be
+affected by super-polynomial simulation, but also by non-uniform simulation.
+For example, Lin, Pass, and Venkitasubramaniam [LPV09] propose a variant of
+UC security where the environment runs in uniform polynomial-time, while the
+simulator runs in non-uniform polynomial-time. The non-uniform input of the
+simulator may impact the security of protocols that have started before the input
+is given to the simulator—even if these protocols are secure against non-uniform
+adversaries. As the definition of environmental friendliness is non-uniform, it
+does not capture this property.
+Both the simulation and the reductions for our composable commitment
+scheme (Sect. 5) are uniform. Our constructions thus do not adversely affect
+security properties of previously started protocols that hold against polynomial-
+time adversaries.
+Remark 1. Environmental friendliness as defined by [CLP13] is not meaningful
+for timed game-based properties such as the timed hiding property of a timed
+commitment scheme.
+When considering an ideal functionality F and a concurrently executed pro-
+tocol π using timed assumptions, the functionality F may already be unfriendly
+to timed properties of π. For example, F may perform computations that break
+time-lock puzzles used in π.
+In the experiment of environmental friendliness, no simulator is not used.
+The (presumptive) simulator is only used to show that a protocol π is as friendly
+as a functionality F (which may already be unfriendly in our setting). Thus, the
+problems of environmental friendliness to protocols using timed assumptions
+start well before considering the effects of the simulation, which additionally
+affect the environmental friendliness.
+To the best of our knowledge, this novel environmental friendliness for timed
+game-based properties is not fulfilled by any security notion for composable
+MPC—not even by UC security.
+While there exists no general and formal definition of non-triviality in the
+UC framework, Canetti et al. [Can+02] consider a protocol π to be a non-trivial
+realization of F if π ≥UC IDEAL(F) and for all adversaries A that deliver
+774 B. Broadnax et al.
+all messages and do not corrupt any party, the simulator S allows all outputs
+generated by F .
+With TLUC security, this notion is not sufficient as it does not consider the
+possibility that a protocol aborts due to timeouts, which may, depending e.g. on
+the environment, occur even if the adversary delivers all messages.
+As an example, let π be a protocol that non-trivially UC-emulates FCOM and
+takes t(κ) steps to execute successfully if all parties are honest. Now, let π′ be
+the protocol that is identical to π, with the following exception. When receiving
+its input, the honest committer sets up a timer with 10t(κ) steps. At the onset
+of the unveil phase, it checks if the timer has expired and halts upon expiration.
+Clearly, π′ should be considered non-trivial.
+However, there exists a legal environment such that π′ never generates output
+even if the legal adversary delivers all messages. As we do not want π′ to be
+considered trivial if there also exists a legal environment Z for which π′ always
+generates an output under the conditions outlined in [Can+02], we thus consider
+an appropriate notion that accounts for this.
+Note that non-triviality may be lost under composition. To this end, take a
+protocol ρφ that makes one subroutine call to some protocol φ and is non-trivial.
+Replacing φ with its realization π that takes more steps than φ may make the
+composed protocol ρπ trivial as timers in ρ may always be triggered due to the
+additional steps performed by the protocol π. However, that this does not render
+ρπ insecure.
+The well-known impossibility results due to Canetti and Fischlin [CF01] state
+that there is no bilateral (i.e. involving two communicating parties) and termi-
+nating (in the sense of correctness for honest parties) protocol π that UC-realizes
+FCOM in the plain model. This is due to the fact that if a protocol π is in the
+plain model, an environment is able to internally emulate every (presumptive)
+UC simulator for π.
+We state the following variant of the impossibility result of [CF01] for TLUC-
+realizing FCOM in the plain model:
+Theorem 3. There exists no bilateral, non-trivial protocol π in the plain model
+where only one party sets up timers such that π ≥TLUC FCOM.
+By introducing a temporary asymmetry between simulator and environment,
+e.g. when the environment counts the steps relative to the real-world adversary,
+non-trivial and environmentally friendly realizations of UC-complete functional-
+ities in the plain model using timed assumptions become possible.
+5 Composable Commitments in the Plain Model
+We are now ready to present our construction πMCOM that TLUC-realizes the
+ideal functionality FMCOM (Fig. 1) and prove its security. Our construction is
+based on the UCCOneTime commitment scheme in the FCRS-hybrid model due to
+Canetti and Fischlin [CF01].
+Environmentally Friendly Composable Multi-party Computation 775
+In the original scheme UCCOneTime, which is suitable for a single commitment
+only, the CRS consists of two parts: a pair of public keys (pk0, pk1) for a trapdoor
+PRG (cf. [CF01]) as well as a uniformly random string σ ∈ {0, 1}4κ. With
+the knowledge of the associated secret keys (sk0, sk1), it is possible to extract
+commitments. By changing the distribution of σ in an indistinguishable way, the
+commitment becomes equivocal.
+To enable simulation in the case of static corruptions, the knowledge of only
+one trapdoor, depending on which party is corrupted, is sufficient. The other
+trapdoor does not even have to exist. Assuming trapdoor one-way permutations
+with dense public description [DP92], we can perform two coin-tosses to gener-
+ate (pk0, pk1) resp. σ. While our coin-toss protocol (see Sect. 5.1) is not fully
+simulatable, it is simulatable if the simulator plays the initiator. This suffices
+to set up the extraction trapdoor if the sender is corrupted by having the com-
+mitment receiver, played by the simulator, start the coin-toss for (pk0, pk1). The
+simulator can equivocate the result to public keys for which it knows the secret
+keys. Conversely, the coin-toss for σ is started by the commitment sender. If
+it is honest, the simulator can simulate the coin-toss such that σ contains an
+equivocation trapdoor. From that point on, the original UCCOneTime scheme is
+executed, using the values obtained by this preamble phase instead of the CRS
+as in the original protocol. For each new commitment between two parties, the
+preamble phase is re-executed. A similar approach is used in [Dac+13].
+Our coin-toss protocol πCT uses the trapdoor commitment scheme SSCOM
+(see Sect. 3.2) whose equivocation trapdoor is protected by a timed commitment
+that can be extracted by the simulator. As SSCOM is timed simulation-sound,
+SSCOM commitments of corrupted committers remain binding if opened in time.
+TLUC security does not imply concurrent self-composability. Thus, we can-
+not simply prove the security of a single commitment and conclude that it holds
+for multiple commitments performed concurrently. Indeed, when using weaker
+building blocks, our construction can be shown to securely realize one instance of
+FCOM, but not FMCOM, where the latter captures concurrent self-composition.
+In the following, we thus prove that πMCOM TLUC-realizes the ideal function-
+ality FMCOM for multiple commitments. Later on, we can plug πMCOM into any
+(UC-secure) protocol making one subroutine call to FMCOM while maintaining
+security.
+5.1 The Coin-Toss Protocol πCT
+One important building block towards constructing our TLUC-secure commit-
+ment scheme is the coin-toss protocol πCT (Construction 2). It is essentially
+identical to the protocol due to Blum [Blu81], except for the use of a string
+commitment and with the addition of handling the timers of SSCOM.
+Construction 2 (Coin-Toss Protocol πCT). Parameterized by a security param-
+eter κ, a timed security parameter �, a length parameter s = s(κ) and a �′(�, κ)-
+simulation-sound commitment scheme SSCOM with message space M ⊇ {0, 1}s.
+1. On input (coin-toss, sid , s), the sender samples r
+$← {0, 1}s.
+776 B. Broadnax et al.
+2. Sender and receiver start an instance of SSCOM on common input
+(1κ, commit, sid , �(κ), �′(�(κ), κ)). The sender’s private input for the commit-
+ment is r. All notify messages are forwarded between the adversary and the
+parties of SSCOM. Messages (timer, id) coming from a SSCOM party are
+forwarded to the adversary as (timer, id, �), i.e. augmented with the timed
+security parameter �.
+3. After the commit phase has finished, the receiver samples r′ $← {0, 1}s uni-
+formly at random and sends (sid , r′) to the sender.
+4. Upon receiving (sid , r′), sender and receiver perform the unveil phase of
+SSCOM.
+5. If the receiver accepts, sender and receiver output (coin-toss, sid, r ⊕ r′).
+Otherwise, the execution halts.
+As SSCOM is not straight-line extractable, we cannot show that πCT TLUC-
+realizes the coin-toss functionality FCT. However, πCT exhibits the following
+useful properties: If the commitment receiver is corrupted, the coin-toss is simu-
+latable. If the sender is corrupted and does not abort, the result of the coin-toss
+is distributed uniformly at random. Due to the simulation-soundness of SSCOM,
+the result of one session is independent from all other instances of πCT that may
+run concurrently, with the exception of aborts skewing the distribution.
+We do not prove these properties on their own, but show them implicitly in
+the proof of the construction of the commitment scheme.
+5.2 The Commitment Scheme πMCOM
+We now give the construction of the composable commitment scheme πMCOM.
+Construction 3 (Commitment Scheme πMCOM). Parameterized by a timed
+security parameter �(κ) and a trapdoor PRG PRG with key space {0, 1}l(κ) for
+some polynomial l, domain {0, 1}κ and range {0, 1}4κ.
+Commit Phase.
+1. Upon receiving (commit, sid , cid , Pi, Pj , b) as input for the committer Pi, com-
+mitter Pi and receiver Pj execute two instances of πCT with timed security
+parameter �(κ) to generate
+(a) (pk0, pk1) ∈ {0, 1}l(κ)×{0, 1}l(κ) (the “extraction CRS”) with the receiver
+acting as initiator in πCT with session ID (sid , cid , 0), where l(κ) is the
+length of public keys of PRG.
+(b) σ ∈ {0, 1}4κ (the “equivocation CRS”) with the sender acting as initiator
+in πCT with session ID (sid , cid , 1).
+If both instances of πCT terminate successfully, both parties store
+(sid , cid , (pk0, pk1, σ)). Otherwise, they halt the execution.
+2. The committer samples r
+$← {0, 1}κ and sets c = PRG(pk0, r)
+if b = 0 and c = PRG(pk1, r) ⊕ σ if b = 1. Then, the com-
+mitter sends (commitment, sid , cid , c) to the receiver. The committer
+stores (sid , cid , (b, r, c)), the receiver stores (sid , cid , c) and outputs
+(committed, sid , cid , Pi, Pj).
+Environmentally Friendly Composable Multi-party Computation 777
+Unveil Phase.
+1. Upon receiving (unveil, sid , cid , Pi, Pj) as input, the committer sends
+(unveil, sid , cid , (b, r)) to the receiver.
+2. Upon receiving (unveil, sid , cid , (b, r)) from the sender, the receiver checks if
+c = PRG(pk0, r) for b = 0 or if c = PRG(pk1, r) ⊕ σ for b = 1, relative to
+the values stored for this sid and cid. If the check is successful, the receiver
+outputs (unveil, sid , cid , Pi, Pj , b) and halts otherwise.
+Theorem 4. Assume that PRG is a trapdoor PRG with dense public descrip-
+tion and that SSCOM is a (computationally) trapdoor, extractable and timed
+simulation-sound commitment scheme. Then, πMCOM ≥TLUC IDEAL(FMCOM).
+For a proof, see the full version.
+Remark 2. Our technique also weakens the assumptions for practical complexity
+leveraging: We can replace the timed commitment scheme with a “weak” com-
+mitment scheme that is initially hiding for all polynomial-time environments and
+adversaries, but extractable for the simulator (that must not be able to break the
+other complexity assumptions used in the protocol). The security of this “weak”
+commitment scheme thus can be very low, as the simulation remains indistin-
+guishable as long as the “weak” commitments remain hiding during their use in
+the coin-toss. Afterwards, they do not need to be hiding anymore.
+6 Constant-Round Black-Box Composable General MPC
+In order to achieve composable general MPC, we can plug the construction
+πMCOM into any UC-secure general MPC protocol in the FMCOM-hybrid model
+while maintaining security (using Corollary 3).
+Hazay and Venkitasubramaniam [HV15] have presented a constant-round
+and black-box general MPC protocol in the FCRS-hybrid model based on public-
+key encryption and constant-round semi-honest oblivious transfer. Following the
+approach used in [Bro+17], we can generate the CRS of the [HV15] protocol
+with a simulatable coin-toss, assuming that IND-CPA-secure PKE schemes with
+oblivious public-key exist, thus casting the protocol in the FMCOM-hybrid model.
+Theorem 5. Assume that constant-round timed commitment schemes with
+appropriate parameters and perfectly binding homomorphic commitment schemes
+exist. Also, assume that trapdoor one-way permutations with dense public
+description and IND-CPA-secure PKE schemes with oblivious public-key genera-
+tion exist. Then, for every well-formed 9 functionality F , there exists a constant-
+round protocol πBB
+F in the plain model such that π̂BB
+F ≥TLUC IDEAL(F̂) and
+πBB
+F uses its building blocks in a black-box way only.
+9 Informally, a functionality F is well-formed if its behavior is independent of which
+parties are corrupted [Can+02].
+778 B. Broadnax et al.
+In Theorem 5, F̂ denotes the multi-session existence of F (cf. [CR03]) that
+naturally captures concurrent self-composition.
+Considering possible candidates for timed commitments and perfectly bind-
+ing homomorphic commitment schemes, we obtain the following corollary.
+Corollary 4. Assume that the generalized BBS assumption and the DDH
+assumption hold and that trapdoor one-way permutations with dense public
+description exist. Then, for every well-formed functionality F , there exists a
+constant-round protocol πBB
+F in the plain model such that π̂BB
+F ≥TLUC IDEAL(F̂)
+and πBB
+F does not use non-black-box techniques.
+7 Conclusion
+We constructed a composable constant-round black-box general MPC protocol in
+the plain model from standard (timed) assumptions only. In contrast to previous
+techniques for general MPC in the plain model, our approach fully fulfills the
+notion of environmental friendliness.
+The approach outlined in this paper could also give a new direction to com-
+plexity leveraging. The weaker level of security would have to hold only while
+the protocol is executed.
+Looking ahead, it remains to investigate if these results can be obtained
+more efficiently and from weaker or more generic assumptions and if stronger
+properties, e.g. with respect to transitivity or composition, can be achieved. With
+the recent popularity of timed assumptions, it is necessary to define a meaningful
+extension of environmental friendliness for timed game-based security properties.
+Acknowledgements. Jeremias Mechler, Jörn Müller-Quade: This work was sup-
+ported by funding from the topic Engineering Secure Systems of the Helmholtz Asso-
+ciation (HGF) and by KASTEL Security Research Labs.
+References
+[Bau+20] Baum, C., et al.: CRAFT: composable randomness and almost fairness from
+time. Cryptology ePrint Archive, Report 2020/784 (2020)
+[Bau+21] Baum, C., David, B., Dowsley, R., Nielsen, J.B., Oechsner, S.: TARDIS: a
+foundation of time-lock puzzles in UC. In: Canteaut, A., Standaert, F.-X.
+(eds.) EUROCRYPT 2021. LNCS, vol. 12698, pp. 429–459. Springer, Cham
+(2021). https://doi.org/10.1007/978-3-030-77883-5 15
+[Blu81] Blum, M.: Coin flipping by telephone. In: Gersho, A. (ed.) CRYPTO’81.
+Vol. ECE Report 82-04, pp. 11–15. Dept. of Elec. and Computer Eng., U.C.,
+Santa Barbara (1981)
+[BMM21] Broadnax, B., Mechler, J., Müller-Quade, J.: Environmentally friendly com-
+posable multi-party computation in the plain model from standard (timed)
+assumptions. Cryptology ePrint Archive, Report 2021/843 (2021). https://
+ia.cr/2021/843
+https://doi.org/10.1007/978-3-030-77883-5_15
+https://ia.cr/2021/843
+https://ia.cr/2021/843
+Environmentally Friendly Composable Multi-party Computation 779
+[BN00] Boneh, D., Naor, M.: Timed commitments. In: Bellare, M. (ed.) CRYPTO
+2000. LNCS, vol. 1880, pp. 236–254. Springer, Heidelberg (2000). https://
+doi.org/10.1007/3-540-44598-6 15
+[Bre+15] Brenner, H., et al.: Fast non-malleable commitments. In: Ray, I., Li, N.,
+Kruegel, C. (eds.) ACM CCS 2015, Denver, CO, USA, pp. 1048–1057. ACM
+Press (2015)
+[Bro+17] Broadnax, B., Döttling, N., Hartung, G., Müller-Quade, J., Nagel, M.: Con-
+currently composable security with shielded super-polynomial simulators. In:
+Coron, J.-S., Nielsen, J.B. (eds.) EUROCRYPT 2017. LNCS, vol. 10210, pp.
+351–381. Springer, Cham (2017). https://doi.org/10.1007/978-3-319-56620-
+7 13
+[Bro+18] Broadnax, B., Fetzer, V., Müller-Quade, J., Rupp, A.: Non-malleability vs.
+CCA-security: the case of commitments. In: Abdalla, M., Dahab, R. (eds.)
+PKC 2018. LNCS, vol. 10770, pp. 312–337. Springer, Cham (2018). https://
+doi.org/10.1007/978-3-319-76581-5 11
+[BS05] Barak, B., Sahai, A.: How to play almost any mental game over the net
+- concurrent composition via super-polynomial simulation. In: 46th FOCS,
+Pittsburgh, PA, USA, pp. 543–552. IEEE Computer Society Press (October
+2005)
+[Can+02] Canetti, R., et al.: Universally composable two-party and multiparty secure
+computation. In: 34th ACM STOC, Montréal, Québec, Canada, pp. 494–503.
+ACM Press (May 2002)
+[Can+07] Canetti, R., Dodis, Y., Pass, R., Walfish, S.: Universally composable security
+with global setup. In: Vadhan, S.P. (ed.) TCC 2007. LNCS, vol. 4392, pp. 61–
+85. Springer, Heidelberg (2007). https://doi.org/10.1007/978-3-540-70936-
+7 4
+[Can01] Canetti, R.: Universally composable security: a new paradigm for crypto-
+graphic protocols. In: 42nd FOCS, Las Vegas, NV, USA, pp. 136–145. IEEE
+Computer Society Press (October 2001)
+[CF01] Canetti, R., Fischlin, M.: Universally composable commitments. In: Kilian,
+J. (ed.) CRYPTO 2001. LNCS, vol. 2139, pp. 19–40. Springer, Heidelberg
+(2001). https://doi.org/10.1007/3-540-44647-8 2
+[CLP10] Canetti, R., Lin, H., Pass, R.: Adaptive hardness and composable security
+in the plain model from standard assumptions. In: 51st FOCS, Las Vegas,
+NV, USA, pp. 541–550. IEEE Computer Society Press (October 2010)
+[CLP13] Canetti, R., Lin, H., Pass, R.: From unprovability to environmentally friendly
+protocols. In: 54th FOCS, Berkeley, CA, USA, pp. 70–79. IEEE Computer
+Society Press (October 2013)
+[CR03] Canetti, R., Rabin, T.: Universal composition with joint state. In: Boneh,
+D. (ed.) CRYPTO 2003. LNCS, vol. 2729, pp. 265–281. Springer, Heidelberg
+(2003). https://doi.org/10.1007/978-3-540-45146-4 16
+[Dac+13] Dachman-Soled, D., Malkin, T., Raykova, M., Venkitasubramaniam, M.:
+Adaptive and concurrent secure computation from new adaptive, non-
+malleable commitments. In: Sako, K., Sarkar, P. (eds.) ASIACRYPT 2013.
+LNCS, vol. 8269, pp. 316–336. Springer, Heidelberg (2013). https://doi.org/
+10.1007/978-3-642-42033-7 17
+[DIO98] Di Crescenzo, G., Ishai, Y., Ostrovsky, R.: Non-interactive and non-malleable
+commitment. In: 30th ACM STOC, Dallas, TX, USA, May 1998, pp. 141–
+150. ACM Press (1998)
+https://doi.org/10.1007/3-540-44598-6_15
+https://doi.org/10.1007/3-540-44598-6_15
+https://doi.org/10.1007/978-3-319-56620-7_13
+https://doi.org/10.1007/978-3-319-56620-7_13
+https://doi.org/10.1007/978-3-319-76581-5_11
+https://doi.org/10.1007/978-3-319-76581-5_11
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.1007/3-540-44647-8_2
+https://doi.org/10.1007/978-3-540-45146-4_16
+https://doi.org/10.1007/978-3-642-42033-7_17
+https://doi.org/10.1007/978-3-642-42033-7_17
+780 B. Broadnax et al.
+[DP92] De Santis, A., Persiano, G.: Zero-knowledge proofs of knowledge without
+interaction (extended abstract). In: 33rd FOCS, Pittsburgh, PA, USA, Octo-
+ber 1992, pp. 427–436. IEEE Computer Society Press (1992)
+[DS13] Damg̊ard, I., Scafuro, A.: Unconditionally secure and universally composable
+commitments from physical assumptions. In: Sako, K., Sarkar, P. (eds.) ASI-
+ACRYPT 2013. LNCS, vol. 8270, pp. 100–119. Springer, Heidelberg (2013).
+https://doi.org/10.1007/978-3-642-42045-0 6
+[ElG84] ElGamal, T.: A public key cryptosystem and a signature scheme based on
+discrete logarithms. In: Blakley, G.R., Chaum, D. (eds.) CRYPTO 1984.
+LNCS, vol. 196, pp. 10–18. Springer, Heidelberg (1985). https://doi.org/10.
+1007/3-540-39568-7 2
+[Eph+20] Ephraim, N., et al.: Non-malleable time-lock puzzles and applications. Tech-
+nical report (2020)
+[Gar+12] Garg, S., Goyal, V., Jain, A., Sahai, A.: Concurrently secure computation
+in constant rounds. In: Pointcheval, D., Johansson, T. (eds.) EUROCRYPT
+2012. LNCS, vol. 7237, pp. 99–116. Springer, Heidelberg (2012). https://doi.
+org/10.1007/978-3-642-29011-4 8
+[GKP18] Garg, S., Kiyoshima, S., Pandey, O.: A new approach to black-box concurrent
+secure computation. In: Nielsen, J.B., Rijmen, V. (eds.) EUROCRYPT 2018.
+LNCS, vol. 10821, pp. 566–599. Springer, Cham (2018). https://doi.org/10.
+1007/978-3-319-78375-8 19
+[GMY03] Garay, J.A., MacKenzie, P., Yang, K.: Strengthening zero-knowledge proto-
+cols using signatures. In: Biham, E. (ed.) EUROCRYPT 2003. LNCS, vol.
+2656, pp. 177–194. Springer, Heidelberg (2003). https://doi.org/10.1007/3-
+540-39200-9 11
+[Gol08] Goldreich, O.: Computational complexity - a conceptual perspective. Cam-
+bridge University Press (2008). https://doi.org/10.1017/CBO9780511804106
+[Goy+14] Goyal, V., et al.: An algebraic approach to non-malleability. In: 55th FOCS,
+Philadelphia, PA, USA. IEEE Computer Society Press, pp. 41–50 (October
+2014)
+[HV15] Hazay, C., Venkitasubramaniam, M.: On black-box complexity of universally
+composable security in the CRS model. In: Iwata, T., Cheon, J.H. (eds.) ASI-
+ACRYPT 2015. LNCS, vol. 9453, pp. 183–209. Springer, Heidelberg (2015).
+https://doi.org/10.1007/978-3-662-48800-3 8
+[IPS08] Ishai, Y., Prabhakaran, M., Sahai, A.: Founding cryptography on oblivious
+transfer – efficiently. In: Wagner, D. (ed.) CRYPTO 2008. LNCS, vol. 5157,
+pp. 572–591. Springer, Heidelberg (2008). https://doi.org/10.1007/978-3-
+540-85174-5 32
+[Kiy14] Kiyoshima, S.: Round-efficient black-box construction of composable multi-
+party computation. In: Garay, J.A., Gennaro, R. (eds.) CRYPTO 2014.
+LNCS, vol. 8617, pp. 351–368. Springer, Heidelberg (2014). https://doi.org/
+10.1007/978-3-662-44381-1 20
+[KLP05] Kalai, Y.T., Lindell, Y., Prabhakaran, M.: Concurrent general composition
+of secure protocols in the timing model. In: Gabow, H.N., Fagin, R. (eds.)
+37th ACM STOC, Baltimore, MA, USA, May 2005, pp. 644–653. ACM Press
+(2005)
+[KLX20] Katz, J., Loss, J., Xu, J.: On the security of time-lock puzzles and timed com-
+mitments. In: Pass, R., Pietrzak, K. (eds.) TCC 2020. LNCS, vol. 12552, pp.
+390–413. Springer, Cham (2020). https://doi.org/10.1007/978-3-030-64381-
+2 14
+https://doi.org/10.1007/978-3-642-42045-0_6
+https://doi.org/10.1007/3-540-39568-7_2
+https://doi.org/10.1007/3-540-39568-7_2
+https://doi.org/10.1007/978-3-642-29011-4_8
+https://doi.org/10.1007/978-3-642-29011-4_8
+https://doi.org/10.1007/978-3-319-78375-8_19
+https://doi.org/10.1007/978-3-319-78375-8_19
+https://doi.org/10.1007/3-540-39200-9_11
+https://doi.org/10.1007/3-540-39200-9_11
+https://doi.org/10.1017/CBO9780511804106
+https://doi.org/10.1007/978-3-662-48800-3_8
+https://doi.org/10.1007/978-3-540-85174-5_32
+https://doi.org/10.1007/978-3-540-85174-5_32
+https://doi.org/10.1007/978-3-662-44381-1_20
+https://doi.org/10.1007/978-3-662-44381-1_20
+https://doi.org/10.1007/978-3-030-64381-2_14
+https://doi.org/10.1007/978-3-030-64381-2_14
+Environmentally Friendly Composable Multi-party Computation 781
+[LPV09] Lin, H., Pass, R., Venkitasubramaniam, M.: A unified framework for concur-
+rent security: universal composability from stand-alone non-malleability. In:
+Mitzenmacher, M. (ed.) 41st ACM STOC, Bethesda, MD, USA, pp. 179–188.
+ACM Press (2009)
+[MMV13] Mahmoody, M., Moran, T., Vadhan, S.P.: Publicly verifiable proofs of
+sequential work. In: Kleinberg, R.D. (ed.) ITCS 2013, Berkeley, CA, USA,
+pp. 373–388. ACM (2013)
+[MPR06] Micali, S., Pass, R., Rosen, A.: Input-indistinguishable computation. In: 47th
+FOCS, Berkeley, CA, USA, October 2006, pp. 367–378. IEEE Computer
+Society Press (2006)
+[MY04] MacKenzie, P., Yang, K.: On simulation-sound trapdoor commitments. In:
+Cachin, C., Camenisch, J.L. (eds.) EUROCRYPT 2004. LNCS, vol. 3027,
+pp. 382–400. Springer, Heidelberg (2004). https://doi.org/10.1007/978-3-
+540-24676-3 23
+[OPV08] Ostrovsky, R., Persiano, G., Visconti, I.: Constant-round concurrent non-
+malleable commitments and decommitments. Cryptology ePrint Archive,
+Report 2008/235 (2008). https://eprint.iacr.org/2008/235
+[Pas03] Pass, R.: Simulation in quasi-polynomial time, and its application to protocol
+composition. In: Biham, E. (ed.) EUROCRYPT 2003. LNCS, vol. 2656, pp.
+160–176. Springer, Heidelberg (2003). https://doi.org/10.1007/3-540-39200-
+9 10
+[PR05] Pass, R., Rosen, A.: New and improved constructions of non-malleable cryp-
+tographic protocols. In: Gabow, H.N., Fagin, R. (eds.) 37th ACM STOC,
+Baltimore, MA, USA, pp. 533–542. ACM Press (2005)
+[PS04] Prabhakaran, M., Sahai, A.: New notions of security: achieving universal
+composability without trusted setup. In: Babai, L. (ed.) 36th ACM STOC,
+Chicago, IL, USA, pp. 242–251. ACM Press (2004)
+[RSW96] Rivest, R.L., Shamir, A., Wagner, D.A.: Time-lock puzzles and timed-release
+crypto (1996)
+https://doi.org/10.1007/978-3-540-24676-3_23
+https://doi.org/10.1007/978-3-540-24676-3_23
+https://eprint.iacr.org/2008/235
+https://doi.org/10.1007/3-540-39200-9_10
+https://doi.org/10.1007/3-540-39200-9_10
+	Environmentally Friendly Composable Multi-party Computation in the Plain Model from Standard (Timed) Assumptions
+	1 Introduction
+	1.1 Related Work
+	1.2 Our Results
+	1.3 Outline
+	2 Preliminaries
+	2.1 Notation
+	2.2 Machine Model, Notion of Time
+	2.3 Timed Commitment Schemes
+	2.4 pCCA Security
+	2.5 Ideal Functionality for Multiple Commitments
+	3 Timed Simulation-Sound Commitment Schemes
+	3.1 Timed Simulation-Soundness
+	3.2 Construction SSCOM
+	4 TLUC Security in a Nutshell
+	4.1 Protocol Emulation
+	4.2 Properties of TLUC Security
+	5 Composable Commitments in the Plain Model
+	5.1 The Coin-Toss Protocol CT
+	5.2 The Commitment Scheme MCOM
+	6 Constant-Round Black-Box Composable General MPC
+	7 Conclusion
+	References

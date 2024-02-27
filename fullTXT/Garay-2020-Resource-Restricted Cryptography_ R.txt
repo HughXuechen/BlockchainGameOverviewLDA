@@ -1,0 +1,1452 @@
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era
+Resource-Restricted Cryptography:
+Revisiting MPC Bounds in the
+Proof-of-Work Era
+Juan Garay1, Aggelos Kiayias2(B), Rafail M. Ostrovsky3,
+Giorgos Panagiotakos4(B), and Vassilis Zikas2
+1 Department of Computer Science and Engineering,
+Texas A&M University, College Station, USA
+garay@cse.tamu.edu
+2 School of Informatics, University of Edinburgh & IOHK, Edinburgh, UK
+{akiayias,vzikas}@inf.ed.ac.uk
+3 Department of Computer Science and Department of Mathematics,
+UCLA, Los Angeles, USA
+rafail@cs.ucla.edu
+4 School of Informatics, University of Edinburgh, Edinburgh, UK
+giorgos.pan@inf.ed.ac.uk
+Abstract. Traditional bounds on synchronous Byzantine agreement
+(BA) and secure multi-party computation (MPC) establish that in
+absence of a private correlated-randomness setup, such as a PKI, proto-
+cols can tolerate up to t < n/3 of the parties being malicious. The intro-
+duction of “Nakamoto style” consensus, based on Proof-of-Work (PoW)
+blockchains, put forth a somewhat different flavor of BA, showing that
+even a majority of corrupted parties can be tolerated as long as the
+majority of the computation resources remain at honest hands. This
+assumption on honest majority of some resource was also extended to
+other resources such as stake, space, etc., upon which blockchains achiev-
+ing Nakamoto-style consensus were built that violated the t < n/3 bound
+in terms of number of party corruptions. The above state of affairs begs
+the question of whether the seeming mismatch is due to different goals
+and models, or whether the resource-restricting paradigm can be gener-
+ically used to circumvent the n/3 lower bound.
+In this work we study this question and formally demonstrate how the
+above paradigm changes the rules of the game in cryptographic defini-
+tions. First, we abstract the core properties that the resource-restricting
+paradigm offers by means of a functionality wrapper, in the UC frame-
+work, which when applied to a standard point-to-point network restricts
+the ability (of the adversary) to send new messages. We show that such
+a wrapped network can be implemented using the resource-restricting
+paradigm—concretely, using PoWs and honest majority of computing
+power—and that the traditional t < n/3 impossibility results fail when
+the parties have access to such a network. Our construction is in the fresh
+Common Reference String (CRS) model—i.e., it assumes a CRS which
+becomes available to the parties at the same time as to the adversary.
+c© International Association for Cryptologic Research 2020
+A. Canteaut and Y. Ishai (Eds.): EUROCRYPT 2020, LNCS 12106, pp. 129–158, 2020.
+https://doi.org/10.1007/978-3-030-45724-2_5
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-45724-2_5&domain=pdf
+https://doi.org/10.1007/978-3-030-45724-2_5
+130 J. Garay et al.
+We then present constructions for BA and MPC, which given access to
+such a network tolerate t < n/2 corruptions without assuming a private
+correlated randomness setup. We also show how to remove the freshness
+assumption from the CRS by leveraging the power of a random oracle.
+Our MPC protocol achieves the standard notion of MPC security, where
+parties might have dedicated roles, as is for example the case in Obliv-
+ious Transfer protocols. This is in contrast to existing solutions basing
+MPC on PoWs, which associate roles to pseudonyms but do not link
+these pseudonyms with the actual parties.
+1 Introduction
+Byzantine agreement (BA), introduced by Lamport, Shostak, and Pease [31], is
+a fundamental primitive in distributed computing and is at the core of many
+secure multi-party computation (MPC) protocols. The problem comes in two
+main flavors, Consensus and Broadcast—although a number of relaxations have
+also been proposed. Consensus considers a set of n parties P = {P1, . . . , Pn} each
+of whom has an input xi, and who wish to agree on an output y (Consistency)
+such that if xi = x for all honest parties then y = x (Validity), despite the
+potentially malicious behavior of up to t of them. In the Broadcast version, on
+the other hand, only a single party, often called the sender has an input xs, and
+the goal is to agree on an output y (Consistency) which, when the sender is
+honest equals x (Validity).
+The traditional setting in which the problem was introduced and investigated
+considers synchronous communication and protocol execution. In a nutshell, this
+means that the protocol advances in rounds such that: (1) parties have a con-
+sistent view of the current round—i.e., no party advances to round ρ + 1 before
+all other parties are finished with their round ρ instructions; and (2) all mes-
+sages sent in round ρ are delivered to their respective recipients by the beginning
+of round ρ + 1. Furthermore, the underlying communication network is a com-
+plete point-to-point authenticated channels network, where every pair (Pi, Pj)
+of parties is connected by a channel, such that when Pj receives a message on
+this channel it knows it was indeed sent by Pi (or the adversary, in case Pi is
+corrupted). We refer to the above setting as the (standard) LSP setting.
+In this model, Lamport et al. [21,31] proved that there exists no Consensus or
+Broadcast protocol which can tolerate t ≥ n/3 Byzantine parties, i.e., parties con-
+trolled by a (central) active and malicious adversary. The original formulation con-
+sidered perfect security (i.e., information-theoretic security with zero error proba-
+bility) and no correlated randomness shared among the parties.1 This impossibil-
+ity result was later extended by Borcherding [7] to computational security—i.e., it
+was proved to hold even under strong computational assumptions, such as one-way
+1 Lamport et al. also considered the case of “signed messages.” The information-
+theoretic setting was referred to as the “oral messages” setting.
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 131
+permutations.2 Furthermore, it applies evenwhen the point-to-point channels used
+by the parties are secure, i.e., both authenticated andprivate, and even ifwe assume
+an arbitrary public correlated randomness setup and/or a random oracle (RO).3
+(A public correlated randomness setup can be viewed as a functionality which sam-
+ples a string and distributes it to all parties, e.g, a common reference string (CRS).
+This is in contrast to a private correlated randomness setup which might keep part
+of the sampled string private and distribute different parts of it to different parties,
+e.g., a PKI.) For ease of reference we state the above as a corollary:
+Corollary 1 (Strong t ≥ n/3 impossibility [7]). In the synchronous point-
+to-point channels setting, there exists no Broadcast protocol tolerating t ≥ n/3
+corrupted parties. The statement holds both in the authenticated and in the
+secure channels settings, both for unconditional adversaries and assuming (even
+enhanced) trapdoor permutations, and even assuming an arbitrary public corre-
+lated randomness setup and/or a random oracle.
+Finally, Cohen et al. [16], show that this line of impossibility results can be
+extended to the case of symmetric functionalities, i.e., functionalities where all
+parties receive the same output.
+The effect of BA lower bounds on MPC. MPC allows a set of parties to compute
+an arbitrary function of their (potentially private) inputs in a secure way even
+in the presence of an adversary. Ben-Or, Goldwasser and Wigderson [5] pre-
+sented a protocol which computes any function with perfect security in the syn-
+chronous setting while tolerating t < n/3 malicious parties assuming the parties
+have access to a complete network of instant delivery point-to-point secure—i.e.,
+authenticated and private—channels (we shall refer to this model as the BGW
+communication model). The lower bound holds even if a Broadcast channel—i.e.,
+an ideal primitive guaranteeing the input/output properties of Broadcast—is
+available to the parties. Rabin and Ben-Or [34] proved that if we allow for a
+negligible error probability and assume broadcast, then there exists a general
+MPC protocol tolerating up to t < n/2 of the parties being corrupted, even if
+the adversary is computationally unbounded.
+Observe, however, that just allowing negligible error probability is not suf-
+ficient for circumventing the t < n/3 barrier. Indeed, it is straightforward to
+verify that fully secure MPC as considered in [26,34]—with fairness and guar-
+anteed output delivery—against malicious/Byzantine adversaries implies Broad-
+cast: Just consider the function which takes input only from a designated party,
+the sender, and outputs it to everyone.4 In fact, using the above observation
+2 The original result by Borcherding just treats the case of assumptions sufficient for
+the existence of existentially unforgeable signatures, but it can easily be extended
+to arbitrary cryptographic hardness assumptions.
+3 As usual, the implicit assumption here is that no party of adversary can query the
+RO more times than its running time.
+4 There are some delicate matters to handle when capturing Broadcast as MPC, which
+will become relevant for our results, but for clarity we defer discussing them for when
+they are needed.
+132 J. Garay et al.
+and Corollary 1 directly implies that t < n/3 is tight even assuming a computa-
+tional adversary, secure point-to-point channels, an arbitrary public correlated
+randomness setup, e.g., a CRS, and/or a random oracle.
+The public-key infrastructure (PKI) model. With the exception of perfect secu-
+rity5, the above landscape changes if we assume a private correlated randomness
+setup, such as a PKI. Indeed, in this case Dolev and Strong [19] proved that
+assuming a PKI and intractability assumptions implying existentially unforge-
+able digital signatures (e.g., one way functions) Broadcast tolerating arbitrarily
+many (i.e., t < n) malicious corruptions is possible. We refer to this protocol as
+Dolev-Strong Broadcast. In fact, as shown later by Pfitzmann and Waidner [33],
+by assuming more complicated correlations—often referred to as a setup for
+information-theoretic (pseudo-)signatures—it is also possible to obtain an uncon-
+ditionally (i.e., information-theoretically) secure protocol for Broadcast tolerat-
+ing. Clearly, by plugging the above constructions in [34], we obtain a computa-
+tionally or even i.t. secure MPC protocol tolerating any dishonest minority in
+the private correlated randomness setting. Recall that this task was impossible
+for honest majorities in the public correlated randomness setting.
+The blockchain revolution. The introduction and systematic study of blockchains
+in the permissionless setting, such as the Bitcoin blockchain, demonstrated how
+Consensus and Broadcast can be reached even in settings where a majority of
+the participants might be adversarial (as long as the majority of the comput-
+ing power remains honest) and even without a private correlated randomness
+setup. And although it was proven that such constructions work under the differ-
+ent assumption of honest-majority computing power, a confusion still remained
+driven mainly by the fact that the investigation of the type of consensus achieved
+by Bitcoin (“Nakamoto consensus”) considered more involved models that closer
+capture its execution parameters (e.g., “partial synchrony” [20]), and that the
+Bitcoin backbone protocol [23,32] was shown to achieve eventual consensus, a
+property closer to the traditional state-machine replication problem from dis-
+tributed computing [35]6. In fact, similar approaches were also used for alter-
+native blockchains that relied on assumptions about restricting other resource,
+such as for example a majority of honest stake (“proof of stake”—PoS) [6,25,30],
+a majority of honest space [3,6,15,18,30], etc., which were however also analyzed
+in more complex network settings; see also Remark 1.
+The resource-restricting paradigm. We will use this general term to refer to all
+the above approaches. Thus, an intriguing question remained:
+Does Corollary 1 still apply to the standard LSP model (of instant delivery
+authenticated channels and full synchrony) under the resource-restricting
+paradigm?
+5 Since perfect security allows no error probability, a setup does not help.
+6 Although it was also shown in [23] how to achieve the standard version of Consensus,
+as defined above, but in a way radically different from the existing protocols.
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 133
+In this work we first answer this question in the negative by abstracting the
+essence of the above resource-restricting paradigm as an access restriction on
+the underlying communication network. Intuitively, the assumption of restricting
+(the adversary’s access to) the relative resource can be captured by disallowing
+any party—and in particular any adversarial party—to send unboundedly many
+more new messages than any other party. To avoid ambiguity and allow using the
+related assumption in higher level constructions, we choose to work on Canetti’s
+Universal Composition framework [10]. In particular, we describe the assumption
+induced by restricting the resources available to the adversary by means of a
+functionality wrapper, which wraps a communication network and restricts the
+ability of parties (or the adversary) to send new messages through this network.
+We then demonstrate how our wrapper, when applied to the standard instant-
+delivery synchronous network, makes it impossible for the adversary to launch
+the attack from [7]. In particular, the classical impossibilities (or even their
+extension stated in Corollary 1) in the same model as the one they were proven,
+and with the required properties from the target primitive, do not apply to
+protocols in this new restricted network. We note in passing that the idea of
+restricting the resources available to the adversary compared to those available to
+the parties in order to limit the adversary’s attacking power was also previously
+explored in [8,24].
+In order to prove that our network restriction is an appropriate abstraction
+of the mechanisms implied by the resource-restricting paradigm, we focus on the
+case of proofs of work (PoW) and prove how to implement the wrapped LSP-style
+network from a public correlated randomness setup (in particular, any high min-
+entropy CRS) and an access-restricted random oracle. Concretely, along the lines
+of the composable analyses of Bitcoin [4], we capture the assumption of honest
+majority of hashing power by means of a wrapped RO, which allows each party
+(honest or corrupted) at most q queries per communication round (cf. [23]) for
+any given q (polynomial in the security parameter).7 An important consideration
+of our transformation is the need for a freshness property on the assumed CRS.
+Specifically, our protocol for realizing the wrapped network assumes that the
+adversary gets access to the CRS at the same time as honest parties do (and
+crucially relies on this fact). Intuitively, the reason is that our protocol will rely
+on PoW-style hash puzzles in order to restrict the ability of the adversary to
+create many new valid messages. Clearly, if the adversary has access to the initial
+CRS—which will play the role of the genesis block—way before the honest parties
+do, then he can start potentially precomputing valid messages thus making the
+implementation of communication restriction infeasible.
+We note that such freshness of the CRS might be considered a non-standard
+assumption and seems relevant only in combination with the resource-restricting
+paradigm. Nonetheless, in Sect. 6, we discuss how this freshness can be replaced
+using PoWs on challenges exchanged between parties, along the lines of [1]. The
+absence of freshness yields a somewhat relaxed wrapper which offers analogous
+7 The wrapper actually puts a restriction to adversarial parties as honest parties can
+be restricted by their protocol (cf. [4]).
+134 J. Garay et al.
+restrictions as our original wrapper, but guarantees only limited transferability
+of the messages sent, and is not as strict towards the adversary as our original
+one (i.e., adversarial messages can be transferred more times than honest ones).
+Still, as we argue, this relaxed wrapper is sufficient for obtaining all the positive
+results in this work.
+The above sheds light on the seemingly confusing landscape, but leaves open
+the question of how powerful the new assumption of the resource-restricting
+wrapper (and hence the resource-restricting paradigm in general) is. In partic-
+ular, although the above demonstrates that the resource-restricting paradigm
+allows to circumvent the limitation of Corollary 1, it still leaves open the ques-
+tion:
+Does the resource-restricting methodology allow for fully secure MPC in the
+public correlated randomness model, and if so, under what assumptions on
+the ‘number of corrupted parties?
+We investigate the question of whether we can obtain honest majority MPC
+in this setting, and answer it in the affirmative. (Recall that without the resource-
+restricting methodology and associated assumptions this is impossible since MPC
+implied Broadcast.) Note that a consensus impossibility due to Fitzi [22] proved
+that the t < n/2 bound is actually necessary for Consensus in the standard LSP
+communication model. And the lower bound holds even if we assume a broadcast
+primitive. In fact, by a simple inspection of the results one can observe that the
+underlying proof uses only honest strategies (for different selections of corrup-
+tion sets) and therefore applies even under the resource-restricting paradigm—
+where, as above, this paradigm is captured by wrapping the network with our
+communication-restricting wrapper.
+Towards the feasibility goal, we provide a protocol which allows us to establish
+a PKI assuming only our resource-restricted (wrapped) LSP network and one-
+way functions (or any other assumption which allows for existentially unforgeable
+signatures). More specifically, we show that our PKI establishment mechanism
+implements the key registration functionality Freg from [11]. Our protocol is
+inspired by the protocol of Andrychowicz and Dziembowski [1]. Their protocol,
+however, achieved a non-standard notion of MPC in which inputs are associated
+to public-keys/pseudonyms. In particular, in the standard MPC setting, com-
+puting a function f(x1, . . . , xn) among parties P1, . . . , Pn means having each Pi
+contribute input xi and output f(x1, . . . , xn)—this is reflected both in the origi-
+nal definitions of MPC [26,36] and in the UC SFE functionality Fsfe [10] and the
+corresponding standalone evaluation experiment from [9]. Instead, in the MPC
+evaluation from [1], every party Pi is represented by a pseudonym ji, which is
+not necessarily equal to i and where the mapping between i and ji is unknown
+to the honest participants.8 Then the party contributing the �th input to the
+computation of f is Pi such that ji = �. This evaluation paradigm was termed
+pseudonymous MPC in [29].
+8 In fact, (j1, . . . , jn) is a permutation of (1, . . . , n).
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 135
+It is not hard to see, however, that the above evaluation paradigm makes the
+corresponding solution inapplicable to classical scenarios where MPC would be
+applied, where parties have distinguished roles. Examples include decentralized
+auctions—where the auctioneer should not bid—and asymmetric functionali-
+ties such as oblivious transfer. We note in passing that the above relaxation of
+traditional MPC guarantees seems inherent in the permissionless peer-to-peer
+setting setting of [1,29]. Instead, our protocol adapts the techniques from [1] in
+a white-box manner to leverage the authenticity of our underlying communica-
+tion network—recall that our protocol is in the (wrapped) BGW communication
+setting—in order to ensure that the registered public keys are publicly linked to
+their respective owners. This allows us to evaluate the standard MPC function-
+ality.
+Getting from an implementation of Freg where the keys are linked to their
+owners to standard MPC is then fairly straightforward by using the modular-
+ity of the UC framework. As proved in [11], Freg can be used to realize the
+certified signature functionality (aka certification functionality) Fcert which, in
+turn, can be used to realize a Broadcast functionality against even adaptive
+adversaries [27]. By plugging this functionality into the honest-majority proto-
+col (compiler) by Cramer et al. [17]—an adaptation of the protocol from [34] to
+tolerate adaptive corruptions—we obtain an MPC protocol which is adaptively
+secure.
+Organization of the paper. In Sect. 2 we discuss our model. In Sect. 3 we intro-
+duce our wrapper-based abstraction of the resource-restricting paradigm and
+demonstrate how the impossibility from Corollary 1 fails when parties can use
+it. Section 4 presents our implementation of this wrapper from PoWs and a fresh
+CRS, and Sect. 5 discusses how to use it to obtain certified digital signatures and
+MPC. Finally in Sect. 6 we discuss how to remove the freshness assumption by
+leveraging PoWs.
+2 Model
+To allow for a modular treatment and ensure universal composition of our results,
+we will work in Canetti’s UC model [9]. We assume some familiarity of the
+reader with UC but we will restrict the properties we use to those that are
+satisfied by any composable security framework. In fact, technically speaking,
+our underlying framework is the UC with global setups (GUC) [12], as we aim
+to accurately capture a global notion of time (see below). Nonetheless, the low
+level technicalities of the GUC framework do not affect our arguments and the
+reader can treat our proofs as standard UC proofs.
+Parties, functionalities, and the adversary and environment are (instances
+of) interactive Turing machines (ITMs) running in probabilistic polynomial time
+(PPT). We prove our statements for a static active adversary; however, the static
+restriction is only for simplicity as our proofs can be directly extended to handle
+adaptive corruptions. In (G)UC, security is defined via the standard simulation
+136 J. Garay et al.
+paradigm: In a nutshell, a protocol π realizes a functionality F (in UC, this
+is described as emulation of the dummy/ideal F-hybrid protocol φ) if for any
+adversary attacking π there exists a simulator attacking φ making the executions
+of the two protocols indistinguishable in the eyes of any external environment.
+Note that π might (and in our cases will, as discussed below) have access to its
+own hybrid functionalities.
+Synchrony. We adopt the global clock version of the synchronous UC model
+by Katz et al. [28] as described in [4]. Concretely, we assume that parties have
+access to a global clock functionality which allows them to advance rounds at
+the same pace. For generality, we will allow the clock to have a dynamic party
+set, as in [4].
+The functionality manages the set P of registered identities, i.e, parties
+P = (pid, sid). It also manages the set F of registered functionalities (together with
+their session identifier). Initially, P = ∅ and F = ∅. For each session sid the clock
+maintains a variable τsid. For each identity P = (pid, sid) ∈ P it manages variable
+dP . For each pair (F , sid) ∈ F it manages variable d(F,sid) (all integer variables are
+initially set to 0).
+Synchronization:
+Upon receiving (clock-update, sidC) from some party P ∈ P set dP := 1;
+execute Round-Update and forward (clock-update, sidC , P ) to A.
+Upon receiving (clock-update, sidC) from some functionality F ∈ F in a
+session sid such that (F , sid) ∈ F , set d(F,sid) = 1, execute Round-Update and
+return (clock-update, sidC , F) to A.
+Upon receiving (clock-read, sidC) from any participant (including the
+environment, the adversary, or any ideal—shared or local—functionality)
+return (clock-read, sidC , τsid) to the requestor.
+Procedure Round-Update: For each session sid do: If d(F,sid) = 1 for all F ∈ F and
+dP = 1 for all honest P = (·, sid) in P, then set τsid = τsid + 1 and reset dF = 0 and
+dP = 0 for all parties P = (·, sid) ∈ P.
+Global Functionality Gclock
+Communication network. We capture point-to-point authenticated commu-
+nication, modeling the LSP channels in UC, by means of a multi-party multi-use
+version of the authenticated channel functionality with instant delivery along
+the lines of [4]. (The original network from [4] had bounded delay; hence here
+we need to set this bound to 1.) Note that in this network once an honest party
+Pi inserts a message to be sent to Pj , the message is buffered, and it is deliv-
+ered after at most Δ attempts from the receiver (here Δ = 1). Syntactically, we
+allow the simulator to query the network and learn if a buffered message was
+received by the respective receiver. This step—despite being redundant in most
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 137
+cases as the simulator should be able to defer this fact by observing the acti-
+vations forwarded to him—is not only an intuitive addition, as it captures that
+the adversary is aware of delivery of message, but will also simplify the proto-
+col description and simulation. For completeness, we include the authenticated
+network functionality below.
+Note that the BGW-style secure point-to-point network functionality can
+be trivially derived by the authenticated one by replacing in the message
+(sent, sid,m, Pi, Pj ,mid) which the adversary receives upon some m being
+inserted to the network, the value of m by ⊥ (of by |m| if this is implemented
+by standard encryption).
+The functionality is parameterized by a set of possible senders and receivers,
+denoted by P, a list M , and integer variables of the form Dz, where z ∈ {0, 1}∗,
+that are dynamically created. For every party P ∈ P it maintains a fetch counter
+fP . Initially, M := ∅ and fP := 0, for every P ∈ P.
+Upon receiving (send, sid, m, Pj) from Pi ∈ P, set Dmid := 1 and
+M = M ||(m, Pi, Pj , mid), where mid is a unique message-ID, and send
+(sent, sid, m, Pi, Pj , mid) to A.
+Upon receiving (fetch, sid) from some honest party Pj ∈ P, increment fP by
+1, set M ′ = ∅, and do the following:
+1. For all tuples (m, Pi, Pj , mid) ∈ M , set Dmid := Dmid − 1,
+2. for all tuples (m, Pi, Pj , mid) ∈ M , where Dmid ≤ 0, delete
+(m, Pi, Pj , mid) from M , and add (m, Pi) to M ′.
+3. Send (sent, sid, M ′) to Pj .
+Upon receiving (fetch-requests, sid, P ) from A, output
+(fetch-requests, sid, fP ).
+Functionality Fauth
+The random oracle functionality. As is typical in the proof-of-work litera-
+ture, we will abstract puzzle-friendly hash functions by means of a random oracle
+functionality.
+The functionality is parameterized by a security parameter λ and a set of parties
+P. It maintains a (dynamically updatable) map H that is initially empty.
+Upon receiving (Eval, sid, x) from some party P ∈ P (or from A on behalf of
+a corrupted P ), do the following:
+1. If H[x] = ⊥, sample a value y uniformly at random from {0, 1}λ, and set
+H[x] := y.
+2. Return (Eval, sid, x, H[x]) to the requestor.
+Functionality FRO
+138 J. Garay et al.
+Furthermore, following [4], we will use the wrapper to capture the assumption
+that no party gets more than q queries to the RO per round. This wrapper in
+combination with the honest majority of parties captures the assumption that
+the adversary does not control a majority of the systems hashing power.
+The wrapper functionality is parameterized by a set of parties P, and an upper
+bound q which restricts the F-evaluations of each corrupted party per round. (To
+keep track of rounds the functionality registers with the global clock Gclock.) The
+functionality manages the variable τ and the current set of corrupted miners P.
+For each party P ∈ P it manages variables qP . Initially, τ = 0.
+General:
+The wrapper stops the interaction with the adversary as soon as the
+adversary tries to exceed its budget of q queries per corrupted party.
+Relaying inputs to the random oracle:
+Upon receiving (Eval, sid, x) from A on behalf of a corrupted party P ∈ P ′,
+then first execute Round Reset. Then, set qP := qP + 1 and only if qP ≤ q
+forward the request to FRO and return to A whatever FRO returns.
+Any other request from any participant or the adversary is simply relayed to
+the underlying functionality without any further action and the output is
+given to the destination specified by the hybrid functionality.
+Standard UC Corruption Handling:
+Upon receiving (corrupt, sid, P ) from the adversary, set P ′ := P ′ ∪ P. If P
+has already issued t > 0 random oracle queries in this round, set qP := t.
+Otherwise set qP := 0.
+Procedure Round-Reset:
+Send (clock-read, sidC) to Gclock and receive (clock-read, sidC , τ ′) from
+Gclock. If |τ ′ − τ | > 0 (i.e., a new round started), then set qP := 0 for each
+participant P ∈ P and set τ := τ ′.
+Wrapper Functionality Wq
+ro(F)
+Correlated randomness setup. Finally, we make use of the CRS functional-
+ity [13], which models a public correlated randomness setup.
+When activated for the first time on input (Retrieve, sid), choose a value d ← D,
+and send (Retrieve, d) back to the activating party. In each other activation
+return the value d to the activating party.
+Functionality FD
+crs
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 139
+3 Inapplicability of Strong BA Impossibility
+In this section we present our abstraction of the resource-restricting paradigm
+as a communication-restricting wrapper for the underlying communication net-
+work, and show that the strong BA impossibility (Corollary 1) does not apply
+to this wrapped network. In particular, as we discussed, in [7] it was argued
+that assuming 3t ≥ n, no private correlated randomness setup, the existence
+of signatures, and authenticated point-to-point channels, no protocol solves the
+broadcast problem. In this section, we show that if parties have access to a simple
+channel that is restricted in such a way that spam or sybil attacks are infeasible,
+the impossibility proof of [7] does not go through.
+3.1 Modeling a Communication-Restricted Network
+Our filtering wrapper restricts the per-round accesses of each party to the func-
+tionality, in a probabilistic manner. In more detail, for parameters p, q, each
+party has a quota of q send requests per round, each of them succeeding with
+probability p. Note that after a message has been sent through the filter, the
+sender, as well as the receiver, can re-send the same message for free. This fea-
+ture captures the fact that if a message has passed the filtering mechanism once,
+it should be freely allowed to circulate in the network. We explicitly differentiate
+this action in our interface, by introducing the resend request; parties have to
+use resend to forward for free messages they have already received.
+The wrapper functionality is parameterized by p ∈ [0, 1] and q ∈ N, which restrict
+the probability of success and number of F-evaluations of each party per round,
+respectively, and a set of parties P. It registers with the global clock Gclock. It
+manages the round integer variable τ , the current set of corrupted parties P̃, and a
+list T . For each party P ∈ P, it manages the integer variable tP .
+Initially τ := 0, T := ∅, and tP := 0, for each P ∈ P.
+Filtering:
+– Upon receiving (send, sid, m, Pj) from party Pi ∈ P, execute Round-Reset, and
+do the following:
+• Set tPi := tPi + 1. If tPi ≤ q, with probability p, do:
+1. Add (m, Pi) to T and output (success, sid) to Pi.
+2. On response (continue, sid, m) from Pi, forward (send, sid, m, Pj) to F .
+In any other case, send (fail, sid) to Pi.
+– Upon receiving (resend, sid, m, Pj) from honest party Pi ∈ P \ P̃, if
+(m, Pi) ∈ T then forward (send, sid, m, Pj) to F .
+– Upon receiving (resend, sid, m, PJ) from A on behalf of corrupted Pi ∈ P̃, if
+(m, P ) ∈ T for some P ∈ P, then forward (send, sid, m, Pj) to F .
+– Upon F sending (sent, sid, m, Pi) to Pj , add (m, Pj) to T and forward the
+message to Pj .
+Wrapper Functionality Wp,q
+flt (F)
+140 J. Garay et al.
+Standard UC Corruption Handling:
+– Upon receiving (corrupt, sid, P ) from the adversary, set P̃ ← P̃ ∪ P.
+General:
+– Any other request from (resp. towards) any participant or the adversary, is
+simply relayed to the underlying functionality (resp . any participant of the
+adversary) without any further action.
+Procedure Round-Reset:
+– Send (clock-read, sidC) to Gclock and receive (clock-read, sidC , τ ′) from
+Gclock.
+– If |τ ′ − τ | > 0, then set tP := 0 for each P ∈ P and set τ := τ ′.
+3.2 The Impossibility Theorem, Revisited
+Next, we show that if parties have access to Wp,q
+flt(Fauth), for some noticeable
+p and q ≥ 1, the BA attack from the impossibility proof of [7] does not go
+through. The proof relies on the fact that the adversary can simulate the behavior
+of multiple honest parties. In a nutshell, we describe a protocol where parties
+send messages through Wp,q
+flt(Fauth), and due to the restricted number of send
+attempts the adversary has at his disposal, it is impossible for him to simulate
+multiple parties running this protocol.
+Lemma 1. Let n = 3, t = 1, p be a noticeable function, and q ≥ 1. There exists
+a polynomial time protocol in the (Gclock,Fauth,Wp,q
+flt(Fauth),Fsig)-hybrid model
+that invalidates the t ≥ n/3 BA attack from the impossibility theorem of [7].
+Proof. The impossibility proof considers the class of full information protocols,
+where if some party receives a message at some round r, it signs the message
+with its own signing key, and sends it to all other parties. We are going to show
+a subclass of protocols that use Wp,q
+flt(Fauth) and are not captured by the proof.
+We first briefly recall the proof in [7] for the case n = 3 and t = 1. The
+proof is based on constructing three scenarios σ1, σ2, σ3, where broadcast cannot
+possibly be achieved. Let the sender be P1. We proceed to describe σ1, σ2, σ3. In
+σ1, P1 has input 0 and P2 is corrupted. In σ2, P1 has input 1 and P3 is corrupted.
+In σ3, P1 is corrupted.
+By Validity, it follows that in σ1 P3 should output 0, and in σ2 P2 should out-
+put 1, no matter the behavior of the adversary. Moreover, due to the Agreement
+(Consistency) property, the output of P2 and P3 in σ3 must be the same. The
+proof then proceeds to describe a way of making the view of P3 (resp. P2) indis-
+tinguishable in scenarios σ1 (resp. σ2) and σ3, and thus reaching a contradiction
+since they are going to decide on different values in σ3.
+The main idea is for P2 in σ1 to behave as if P1 had input 1, by creating a set
+of fake keys and changing the signatures of P1 to the ones with the fake keys and
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 141
+different input where possible. Since there is no PKI, P3 cannot tell whether: (i)
+P1 is corrupted and sends messages signed with different keys to P2, or (ii) P2
+is corrupted. Symmetrically, P3 in σ2 simulates P1 with input 0. Finally, P1 in
+σ3 simulates both behaviors, i.e., P1 running the protocol honestly with input 1
+in its communication with P2, and P1 with input 0 in its communication with
+P3. This is exactly where the impossibility proof does not go through anymore.
+For the moment, assume that we are in the setting where p = 1−negl(λ) and
+q = 1. Let Π be a full information protocol, where in the first round the sender
+P1 uses W1−negl(λ),1
+flt (Fauth) to transmit its message to the other two parties.
+Further, assume that this message is different for the cases where the sender
+input is 0 and 1, with probability α. It follows that P1 has to send two different
+messages to parties P2 and P3 at the first round of σ3, with probability α. How-
+ever, this is not possible anymore, as the network functionality only allows for
+one new message to be send by P1 at each round, with overwhelming probability.
+Hence, with probability α the impossibility proof cannot go through anymore.
+For the case where p is noticeable and q ≥ 1, we can design a similar protocol
+that cannot be captured by the proof. The protocol begins with a first “super
+round” of size λ
+pq regular rounds, where each party should successfully send its
+first message m at least 3λ
+4 times using Wp,q
+flt(Fauth) for it to be considered
+valid. Since the functionality allows sending the same message twice for free, the
+sequence of 3λ
+4 messages is encoded as follows: (m, 1), . . . , (m, 3λ
+4 ).
+Next, we analyze the probability that A can use the strategy described in
+the impossibility proof in [7]. Note that each party can query Wp,q
+flt(Fauth) up to
+λ/p times during the super round. We will show that: (i) honest parties will
+be able to send 3λ
+4 messages with overwhelming probability, and (ii) that the
+adversary in σ3 will not be able to send the 2 · 3λ
+4 messages it has to. Let random
+variable Xi be 1 if the i-th query to Wp,q
+flt(Fauth) of some party P succeeds, and
+0 otherwise. Also, let X =
+∑λ/p
+i=1 Xi. It holds that E[X] = p · λ/p = λ. By an
+application of the Chernoff bound, for δ = 1
+4 , it holds that
+Pr[X ≤ (1 − δ)E[X]] = Pr[X ≤ 3λ
+4
+] ≤ e−Ω(λ).
+Hence, with overwhelming probability each party will be able to send at least
+3λ
+4 messages in the first λ
+pq rounds. On the other hand, we have that
+Pr[X ≥ (1 + δ)E[X]] = Pr[X ≥ 5λ
+4
+] ≤ e−Ω(λ).
+Hence, no party will be able to send more than 5λ
+4 messages in the first super
+round. This concludes the proof, since the adversary, in order to correctly follow
+the strategy described before, must send in total 6λ
+4 (> 5λ
+4 ) messages in the
+first super round. Thus, with overwhelming probability it is going to fail to do
+so. Finally, note that the length of the super round is polynomial, since 1/p is
+bounded by some polynomial. Thus, the theorem follows. ��
+The proof of Corollary 1 works along the same lines as the proof of [7]; since
+only public correlated randomness is assumed, nothing prevents the adversary
+142 J. Garay et al.
+from simulating an honest party. Finally, we note that the same techniques used
+above can also be used to refute an appropriate adaptation of Corollary 1, where
+parties have access to Wp,q
+flt(Fauth).
+4 Implementing a Communication-Restricted Network
+In this section we describe our implementation of Wp,q
+flt(Fauth) that is based on
+the resource-restricted RO functionality Wq
+ro(FRO) and a standard authenticated
+network. As discussed in the introduction, we also make use of an enhanced ver-
+sion of the Fcrs functionality, where it is guaranteed that the adversary learns the
+shared string after the honest parties. We capture this restriction in a straight-
+forward way: A wrapper Wfresh(FD
+crs) which does not allow the adversary to
+learn the CRS before the round honest parties are spawned. W.l.o.g., in the rest
+of the paper we are going to assume that all parties are spawned at round 1.
+Our protocol makes uses of the proof-of-work construction of [2]. Every time a
+party wants to send a new message, it tries to find a hash of the message and some
+nonce, that is smaller than some target value D, and if successful it forwards this
+message through Fauth to the designated recipient. Moreover, if it has received
+such a message and nonce, it can perform a resend by forwarding this message
+through Fauth. To be sure that the adversary does not precompute small hashes
+before the start of the protocol, and thus violates the send quota described in
+the wrapper, parties make use of the string provided by WD
+fresh(Fcrs), where D
+will be a distribution with sufficient high min-entropy. They use this string as
+a prefix to any hash they compute, thus effectively disallowing the adversary to
+use any of the small hashes it may have precomputed.
+Initialization:
+– We assume that P is in the party set of Wq
+ro(FRO), Fauth, and Wfresh(FD
+crs),
+and is registered with Gclock. The protocol maintains a list of valid
+message/nonce/hash tuples T , initially empty, and a counter t initially set to 0.
+When P is first activated, it gets the CRS from Wfresh(FD
+crs), and uses it as a
+prefix of all messages it sends to Wq
+ro(FRO). For simplicity, we avoid explicitly
+including this term bellow.
+Message Exchange:
+– Upon receiving (send, sid, m, P ′), execute Round-Reset, set t := t + 1, and if
+t > q output (fail, sid) to P . Otherwise, do the following:
+1. Send (eval, sid, (m, r)) to Wq
+ro(FRO), where r ← {0, 1}λ.
+2. On response (eval, sid, (m, r), v), if (v > D), output (fail, sid) to P .
+3. Otherwise, if no entry of the form (m, r′, v′) exists in T , store (m, r, v) in T .
+Then, send (success, sid) to P . On response (continue, sid), pick r′, v′ such
+that (m, r′, v′) is an entry in T , and send (send, sid, (m, r′, v′), P ′) to Fauth.
+– Upon receiving (resend, sid, m, P ′), if r, v exist such that (m, r, v) is an entry
+in T , send (send, sid, (m, r, v), P ′) to Fauth. Otherwise, output (fail, sid) to P .
+Protocol Wrapped-ChannelD,q(P )
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 143
+– Upon receiving (fetch, sid), forward the message to Fauth.
+– Upon receiving (sent, sid, (m, r, v), P ′) from Fauth, send (eval, sid, (m, r)) to
+Wq
+ro(FRO). On response (eval, sid, (m, r), v′), if (v ≤ D) and (v′ = v), remove
+any entry of the form (m, r′, v′) from T and instead add (m, r, v), and output
+(sent, sid, m, P ′).
+– Upon receiving (fetch-requests, sid), forward the message to Fauth, and
+output its response.
+Clock Update:
+Upon receiving (clock-update, sidC), send (clock-update, sidC) to Gclock.
+Procedure Round-Reset:
+Send (clock-read, sidC) to Gclock and receive (clock-read, sidC , τ ′) from
+Gclock. If |τ ′ − τ | > 0, then set t := 0 and τ := τ ′.
+Next, we prove that Wrapped-ChannelD,q UC realizes the Wp,q
+flt(Fauth) func-
+tionality, for appropriate values of p. The main idea of the proof is that the
+simulator is going to simulate new messages sent through the ideal functionality
+in the eyes of A, by appropriately programming the random oracle. All other
+actions can be easily simulated.
+Lemma 2. Let p := D
+2λ , and D be a distribution with min-entropy at least
+ω(log(λ)). Protocol Wrapped-ChannelD,q UC-realizes functionality Wp,q
+flt(Fauth)
+in the (Gclock,Wq
+ro(FRO),Fauth,Wfresh(FD
+crs))-hybrid model.
+Proof. We consider the following simulator that is parameterized by some real-
+world adversary A:
+The simulator manages a set of parties P . It sets up an empty network buffer M ,
+an empty random oracle table H, and a table of received messages T . The
+simulator also manages integer variables of the form Dz, where z ∈ {0, 1}∗, that
+are dynamically created, and fP , for P ∈ P. Initially, M is empty, and fP := 0,
+for P ∈ P.
+Simulating the CRS:
+– Sample a value from D once, and only output it after the round the protocol
+starts.
+Simulating the Random Oracle:
+– As in the protocol above, we always include the CRS value as a prefix of all
+messages to Wq
+ro(FRO). Again, for clarity we avoid explicitly including this
+term bellow.
+– Upon receiving (eval, sid, u) for Wq
+ro(FRO) from A on behalf of corrupted
+P ∈ P, do the following:
+1. If H[u] is already defined, output (eval, sid, u, H[u]),
+Simulator S1
+144 J. Garay et al.
+2. If u is of the form (m, r), send (send, sid, m, P ) to Wp,q
+flt (Fauth) on behalf of
+P . On response (fail, sid), set H[u] to a uniform value in {0, 1}λ larger than
+D. On response (success, sid), set H[u] to a uniform value in {0, 1}λ
+smaller or equal to D. Output (eval, sid, v, H[u]).
+3. Otherwise, set H[u] to a uniform value in {0, 1}λ and output
+(eval, sid, u, H[u]).
+Simulating the Network:
+– Upon receiving (send, sid, u, P ′) for Fauth from A on behalf of corrupted
+P ∈ P, do the following:
+1. If u is of the form (m, r, v), H[(m, r)] is defined, H[(m, r)] = v, and v ≤ D,
+add (u, P ) to T , and send (resend, sid, m, P ′) to Wp,q
+flt (Fauth) on behalf of
+P . On response (sent, sid, m, P, P ′, mid), set Dmid = 1 and
+M = M ||(u, P, P ′, mid), and send (sent, sid, u, P, P ′, mid) to A.
+2. Otherwise, send (sent, sid, u, P, P ′, mid) to A, where mid is a unique
+message-ID.
+– Upon receiving (fetch-requests, sid, P ) for Fauth from A, execute
+Network-Update and output (fetch-requests, sid, P, fP ).
+Interaction with Wp,q
+flt (Fauth):
+– Upon receiving (sent, sid, m, P, P ′, mid) from Wp,q
+flt (Fauth), execute
+Network-Update, and do the following :
+1. If (� ∃(r′, v′) : ((m, r′, v′), P ) ∈ T ), pick an r uniformly at random from
+{0, 1}λ and set H[(m, r)] := v, where v is a uniform value in {0, 1}λ smaller
+or equal to D. Then, add ((m, r, v), P ) to T .
+2. Otherwise, pick r, v such that ((m, r, v), P ) is an entry in T .
+Add ((m, r, v), P, P ′, mid) to M , set Dmid = 1, and output
+(sent, sid, (m, r, v), P, P ′, mid) to A.
+Procedure Network-Update: For each P ∈ P, send (fetch-requests, sid, P ) to
+Wp,q
+flt (Fauth). On response (fetch-requests, sid, P, f ′
+P ), if f ′
+P > fP , set fP := f ′
+P
+and do the following
+1. For all tuples ((m, r, v), P ′, P, mid) ∈ M , set Dmid := Dmid − 1.
+2. For all tuples ((m, r, v), P ′, P, mid) ∈ M , where Dmid ≤ 0, delete
+((m, r, v), P ′, P, mid) from M , delete any entry of the form ((m, r′, v′), Pj)
+from T , and add ((m, r, v), Pj) to T .
+We will argue that for every PPT adversary A in the real world, no PPT
+environment Z can distinguish between the real execution against A and the
+ideal execution against S1.
+First, let E1 denote the event where honest parties in the real world, and on
+input send, repeat a query to the random oracle. Each time an honest party
+issues a new RO query, a random string of size λ bits is sampled. The probability
+that the same string is sampled twice in a polynomial execution is negligible in
+λ. Moreover, E1 implies this event. Hence, the probability of E1 happening in
+a polynomially bounded execution is at most negl(λ). Note, that if E1 does not
+occur, the distribution of send commands invoked by honest parties that succeed
+is identical in the real and the ideal world.
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 145
+Next, we turn our attention to adversarial attempts to send a new message.
+Let E2 be the event where A sends a message of the form (m, r, v) to Fauth,
+such that it hasn’t queried (m, r) on the random oracle and H[(m, r)] = v. The
+probability of this event happening, amounts to trying to guess a random value
+sampled uniformly over an exponential size domain, and is negl(λ). Moreover,
+if E2 does not occur, the adversary can only compute new “valid” messages by
+querying the RO. Define now E3 to be the event where the adversary makes a
+query to the RO containing the CRS value, before round 1. By the fact that
+the CRS value is sampled by a high min-entropy distribution, and that A is
+PPT, it is implied that Pr[E3] ≤ negl(λ). Hence, if E2 and E3 do not occur, the
+distribution of adversarially created messages is identical in both worlds.
+Now if E1, E2, E3 do no occur, the view of the adversary and the environment
+in both worlds is identical, as all requests are perfectly simulated. By an appli-
+cation of the union bound, it is easy to see that ¬(E1∨E2∨E3) occurs with only
+negligible probability. Hence, the real and the ideal execution are statistically
+indistinguishable in the eyes of Z, and the theorem follows. ��
+Regarding the round and communication complexity of our protocol, we note
+the following: It takes on expectation 1/p send requests to send a message,
+i.e., 1/pq rounds, and the communication cost is only one message. Regarding
+implementing Wp,q
+flt(Fauth) using virtual resources, we point to Remark 1.
+Corollary 2. Let n = 3, t = 1, p be a noticeable function, q ≥ 1, and any
+distribution D with min-entropy at least ω(log(λ)). Then, there exist a polynomial
+time protocol in the (Gclock,Wq
+ro(FRO),Fauth,Wfresh(FD
+crs),Fsig)-hybrid model,
+that invalidates the proof of the impossibility theorem of [7].
+Remark 1. The resource-restricted crypto paradigm can be also applied to vir-
+tual resources. For PoS, the implicit PKI associated with PoS blockchains seems
+sufficient for a simple implementation of our resource-restricted wrapper using
+a verifiable random function (VRF). However, this PoS-implicit PKI typically
+assigns keys to coins instead of parties. Thus, a transformation, e.g. through
+our wrapper (see Sect. 5), would be needed that shifts from the honest majority
+assumption on coins to parties. This validates the generality of our abstraction;
+however, with PoS in the permissioned setting, there might be more direct ways
+of getting standard MPC by leveraging the implicit coin-PKI.
+5 Implementing a Registration Functionality
+In this section, we show how to implement a key registration functionality
+(cf. [11]) in the resource-restricted setting, and in the presence of an honest
+majority of parties.
+5.1 The Registration Functionality
+The registration functionality allows any party to submit a key, which all other
+parties can later retrieve. Our specific formulation Fr
+reg, is parameterized by an
+146 J. Garay et al.
+integer r that specifies the round after which key retrieval becomes available.9
+Note, that Freg does not guarantee that the keys submitted belong to the corre-
+sponding parties, i.e., a corrupted party can submit a key it saw another party
+submit.
+Following the paradigm of [4] to deal with synchrony, Freg also has a
+Maintain command, which is parameterized by an implementation dependent
+function predict-time. We use this mechanism, to capture the behavior of the
+real world protocol with respect to Gclock, and appropriately delay Freg from
+sending its clock update until all honest parties get enough activations. In
+more detail, predict-time takes as input a timed honest input sequence of tuples
+IT
+H = (. . . , (xi, idi, τi), . . .), where xi is the i-th input provided to Freg by honest
+party idi at round τi. We say that a protocol Π has a predictable synchronization
+pattern, if there exists a function predict-time such that for any possible execu-
+tion of Π, with timed honest input sequence IT
+H , predict-time(IT
+H) = τ + 1 if all
+honest parties have received enough activations to proceed to round τ + 1.
+The functionality is parameterized by a set of parties P, and an integer r. It
+maintains integer variables τ, du, and a owner/key set T . Initially, T is empty and
+τ is equal to 0.
+Upon receiving any input I from any party or the adversary, send
+(clock-read, sidC) to Gclock. On response (clock-read, sidC , t′), if |τ ′ − τ | > 0,
+set τ := τ ′, du := 0. Then, if I was received from an honest party P ∈ P \ P̃, set
+IT
+H := IT
+H ||(I, Pi, τ). Depending on the input I and the ID of the sender, execute
+the respective code:
+On input I = (Submit, sid, v) from honest party P , if there is no v′ such that
+(P, v′) ∈ T , add (P, v) to T and send (Submit, sid, v) to A.
+On input I = (Submit, sid, v) from corrupted party P , if τ ≤ r and there is a
+v′ such that (P, v′) ∈ T , delete it and add (P, v) instead. Then, send
+(Submit, sid, v) to A.
+On input I = (Retrieve, sid) from party P , if τ > r, output
+(Retrieve, sid, T ) to P .
+Upon receiving (Maintain, sid) from honest party P , if predict-time(IT
+H) > τ ,
+and du = 0, set du := 1 and send (clock-update, sidC) to Gclock. Otherwise,
+send (I,ID) to A.
+Functionality Fr
+reg
+5.2 The Identity-Assignment Protocol
+To implement the above functionality we follow an adaptation of the protocol
+from [1], with the difference that instead of relating keys to pseudonyms, parties
+are able to create a PKI relating keys to identities. First, we deal with a technical
+issue.
+9 We sometimes omit r when it is clear from the context.
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 147
+Our protocol contains commands that perform a sequence of operations. It
+is possible that during the execution of this operation, the party will lose the
+activation. Following the formulation of [4], we perform some of the commands
+in an interruptible manner. That is, a command I is I-interruptible executed, if
+in case activation is lost, an anchor is stored so that in the next invocation of
+this command it continues from the place it stopped in the previous activation.
+For more details on how implement this mechanism, we refer to [4].
+Next, we give an informal description of the protocol, which makes use of
+Wflt(Fauth), Fauth, Gclock, and the signature functionality Fsig of [11], adapted
+for many signers and being responsive, i.e., the one who is issuing a command is
+not losing its activation, as for example is done in the context of the key evolving
+signature functionality Fkes of [3].
+The protocol is structured in 2 different phases. In the first phase, lasting
+up to round r + n + 1, parties use Wflt(Fauth) to partially agree on a “graded”
+PKI. In more detail, for the first r rounds (procedure PoWGeneration) they
+attempt to send through Wflt(Fauth) messages containing a verification key pk
+and an increasing counter c. A key is going to be taken in account, only if a
+sufficient number of messages related to this key and with different counter val-
+ues are sent. This way keys are linked to resource accesses. And since resource
+accesses are restricted, so is going to be the number of generated keys. Unlike [1],
+to establish that keys are linked to identities, at round r parties sign the sub-
+mitted key p̂k and their identity with their verification key pk, and multicast it
+to all other parties.
+For the remaining n+1 rounds (procedure KeyAgreement), parties depending
+on when they received the messages related to some key, assign it a grade from 0
+for the earliest, to n for the latest. To ensure that these grades differ by at most
+one for the same key, they immediately send the relevant messages they received
+to all other parties. This allows them to establish a form of a graded PKI, denoted
+by K in the protocol, where parties are proportionally represented, and which
+is going to be later used for broadcast. Finally, key/identity pairs received that
+have been signed with a key in K of grade 0 are added to a separate set M. This
+set is going to be used in the second phase, which we describe next, to correctly
+relate keys to identities.
+Starting at round r + n + 2, parties use an adaptation of the “Dolev-Strong”
+protocol to reliably broadcast M (procedure Broadcast). The way the protocol
+works, is by accepting messages as correctly broadcast only if a progressively
+bigger number of keys of sufficient grade in K have signed it. At the last round
+of the protocol, round r + 2n + 2, it is ensured that if an honest party accepts a
+message, then so do all other honest parties. Finally, by using a simple majority
+rule on the key/identity pairs contained in the broadcast sets M, parties are
+able to agree on a key/identity set, denoted by N in the protocol, where each
+party is related to exactly one key and honest parties are correctly represented.
+N is output whenever a Retrieve command is issued. Next, we give a formal
+description of protocol Graded-Agreement.
+148 J. Garay et al.
+Initialization:
+– We assume that P is registered to Gclock and is in the party sets of Wq
+flt(FRO),
+Fauth and Fsig. The protocol maintains a list K of key/grade pairs, a list M of
+key/owner tuples, a list N of key/owner pairs, and a list T of message/key
+pairs, all initially empty, keys pk, p̂k, initially set to ⊥, and integer variables
+τ := 0, r := 4n2λ
+min(1,pq)
+, c := 1.
+Upon receiving any input I from any party or the adversary, send (clock-read,
+sidC) to Gclock. On response (clock-read, sidC , t′), if |τ ′ − τ | > 0, set τ := τ ′ and
+dr, du := 0, and do the following:
+– On input I = (Maintain, sid), if dr = 0 execute in a
+(Maintain, sid)-interruptible manner the following:
+1. If 1 ≤ τ ≤ r, execute PowGeneration.
+2. Else if r < τ ≤ r + n + 1, execute KeyAgreement.
+3. Else, if r + n + 1 < τ ≤ r + 2n + 2, execute Broadcast.
+4. Finally, if du = 1, send (clock-update, sidC) to Gclock. Set dr := 1.
+– On input I = (Submit, sid, v), if p̂k = ⊥, set p̂k := v.
+– On input I = (Retrieve, sid), if τ > r + 2n, output N .
+– On input I = (clock-update, sidC), if dr = 1 and du = 0, send
+(clock-update, sidC) to Gclock. Set du := 1.
+Procedure PoWGeneration:
+If pk = ⊥, then send (KeyGen, sid) to Fsig, and on response
+(Verification Key, sid, v), set pk := v. If p̂k = ⊥, give the activation to Z, and
+in the next activation repeat this step. Otherwise, do the following:
+1. Repeat q times: Send (send, sid, (pk, c), P ) to Wp,q
+flt (Fauth). On response
+(success, sid), increase c by 1, and for each P ′ ∈ P send
+(resend, sid, (pk, c − 1), P ′) through Wp,q
+flt (Fauth).
+2. If τ = r, send (Sign, sid, pk, (p̂k, P )) to Fsig. On response,
+(Signed, sid, pk, (p̂k, P ′), σ), for each P ′ ∈ P send (send, sid, (pk, p̂k, σ), P ′) to
+Fauth.
+Procedure KeyAgreement:
+1. Send (fetch, sid) to Wp,q
+flt (Fauth).
+2. On response, (sent, sid,M ) from Wp,q
+flt (Fauth), for every subset of messages in
+M of the form M ′ = {(sent, sid, (pk′, i), P ′
+i )}i∈[�(1−δ)pqr�], for δ equal to 1/4t,
+if no entry of the form (pk′, ·) exists in K, add (pk′, τ − (r + 1)) to K and
+forward the messages in M ′ to all other parties through Wp,q
+flt (Fauth).
+3. If τ = r + 1, send (fetch, sid) to Fauth. On response (sent, sid,M ′) from
+Fauth, for every message in M of the form (sent, sid, (pk′, p̂k
+′
+, σ), P ′), if there
+exists a entry of the form (pk′, ·) in K, send (Verify, sid, pk′, (p̂k
+′
+, P ′), σ) to
+Fsig. On response (Verified, sid, pk′, (p̂k
+′
+, P ′), σ, f), if f = 1, add (p̂k′, P ′) to
+M.
+Protocol Graded-Agreement(P )
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 149
+Procedure Broadcast:
+1. If τ = r + n + 2, send (Sign, sid, pk, (M, pk)) to Fsig. On response,
+(Signed, sid, pk, (M, pk), σ), send (send, sid, ((M, pk), (pk, σ)), P ′) to every
+party P ′ ∈ P through Fauth.
+2. If r + n + 2 < τ ≤ r + 2n + 2, send (fetch, sid) to Fauth. On response,
+(sent, sid,M ) from Fauth, do the following:
+(a) For every message in M of the form
+(sent, sid, ((m, pk1), (pk1, σ1), . . . , (pkk, σk)), P
+′), for k = τ − (r + n + 2),
+send (Verify, sid, pki, (m, pk1), σi) to Fsig, for i ∈ [k]. If for all responses of
+the form (Verified, sid, pki, (m, pk1), σi, fi), for i ∈ [k], it holds that fi = 1,
+pk1, . . . , pkk are all different, and (pki, gi) ∈ K for gi ≤ k, add (m, pk1) to T .
+(b) For every new entry (m, pk1) in T , send (Sign, sid, pk, (m, pk1)) to Fsig. On
+response, (Signed, sid, pk, (m, pk1), σ), add (pk, σ) to the relevant message
+received, and forward it to all other parties through Fauth.
+3. If τ = r + 2n + 2, do the following:
+(a) For every pki, where ∃m �= m′ : (m, pki), (m
+′, pki) ∈ T , delete all entries of
+the form (·, pki) from T .
+(b) For every P ′ ∈ P, if there exists a unique key p̂k′, where at least n/2 entries
+of T contain an entry of the form (p̂k
+′
+, P ′) and do not contain any other
+entry of the form (·, P ′), add (p̂k′, P ′) to N .
+We are going to show that protocol Graded-Agreement implements function-
+ality Freg. First, note that there exists a function predict-time for our protocol
+that successfully predicts when honest parties are done for the round; honest
+parties lose their activation in a predictable manner when they get Maintain
+as input. Moreover, a simulator can easily simulate the real world execution in
+the eyes of Z, since it has all the information it needs to simulate honest parties’
+behavior and functionalities Wflt(Fauth), Fauth, and Fsig. Finally, due to the
+properties of the protocol, also proved in [1], all parties are going to agree on the
+same key/identity set N , and thus provide the same responses on a Retrieve
+command from Z. We proceed to state our theorem.
+Theorem 1. Let n > 2t, p be a noticeable function, q ∈ N
++. The proto-
+col Graded-Agreement UC-realizes functionality F
+4n2λ
+min(1,pq)+2n+3
+reg in the (Gclock,
+Fauth, Wp,q
+flt(Fauth), Fsig)-hybrid model.
+Proof. Let r = 4n2λ
+min(1,pq) and w.l.o.g., let p · q ≤ 1. We start by making some
+observations about the protocol.
+Claim. The set K of each honest party, at the end of round r + 1, will contain
+the keys of all other honest parties, with overwhelming probability in λ.
+Proof. We first show that the claim holds for a single honest party. Let random
+variable Xi be equal to 1, if the i-th invocation of send to Wp,q
+flt(Fauth) by some
+honest party P is successful, and 0 otherwise. It holds that Pr[Xi = 1] = p, and
+that X1, . . . , Xr·q is a set of independent random variables; each party invokes
+150 J. Garay et al.
+send exactly r · q times up to round r. Let X =
+∑rq
+i=1 Xi. By an application of
+the Chernoff bound, it holds that:
+Pr[X ≤ (1 − 1
+4t
+)pqr] = Pr[X ≤ (1 − 1
+4t
+)E[X]] ≤ e−Ω(λ)
+Since X is an integer, with overwhelming probability each honest party will send
+at least 	(1− 1
+4t )pqr
+ messages to each other party. Hence, its key will be included
+in K. By an application of the union bound the claim follows. �
+In addition to the previous claim, we also note two things: (i) The grade of
+each such key will be 0, and (ii) due to the correctness of the signature scheme,
+all honest parties will add the associated key p̂k and the correct owner of key pk
+in M. These two facts will be useful later, when we will argue that all honest
+keys make it to the final list of keys N , along with their correct owner.
+Next, we show that the total number of keys generated will be at most n.
+Claim. The set K of each honest party contains at most n elements, with over-
+whelming probability.
+Proof. As before let Z =
+∑qt(r+n)
+i=1 Zi, denote the successful attempts of the
+adversary to send a message through Wflt(Fauth). Note that, starting from
+round 1, she has r + n rounds in her disposal to send messages. After some
+computations we can show that:
+(1 +
+1
+4t
+)E[Z] = (1 +
+1
+4t
+)pqt(r + n) ≤ (1 − 1
+4t
+)pqr(t + 1)
+By the Chernoff bound, it holds that:
+Pr[Z ≥ (1 − 1
+4t
+)pqr(t + 1)] ≤ Pr[Z ≥ (1 +
+1
+4t
+)E[Z]] ≤ e−Ω(λ)
+Note now, that 	(1− 1
+4t )pqr
+ different messages are required for a new key to be
+added to K. It follows, that the adversary will add at most t keys of its choice
+to K. Moreover, by the design of the protocol, honest parties will add at most
+n − t keys to K. Thus, the set K of any honest party will contain at most n keys
+with overwhelming probability. �
+Next, note that if an honest party adds a key to K with grade g < n, due to
+the fact that the relevant messages for this key are multicast to all other parties
+in the network together with an additional valid signature, all honest parties will
+add the same key in K with grade at most g + 1.
+Using all facts proved above, we can now proceed and show that during the
+Broadcast phase of the protocol, all honest parties will reliably broadcast set M.
+Moreover, the adversary will not be able to confuse them about her broadcast
+input, if any. We start by arguing about the values broadcast by honest parties.
+Claim. At the end of round r + 2n + 2, the set N of each honest party will
+contain the keys of all honest parties, along with their correct identity, with
+overwhelming probability.
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 151
+Proof. Let P be some honest party, (pk, p̂k) be her public keys, K′,M′ be her
+key sets, and m = (M′, pk). By our previous claim, all honest parties will have
+added (pk, 0) to their key set K. Moreover, they will all receive the message
+(p̂k, P ) signed w.r.t. pk at round r + 1 by party P , and thus include (p̂k, P ) in
+M. Note, that no honest party will include another entry related to P , as P will
+not send any other such message. Moreover, all parties will receive (m, (pk, σ)),
+where σ is a valid signature for m. Hence, they will all add m to T . Again, due
+to unforgeability, they will not add any other entry related to pk in T . Hence,
+since T has at most n elements (one for each key) and 2n > t, (p̂k, P ) will be
+the only entry that appears exactly once with respect to P in at least n/2 sets
+of T . Thus, all honest parties will add (pk, P ) in N , and the claim follows. �
+Next, we argue that the key sets N of all honest parties will be the same.
+Claim. At the end of round r + 2n + 2, all honest parties will have the same set
+N , with at most one entry per party, with overwhelming probability.
+Proof. First, we argue that all honest parties have same set T at the end of round
+r+2n+2. For the sake of contradiction assume that the opposite was true. This
+would imply that some honest party P has added (m, pk) ∈ T at some round r′,
+while some other party P ′ has not. We take two cases. If r′ < r +2n+2, then P
+will forward the message relevant to entry (m, pk) together with its own signature
+to all other parties. Since its key has grade 0, all other honest parties will add
+(m, pk) to T in the next round. On the other hand, if r′ = r+2n+2, it holds that
+(m, pk) is signed by n keys in the set K of P , and by our previous claims at least
+one of these keys was of an honest party. Thus, this party must have accepted
+this message earlier, and by our previous argument all other honest parties will
+also receive and add this message to T . This is a contradiction. Hence, honest
+parties agree on their entries in T .
+Now, since all parties agree on T , and N is a deterministic function of T , it
+is implied that they will also agree on N . Moreover, by construction each party
+P is associated with at most one key in N . The claim follows. �
+Our last two claims imply that all parties agree on N , all honest parties will
+be represented, and at most one key will be assigned to each identity.
+Having established these properties of the protocol, we next give a sketch of
+the simulator, which we denote by S2. The first thing the simulator must deal
+with is clock updates. In the ideal world, clock updates sent by Z to honest
+parties, are directly forwarded to Gclock, which in turn notifies S2. This is not
+the case in the real world. Parties send updates to Gclock only after a sufficient
+number of Maintain and clock-update inputs have been provided by Z. The
+way we simulate this behavior, is by having S2 deduce exactly when honest
+parties will send their updates in the real world, by keeping track of when Freg
+will send its clock update in the ideal world, as well as the activations it gets after
+a Maintain command has been issued to Freg or a clock-update command
+has been issued to Gclock. Note, that a new round starts only after either of the
+two commands has been issued, and thus S2 has been activated.
+152 J. Garay et al.
+Since S2 can tell when parties are done for each round, it can also simulate
+the interaction of A with Wflt(Fauth), Fauth and Fsig. It does that by simulating
+the behavior of honest parties. All information needed to do this are public, or
+in the case of the honest parties’ signatures can be faked by the simulator itself.
+Note, that care has been taken so that S2 never throughout the protocol has to
+sign anything with the keys submitted to Freg for honest parties; it only signs
+with the keys generated by the parties themselves. This is the reason that each
+party uses two different keys, pk and p̂k.
+Finally, at round r + 2n + 2 the simulator submits to Freg the keys that
+corrupted parties choose based on key set N ; with overwhelming probability
+this set is the same for all honest parties. Thus, the response of Freg to any
+Retrieve query after this round is N . It follows that the view of Z in the two
+executions is going to be indistinguishable, and the theorem follows. ��
+As discussed in the introduction, getting from an implementation of Freg
+where the keys are linked to their owners to standard MPC is fairly straightfor-
+ward by using the modularity of the UC framework. As proved in [11], Freg can
+be used to realize the certified signature functionality (aka certification func-
+tionality) Fcert which, in turn, can be used to realize a Broadcast functionality
+against even adaptive adversaries [27] if we additionally assume the existence of
+secure channels; for details about implementing the secure channel functionality
+Fsc from Fauth we point to [14]. By plugging the Broadcast functionality into
+the honest-majority protocol (compiler) by Cramer et al. [17]—an adaptation
+of the protocol from [34] to tolerate adaptive corruptions—we obtain an MPC
+protocol which is adaptively secure.
+Corollary 3. Let n > 2t, p be a noticeable function, and q ∈ N
++. Then,
+there exists a protocol that UC-realizes functionality Fmpc in the (Gclock, Fsc,
+Wp,q
+flt(Fauth), Fsig)-hybrid model.
+6 Removing the Freshness Assumption
+So far, we have assumed that all parties, including the adversary, get access to
+the CRS at the same time, i.e., when the protocol starts. In this section, we give
+a high level overview of how our analysis can be adapted to the case where we
+remove the fresh CRS and instead assume the existence of a random oracle. The
+protocol we devise is based on techniques developed initially in [1].
+The main function of the CRS in the implementation of Wflt(Fauth), is to
+ensure that all parties agree on which hash evaluations are “fresh”, i.e., performed
+after the CRS became known. Consequently, sent messages are fully transferable,
+in the sense that they can be forwarded an arbitrary number of times and still be
+valid. Without a CRS we have to sacrifice full transferability and instead settle
+with a limited version of the property (cf. [33]).
+Next, we describe the filtering functionality we implement in this setting,
+denoted Wflt-lim(Fauth). The functionality has the same syntax as Wflt(Fauth),
+with one difference: each message sent is accompanied by a grade g, which signi-
+fies the number of times that this message can be forwarded by different parties
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 153
+and is also related to when the message was initially sent. For example, if party
+P1 receives a message with grade 2, the message can be forwarded to party P2
+with grade 1, and party P2 can forward to party P3 with grade 0. Party P3
+cannot forward the message any further, while party P2 can still forward the
+message to any other party it wants to. Moreover, the initial grade assigned to
+a message sent using the send command is equal to the round that this com-
+mand was issued minus 1, i.e., messages with higher grades can be computed at
+later rounds, for honest parties. The adversary has a small advantage: the initial
+grade of messages he sends is equal to the current round. Finally, we enforce the
+participation of honest parties the same way we do for the Freg functionality in
+Sect. 5. Next, we formally describe Wflt-lim.
+The wrapper functionality is parameterized p ∈ [0, 1] and q ∈ N, which restrict the
+probability of success and number of F-evaluations of each party per round,
+respectively, and a set of parties P. It manages the round integer variable τ , a
+boolean flag du, the current set of corrupted parties P̃, and a list T . For each
+party P ∈ P, it manages the integer variable tP .
+Initially τ, du := 0, T := ∅, and tP := 0, for each P ∈ P.
+Upon receiving any input I from any party or the adversary, send
+(clock-read, sidC) to Gclock. On response (clock-read, sidC , t′), if |τ ′ − τ | > 0,
+set τ := τ ′, du := 0 and tP := 0 for each P ∈ P. Then, if I was received from an
+honest party P ∈ P \ P̃, set IT
+H := IT
+H ||(I, Pi, τ). Depending on the input I and
+the ID of the sender, execute the respective code.
+Filtering:
+– Upon receiving (send, sid, m, Pj) from party Pi ∈ P, do the following:
+• Set tPi := tPi + 1. If tPi ≤ q, with probability p, do:
+1. If Pi is honest, let local variable g := τ − 1. Otherwise, let g := τ .
+2. Add (m, Pi, g) to T , and output (success, sid) to Pi,
+3. On response (continue, sid, m) from Pi, forward (send, sid, (m, g), Pj)
+to F .
+In any other case, send (fail, sid) to Pi.
+– Upon receiving (resend, sid, m, g, Pj) from honest party Pi ∈ P \ P̃, if
+(m, Pi, g) ∈ T and g > 0, then forward (send, sid, (m, g), Pj) to F .
+– Upon receiving (resend, sid, m, g, Pj) from A on behalf of corrupted Pi ∈ P̃, if
+for some g′ ≥ g and some P ∈ P, (m, P, g′) ∈ T , and g > 0, forward
+(send, sid, (m, g), Pj) to F .
+– Upon F sending (sent, sid, (m, g), Pi) to Pj , add (m, Pj , g − 1) to T and
+forward the message to Pj .
+Ensure Honest Participation:
+– Upon receiving (Maintain, sid) from honest party P , if predict-time(IT
+H) > τ
+and du = 0, set du := 1 and send (clock-update, sidC) to Gclock. Otherwise,
+send (I,ID) to A.
+Wrapper Functionality Wp,q
+flt-lim(F)
+154 J. Garay et al.
+Standard UC Corruption Handling:
+– Upon receiving (corrupt, sid, P ) from the adversary, set P̃ ← P̃ ∪ P.
+General:
+– Any other request from (resp. towards) any participant or the adversary, is
+simply relayed to the underlying functionality (resp . any participant of the
+adversary) without any further action.
+The way we implement this functionality is by introducing a repeated
+challenge-exchange procedure to protocol Wrapped-Channel: at each round par-
+ties sample a random string, which they then hash together with the challenges
+sent by other parties at the previous round to compute a new challenge, that
+they multicast to the network. The new challenge computed at each round is
+used as a prefix to the queries they are making to the restricted RO function-
+ality. If a query is successful, they send the query value along with a pre-image
+of the challenge, in order for other parties to be sure that the challenge they
+multicast earlier was used in the computation, and thus ensure freshness. The
+receiving party can forward the message by also including a pre-image of its own
+challenge, thus ensuring all honest parties will accept it as valid. Obviously, in
+the first round of the protocol parties cannot send any message as they haven’t
+yet exchanged any random challenges, in the second round the messages cannot
+be transferred, in the third they can be transferred once, and so on. We formally
+describe the new protocol and state our lemma next. The relevant security proof
+proceeds as that of Lemma 2, except that we have to show the that the adversary
+cannot precomputes hashes that are related to some challenge at a round earlier
+than the one that this challenge was generated. Due to lack of space we omit it.
+Initialization:
+– We assume that P is in the party set of Wq
+ro(FRO), Fauth, FRO. The protocol
+maintains a list of valid message/nonce/hash tuples T , initially empty, a
+counter t initially set to 0, flags dn, du, dr all set to 0, a set M buf , and
+sequences of sets M j and integers cj , for j ∈ N.
+Upon receiving any input I from any party or the adversary, send (clock-read,
+sidC) to Gclock. On response (clock-read, sidC , t′), if |τ ′ − τ | > 0, set τ := τ ′ and
+t, dr, du, dn := 0, and do the following:
+Message Exchange:
+– Upon receiving (send, sid, m, P ′), set t := t + 1, and if t > q output (fail, sid)
+to P . Otherwise, do the following:
+Protocol Wrapped-Channel-LimD,q(P )
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 155
+1. If dn = 0, execute MaintainNetwork.
+2. Send (eval, sid, (cτ , m, r)) to Wq
+ro(FRO), where r ← {0, 1}λ.
+3. On response (eval, sid, (cτ , m, r), v), if (v > D), output (fail, sid) to P .
+4. Otherwise, if no entry of the form (τ − 1, M ′, m, r′, v′) exists in T , store
+(τ − 1, (M τ ), m, r, v) in T . Then, send (success, sid) to P . On response
+(continue, sid), pick M ′, r′, v′ such that (τ − 1, M ′, m, r′, v′) is an entry in
+T , and send (send, sid, (τ − 1, M ′, m, r′, v′), P ′) to Fauth.
+– Upon receiving (resend, sid, m, g, P ′), if g > 0 and M, r, v exists such that
+(g, M, m, r, v) ∈ T , send (send, sid, (g, M, m, r, v), P ′) to Fauth.
+– Upon receiving (fetch, sid), if dn = 0, then execute MaintainNetwork. Set
+M ′ = ∅, and for each message of the form (sent, sid, (g, M, m, r, v), P ′) in
+M buf , do the following:
+1. Let M = (Mi, Mi−1, . . . , Mg+1). For j ∈ {g + 1, . . . , i}, sent (eval, sid, Mj).
+On response (eval, sid, Mj , v), initialize variable H[Mj ] := v.
+2. If cg �∈ Mg+1 or H[Mj ] �∈ M(j + 1), for j ∈ {g + 1, . . . , i − 1}, do nothing.
+(Ensure freshness.)
+3. Send (eval, sid, (H[Mi], m, r)) to Wq
+ro(FRO).
+4. On response (eval, sid, (H[Mi], m, r), v′), if (v ≤ D) and (v′ = v), remove
+any entries of the form (g − 1, M ′′, m, r′′, v′′) from T and add
+(g − 1, M ∪ Mg, m, r, v) instead. Set M ′ := M ′ ∪ ((g − 1, m), P ′).
+Finally, empty M buf and output (sent, sid, M ′).
+– Upon receiving (fetch-requests, sid), forward the message to Fauth, and
+output its response.
+– Upon receiving (Maintain, sid), if dr = 0, execute in a
+(Maintain, sid)-interruptible manner the following:
+1. If dn = 0, then execute MaintainNetwork.
+2. Send (send, sid, (challenge, cτ ), Pi), to all Pi ∈ P.
+3. Set dr := 1. If du = 1, send (clock-update, sidC) to Gclock.
+– Upon receiving (clock-update, sidC), if dr = 1 and du = 0, send
+(clock-update, sidC) to Gclock. Set du := 1.
+Procedure MaintainNetwork :
+1. Send (fetch, sid) to Fauth.
+2. On response (sent, sid,M ), do the following:
+(a) Sample rτ ← {0, 1}λ, and let M τ := {rτ}.
+(b) For any tuple of the form ((challenge, c), P ′) ∈ M , for P ′ ∈ P, set
+M τ := M τ ∪ {c}, and remove this message from M .
+(c) Set M buf := M .
+3. Send (eval, sid,M τ ) to FRO. On response (eval, sid,M τ , v), set cτ := v.
+4. Set dn := 1.
+Lemma 3. Let p := D
+2λ . The protocol Wrapped-Channel-LimD,q UC-
+realizes functionality Wp,q
+flt-lim(Fauth) in the (Gclock,Wq
+ro(FRO),Fauth,FRO)-
+hybrid model.
+Next, we observe that Wflt-lim(Fauth) is sufficient to implement Freg. The
+protocol is similar to protocol Graded-Agreement, with two differences: (i) parties
+156 J. Garay et al.
+start sending messages through Wflt-lim(Fauth) after n + 2 rounds have passed,
+and (ii) during the KeyAgreement phase of the protocol, parties take in account
+messages with grade bigger than n at the first round, n − 1 at the second, . . . , 0
+at the last one. The rest of the protocol is exactly the same. Note, that parties
+can always forward the messages received during the KeyAgreement phase, since
+the grade of the relevant messages is bigger than 0. The analysis of [1] is built
+on the same idea.
+As a result, we are able to implement Freg, and subsequently Fmpc, with-
+out having to assume a “fresh” CRS. With the techniques described above, the
+following theorem can be proven.
+Theorem 2. Let n > 2t and q ∈ N
++. Then, there exists a protocol that UC-
+realizes functionality Fmpc in the (Gclock, Fsc, Wq
+ro(FRO), Fsig,FRO)-hybrid
+model.
+Acknowledgements. Juan Garay, Rafail Ostrovsky and Vassilis Zikas were sup-
+ported in part by the Office of the Director of National Intelligence (ODNI), Intelligence
+Advanced Research Projects Activity (IARPA), via 2019-1902070008. This work was
+performed in part while Juan Garay was consulting for Stealth Software Technologies,
+Inc., and supported in part by DARPA/SPAWAR N66001-15-C-4065. Aggelos Kiayias
+was supported in part by EU Project No.780477, PRIVILEDGE. Rafail Ostrovsky
+was also supported in part by NSF-BSF Grant 1619348, DARPA/SPAWAR N66001-
+15-C-4065, US-Israel BSF grant 2012366, JP Morgan Faculty Award, Google Faculty
+Research Award, OKAWA Foundation Research Award, IBM Faculty Research Award,
+Xerox Faculty Research Award, B. John Garrick Foundation Award, Teradata Research
+Award, and Lockheed-Martin Corporation Research Award. This work was done in
+part while Vassilis Zikas was visiting the Simons Institute for the Theory of Comput-
+ing, UC Berkeley, and UCLA. The views and conclusions contained herein are those
+of the authors and should not be interpreted as necessarily representing the official
+views or policies, either expressed or implied, of the Department of Defense, DARPA,
+ODNI, IARPA, or the U.S. Government. The U.S. Government is authorized to repro-
+duce and distribute reprints for governmental purposes notwithstanding any copyright
+annotation therein.
+References
+1. Andrychowicz, M., Dziembowski, S.: PoW-based distributed cryptography with no
+trusted setup. In: Gennaro, R., Robshaw, M. (eds.) CRYPTO 2015, Part II. LNCS,
+vol. 9216, pp. 379–399. Springer, Heidelberg (2015). https://doi.org/10.1007/978-
+3-662-48000-7_19
+2. Back, A.: Hashcash (1997). http://www.cypherspace.org/hashcash
+3. Badertscher, C., Gazi, P., Kiayias, A., Russell, A., Zikas, V.: Ouroboros genesis:
+composable proof-of-stake blockchains with dynamic availability. In: Proceedings
+of the 2018 ACM SIGSAC Conference on Computer and Communications Security,
+CCS 2018, Toronto, ON, Canada, 15–19 October 2018, pp. 913–930 (2018)
+4. Badertscher, C., Maurer, U., Tschudi, D., Zikas, V.: Bitcoin as a transaction ledger:
+a composable treatment. In: Katz, J., Shacham, H. (eds.) CRYPTO 2017, Part I.
+LNCS, vol. 10401, pp. 324–356. Springer, Cham (2017). https://doi.org/10.1007/
+978-3-319-63688-7_11
+https://doi.org/10.1007/978-3-662-48000-7_19
+https://doi.org/10.1007/978-3-662-48000-7_19
+http://www.cypherspace.org/hashcash
+https://doi.org/10.1007/978-3-319-63688-7_11
+https://doi.org/10.1007/978-3-319-63688-7_11
+Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era 157
+5. Ben-Or, M., Goldwasser, S., Wigderson, A.: Completeness theorems for non-
+cryptographic fault-tolerant distributed computation (extended abstract). In:
+Simon, J. (ed.) Proceedings of the 20th Annual ACM Symposium on Theory of
+Computing, Chicago, Illinois, USA, 2–4 May 1988, pp. 1–10. ACM (1988)
+6. Bentov, I., Pass, R., Shi, E.: Snow white: provably secure proofs of stake. Cryptol-
+ogy ePrint Archive, Report 2016/919 (2016). http://eprint.iacr.org/2016/919
+7. Borcherding, M.: Levels of authentication in distributed agreement. In: Babaoğlu,
+Ö., Marzullo, K. (eds.) WDAG 1996. LNCS, vol. 1151, pp. 40–55. Springer, Hei-
+delberg (1996). https://doi.org/10.1007/3-540-61769-8_4
+8. Cachin, C., Maurer, U.M.: Unconditional security against memory-bounded adver-
+saries. In: Kaliski Jr., B.S. (ed.) CRYPTO 1997. LNCS, vol. 1294, pp. 292–306.
+Springer, Heidelberg (1997). https://doi.org/10.1007/BFb0052243
+9. Canetti, R.: Security and composition of multiparty cryptographic protocols. J.
+Cryptol. 13(1), 143–202 (2000)
+10. Canetti, R.: Universally composable security: a new paradigm for cryptographic
+protocols. In: 42nd Annual Symposium on Foundations of Computer Science, pp.
+136–145. IEEE Computer Society Press, October 2001
+11. Canetti, R.: Universally composable signature, certification, and authentication.
+In: 17th IEEE Computer Security Foundations Workshop (CSFW-17 2004), Pacific
+Grove, CA, USA, 28–30 June 2004, p. 219 (2004)
+12. Canetti, R., Dodis, Y., Pass, R., Walfish, S.: Universally composable security
+with global setup. In: Vadhan, S.P. (ed.) TCC 2007. LNCS, vol. 4392, pp. 61–
+85. Springer, Heidelberg (2007). https://doi.org/10.1007/978-3-540-70936-7_4
+13. Canetti, R., Fischlin, M.: Universally composable commitments. In: Kilian, J. (ed.)
+CRYPTO 2001. LNCS, vol. 2139, pp. 19–40. Springer, Heidelberg (2001). https://
+doi.org/10.1007/3-540-44647-8_2
+14. Canetti, R., Krawczyk, H.: Universally composable notions of key exchange and
+secure channels. In: Knudsen, L.R. (ed.) EUROCRYPT 2002. LNCS, vol. 2332, pp.
+337–351. Springer, Heidelberg (2002). https://doi.org/10.1007/3-540-46035-7_22
+15. Chen, J., Micali, S.: Algorand. arXiv preprint arXiv:1607.01341 (2016)
+16. Cohen, R., Haitner, I., Omri, E., Rotem, L.: Characterization of secure multiparty
+computation without broadcast. In: Kushilevitz, E., Malkin, T. (eds.) TCC 2016,
+Part I. LNCS, vol. 9562, pp. 596–616. Springer, Heidelberg (2016). https://doi.
+org/10.1007/978-3-662-49096-9_25
+17. Cramer, R., Damgård, I., Dziembowski, S., Hirt, M., Rabin, T.: Efficient multi-
+party computations secure against an adaptive adversary. In: Stern, J. (ed.) EURO-
+CRYPT 1999. LNCS, vol. 1592, pp. 311–326. Springer, Heidelberg (1999). https://
+doi.org/10.1007/3-540-48910-X_22
+18. David, B., Gaži, P., Kiayias, A., Russell, A.: Ouroboros Praos: an adaptively-
+secure, semi-synchronous proof-of-stake blockchain. In: Nielsen, J.B., Rijmen, V.
+(eds.) EUROCRYPT 2018, Part II. LNCS, vol. 10821, pp. 66–98. Springer, Cham
+(2018). https://doi.org/10.1007/978-3-319-78375-8_3
+19. Dolev, D., Strong, H.R.: Authenticated algorithms for Byzantine agreement. SIAM
+J. Comput. 12(4), 656–666 (1983)
+20. Dwork, C., Lynch, N., Stockmeyer, L.: Consensus in the presence of partial syn-
+chrony. J. ACM (JACM) 35(2), 288–323 (1988)
+21. Fischer, M.J., Lynch, N.A., Merritt, M.: Easy impossibility proofs for distributed
+consensus problems. In: Malcolm, M.A., Strong, H.R. (eds.) 4th ACM Sympo-
+sium Annual on Principles of Distributed Computing, pp. 59–70. Association for
+Computing Machinery, August 1985
+http://eprint.iacr.org/2016/919
+https://doi.org/10.1007/3-540-61769-8_4
+https://doi.org/10.1007/BFb0052243
+https://doi.org/10.1007/978-3-540-70936-7_4
+https://doi.org/10.1007/3-540-44647-8_2
+https://doi.org/10.1007/3-540-44647-8_2
+https://doi.org/10.1007/3-540-46035-7_22
+http://arxiv.org/abs/1607.01341
+https://doi.org/10.1007/978-3-662-49096-9_25
+https://doi.org/10.1007/978-3-662-49096-9_25
+https://doi.org/10.1007/3-540-48910-X_22
+https://doi.org/10.1007/3-540-48910-X_22
+https://doi.org/10.1007/978-3-319-78375-8_3
+158 J. Garay et al.
+22. Fitzi, M.: Generalized communication and security models in Byzantine agreement.
+Ph.D. thesis, ETH Zurich (2002)
+23. Garay, J.A., Kiayias, A., Leonardos, N.: The bitcoin backbone protocol: analysis
+and applications. In: Oswald, E., Fischlin, M. (eds.) EUROCRYPT 2015, Part
+II. LNCS, vol. 9057, pp. 281–310. Springer, Heidelberg (2015). https://doi.org/10.
+1007/978-3-662-46803-6_10
+24. Garay, J.A., MacKenzie, P.D., Prabhakaran, M., Yang, K.: Resource fairness and
+composability of cryptographic protocols. J. Cryptol. 24(4), 615–658 (2011)
+25. Gilad, Y., Hemo, R., Micali, S., Vlachos, G., Zeldovich, N.: Algorand: scaling
+Byzantine agreements for cryptocurrencies. Cryptology ePrint Archive, Report
+2017/454 (2017). http://eprint.iacr.org/2017/454
+26. Goldreich, O., Micali, S., Wigderson, A.: How to play any mental game or a com-
+pleteness theorem for protocols with honest majority. In: Aho, A. (ed.) 19th Annual
+ACM Symposium on Theory of Computing, pp. 218–229. ACM Press, New York
+(1987)
+27. Hirt, M., Zikas, V.: Adaptively secure broadcast. In: Gilbert, H. (ed.) EURO-
+CRYPT 2010. LNCS, vol. 6110, pp. 466–485. Springer, Heidelberg (2010). https://
+doi.org/10.1007/978-3-642-13190-5_24
+28. Katz, J., Maurer, U., Tackmann, B., Zikas, V.: Universally composable synchronous
+computation. In: Sahai, A. (ed.) TCC 2013. LNCS, vol. 7785, pp. 477–498. Springer,
+Heidelberg (2013). https://doi.org/10.1007/978-3-642-36594-2_27
+29. Katz, J., Miller, A., Shi, E.: Pseudonymous broadcast and secure computation
+from cryptographic puzzles. Cryptology ePrint Archive, Report 2014/857 (2014).
+http://eprint.iacr.org/2014/857
+30. Kiayias, A., Russell, A., David, B., Oliynykov, R.: Ouroboros: a provably secure
+proof-of-stake blockchain protocol. In: Katz, J., Shacham, H. (eds.) CRYPTO 2017,
+Part I. LNCS, vol. 10401, pp. 357–388. Springer, Cham (2017). https://doi.org/
+10.1007/978-3-319-63688-7_12
+31. Lamport, L., Shostak, R.E., Pease, M.C.: The Byzantine generals problem. ACM
+Trans. Program. Lang. Syst. 4(3), 382–401 (1982)
+32. Pass, R., Seeman, L., Shelat, A.: Analysis of the blockchain protocol in asyn-
+chronous networks. In: Coron, J., Nielsen, J.B. (eds.) EUROCRYPT 2017, Part II.
+LNCS, vol. 10211, pp. 643–673. Springer, Cham (2017). https://doi.org/10.1007/
+978-3-319-56614-6_22
+33. Pfitzmann, B., Waidner, M.: Unconditional Byzantine agreement for any number of
+faulty processors. In: Finkel, A., Jantzen, M. (eds.) STACS 1992. LNCS, vol. 577,
+pp. 339–350. Springer, Heidelberg (1992). https://doi.org/10.1007/3-540-55210-
+3_195
+34. Rabin, T., Ben-Or, M.: Verifiable secret sharing and multiparty protocols with
+honest majority (extended abstract). In: 21st Annual ACM Symposium on Theory
+of Computing, pp. 73–85. ACM Press, May 1989
+35. Schneider, F.B.: Implementing fault-tolerant services using the state machine app-
+roach: a tutorial. ACM Comput. Surv. 22(4), 299–319 (1990)
+36. Yao, A.C.-C.: Protocols for secure computations (extended abstract). In: 23rd
+Annual Symposium on Foundations of Computer Science, pp. 160–164. IEEE Com-
+puter Society Press, November 1982
+https://doi.org/10.1007/978-3-662-46803-6_10
+https://doi.org/10.1007/978-3-662-46803-6_10
+http://eprint.iacr.org/2017/454
+https://doi.org/10.1007/978-3-642-13190-5_24
+https://doi.org/10.1007/978-3-642-13190-5_24
+https://doi.org/10.1007/978-3-642-36594-2_27
+http://eprint.iacr.org/2014/857
+https://doi.org/10.1007/978-3-319-63688-7_12
+https://doi.org/10.1007/978-3-319-63688-7_12
+https://doi.org/10.1007/978-3-319-56614-6_22
+https://doi.org/10.1007/978-3-319-56614-6_22
+https://doi.org/10.1007/3-540-55210-3_195
+https://doi.org/10.1007/3-540-55210-3_195
+	Resource-Restricted Cryptography: Revisiting MPC Bounds in the Proof-of-Work Era
+	1 Introduction
+	2 Model
+	3 Inapplicability of Strong BA Impossibility
+	3.1 Modeling a Communication-Restricted Network
+	3.2 The Impossibility Theorem, Revisited
+	4 Implementing a Communication-Restricted Network
+	5 Implementing a Registration Functionality
+	5.1 The Registration Functionality
+	5.2 The Identity-Assignment Protocol
+	6 Removing the Freshness Assumption
+	References

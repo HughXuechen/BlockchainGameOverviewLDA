@@ -1,0 +1,1500 @@
+A Game-theoretic Approach to Storage Offloading in PoC-based Mobile Blockchain Mining
+A Game-theoretic Approach to Storage Offloading in PoC-based
+Mobile Blockchain Mining
+Suhan Jiang
+Temple University
+Suhan.Jiang@temple.edu
+Jie Wu
+Temple University
+jiewu@temple.edu
+ABSTRACT
+Proof of Capacity (PoC) is an eco-friendly alternative to Proof
+of Work for consensus in blockchains since it determines mining
+rights based on miners’ storage rather than computation. In PoC,
+for every block, a miner executes hashing on part of his dedicated
+storage. The miner that comes up with the smallest hash value
+among all miners will win the block. PoC has yet to be applied to
+mobile applications, due to the storage limitation of mobile devices.
+Storage offloading can be a viable solution that allows miners to
+offload mining all files to a cloud storage. In each mining round,
+a miner can decide whether to mine on his local device or by a
+cloud virtual machine (VM). Self-mining requires no extra cost but
+it incurs download delay, which will reduce the chance of winning.
+Cloud-mining experiences no delay but it brings cost on VMs. This
+delay-cost tradeoff challenges each miner to determine a ratio be-
+tween self-mining and cloud-mining to maximize his utility. We
+model interactions among miners as a non-cooperative game and
+formulate a Nash equilibrium problem to investigate the effects of
+offloading on miners’ utilities. We analyze the existence and unique-
+ness of equilibrium and propose a distributed algorithm to achieve
+the equilibrium in a uniform-delay setting. Further, we extend our
+results to non-uniform delays since miners may choose different
+network settings, e.g. 5G, 4G, or 3G. Both numerical evaluation
+and testbed experiments on Burstcoin are conducted to show the
+feasibility of storage offloading and to validate the proposed models
+and theoretical results.
+CCS CONCEPTS
+• Networks → Mobile networks; Network economics; •Mathe-
+matics of computing →Distribution functions.
+KEYWORDS
+cloud storage, game theory, mobile blockchain mining, offloading,
+Proof of Capacity (PoC)
+ACM Reference Format:
+Suhan Jiang and Jie Wu. 2020. A Game-theoretic Approach to Storage
+Offloading in PoC-based Mobile Blockchain Mining. In The Twenty-first
+ACM International Symposium on Theory, Algorithmic Foundations, and
+Protocol Design for Mobile Networks and Mobile Computing (Mobihoc ’20),
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA
+© 2020 Association for Computing Machinery.
+ACM ISBN 978-1-4503-8015-7/20/10. . . $15.00
+https://doi.org/10.1145/3397166.3409136
+scoop
+nonce 0 . . . . . . 4095
+1 =350
+2 =289
+3 =251
+. . . . . .
+=511
+deadline 
+’s plot file
+storage
+cloud service provider (CSP)
+VM
+(a) Plotting and mining in PoC. (b) Storage offloading.
+(1)
+(2)
+self-mining 
+cloud-mining 1
+0
+0
+1 
+0.4
+0.6
+miner
+delay: 
+Figure 1: Miners offload plot files to a cloud storage and mine blocks (1) via
+cloud-mining using VMs and/or (2) via self-mining using mobile devices.
+October 11–14, 2020, Boston, MA, USA. ACM, New York, NY, USA, 10 pages.
+https://doi.org/10.1145/3397166.3409136
+1 INTRODUCTION
+There has been widespread adoption of blockchain [21] in various
+fields ranging from cryptocurrency, finance, IoT to public and social
+services. As a distributed ledger, a blockchain records data in the
+form of linked blocks secured by cryptography. Consensus mecha-
+nisms are a crucial element for every blockchain network as they
+are responsible for maintaining the security and reliability of these
+distributed systems. Currently, most blockchain applications are on
+top of a Proof of Work (PoW) [11] mechanism or a Proof of Stake
+(PoS) [24] mechanism to determine the block winning probability
+of each miner. The former relies on miners’ computation power to
+solve cryptographical problems to win a block and hence monetary
+rewards. PoW is known for its simplicity and attack resistance,
+while it consumes significant electricity consumption. The latter
+virtualizes the power-hungry PoW mining by attributing mining
+power to the proportion of coins held by a miner. PoS can be a
+viable solution for energy inefficiencies but gives rise to a trend of
+system centralization since rewards go more towards miners that
+already have more properties.
+Recently, a new mechanism called Proof of Capacity (PoC) [1]
+has emerged as a promising solution to the previously-mentioned
+problems of energy efficiency and fairness. As its name implies, PoC
+mining relies on idle storage capacity, i.e., miners invest disk space,
+as opposed to computation in PoWmining, and the amount of space
+dedicated to mining determines the chances of winning a block.
+The mining process consists of two steps: one-time plotting and
+repeated mining in rounds. In the plotting step, miners configure
+their available storage withmining-related plot files. Fig. 1 (a) shows
+miner𝑚𝑖 ’s plot file, which is arranged into 𝑠𝑖 units. Each unit is
+called a nonce and each nonce is divided into 4096 scoops. In each
+mining round,𝑚𝑖 executes hashing over a scoop column (which
+171
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3397166.3409136&domain=pdf&date_stamp=2020-10-11
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA Suhan Jiang and Jie Wu
+is randomly selected by the system to avoid miner-side cheating)
+individually to get the smallest value among all cells of the scoop
+column, which is called𝑚𝑖 ’s deadline. A miner cannot publish a
+block until his deadline comes. The one that finds the smallest
+deadline among all miners wins. Since more storage space gives a
+higher chance of finding the smallest deadline, a miner’s probability
+of winning a block is related to the ratio between his own space to
+the total space invested by all miners.
+The PoC mechanism has been applied to several blockchain ap-
+plications, e.g. Burstcoin [1], Chia [4], etc. However, its storage
+requirement poses a challenge on mobile devices, thus hindering its
+applications to mobile services. To facilitate PoC-based blockchain
+application in future mobile IoT systems, storage offloading appears
+to be a viable solution. Miners with mobile devices can overcome
+capacity limitations by offloading all plot files to an external cloud
+storage. Given that a small amount of computation is required in
+each PoC mining round, a miner can execute hashing in his de-
+vice by downloading corresponding scoops (self-mining) and/or
+in the cloud by employing virtual machines (VMs) (cloud-mining)
+provided by the cloud service provider (CSP). Fig. 1 (b) gives an ex-
+ample where miners apply different mining strategies. Self-mining
+requires no extra cost, but miners cannot start mining until a se-
+lected scoop column (one in 4096 rather than all of his plot file) is
+downloaded. The incurred download delay will reduce a miner’s
+winning probability. Cloud-mining can avoid such a disadvantage,
+however, it also adds miners’ cost on VM employment. Thus, a
+miner has to determine a suitable mining strategy, i.e., the optimal
+ratio between self-mining and cloud-mining to maximize his util-
+ity, based on his storage offloading decision. In Fig. 1 (b), user𝑚3
+deploys 40% for cloud-mining and the rest for self-mining.
+In this paper, we study the interactions among multiple mobile
+miners, who aim to maximize their own utilities. The individual
+utility is defined as the difference between aminer’s expected payoff
+and his cost, where the expected payoff is a product of the mining
+reward and his winning probability. Each miner maximizes his util-
+ity by deciding his strategies of both storage offloading and mining,
+while the individual utility is influenced by all miners’ decisions.
+To solve the miners’ resource management problem, we exploit
+game theory and propose a non-cooperative complete-information
+game to capture this complicated interplay among miners. The cor-
+responding Nash equilibrium problem is then formulated. We prove
+the existence of unique equilibrium through our theoretical analysis
+and then propose a distributed algorithm to achieve the equilibrium.
+In practice, miners can use different network settings, e.g. 3G, 4G, or
+even 5G in the future, which will incur different download delays.
+Thus, we extend our approach to model non-uniform delays on the
+miners’ strategies. Our primary contributions are as follows:
+• As the first work analyzing the PoC mining mechanism in
+mobile applications, we derive expressions for miner win-
+ning probability with delays.
+• We define a non-cooperative game to capture interactions
+among mobile miners and formulate a Nash equilibrium
+problem to optimize resource allocation among miners.
+• We prove and design an algorithm to obtain a unique Nash
+equilibrium (NE) of the proposed game in the uniform-delay
+setting, and a close-form strategy is presented for homoge-
+neous miners with identical budgets.
+• We show the existence of NE in the non-uniform-delay set-
+ting, where the uniform-delay algorithm still can be applied
+to achieve an NE point.
+• We perform numerical evaluation and conduct testbed ex-
+periments on Burstcoin and Google Cloud. The equilibria
+obtained are consistent with all the theoretical results.
+2 CHALLENGES AND MAIN RESULTS
+This paper aims to solve a resource allocation problem for all miners
+by maximizing their individual utilities. We assume that miner𝑚𝑖 ’s
+files are all offloaded in the cloud and define his utility 𝑈𝑖 as the
+difference between his expected payoff and his cost, denoted 𝐶𝑖 ,
+where the expected payoff is a product of the mining reward 𝑅 and
+his winning probability, denoted 𝑃𝑖 , i.e.,𝑈𝑖 = 𝑅 · 𝑃𝑖 −𝐶𝑖 . Our goal is
+to find a strategy that leads to the maximal utility for𝑚𝑖 . However,
+it is non-trivial to obtain optimal strategies for individual miners,
+given that each miner’s strategy is multi-dimensional, i.e., deciding
+on how many storage units to purchase and how to arrange the
+ratio between cloud-mining and self-mining. All miners’ strategies
+can mutually affect their utilities.
+Tomaximize his utility,𝑚𝑖 can either increase his expected payoff
+by improving his winning probability 𝑃𝑖 or decrease his cost 𝐶𝑖 . 𝑃𝑖
+is a complex function determined by multiple parameters. First, 𝑃𝑖
+should be positively correlated with𝑚𝑖 ’s storage size since a bigger
+storage size yields a higher chance of smaller hash values. Second,
+𝑃𝑖 is also affected by other miners’ strategies since𝑚𝑖 cannot win
+unless his deadline is the smallest among all miners. Last, if 𝑚𝑖
+chooses self-mining, the incurred download delay 𝑑 will discount
+𝑃𝑖 (detailed explanations are given later). In order to improve 𝑃𝑖 ,𝑚𝑖
+is encouraged to buy more storage resources and increase his cloud-
+mining ratio, whichwill increase his cost𝐶𝑖 . Thus, improving 𝑃𝑖 and
+decreasing 𝐶𝑖 are two conflicting goals.𝑚𝑖 has to buy appropriate
+storage units and find a reasonable mining ratio to balance 𝑃𝑖 and
+𝐶𝑖 . Based on these parameters, we derive the expression of 𝑃𝑖 and
+verify its validity (Theorem 1).
+Given the mutual effects on 𝑃𝑖 and hence on 𝑈𝑖 , we propose a
+non-cooperative game to characterize miners’ complex interactions.
+Thus, we turn the original resource allocation problem into a Nash
+equilibrium (NE) problem, in which each miner’s NE strategy is
+his optimal strategy if NE exists. In the uniform-delay network,
+we prove the uniqueness of NE (Theorem 2) in the miner game.
+We further extend it to a non-uniform-delay network, where the
+existence of NE(s) can be proven (Theorem 3). We also provide a
+distributed algorithm (Algorithm 1) to compute the unique NE point
+in the uniform-delay network and provide one NE point in the non-
+uniform-delay network. We also present a miner’s optimal strategy
+in an explicit expression, given all miners are homogeneous on
+their budgets in the uniform-delay network (Theorem 4).
+3 SYSTEM MODEL AND PROBLEM
+FORMULATION
+This paper focuses on amobile PoCmining network. Corresponding
+notations are listed in Table 1. We consider a remote CSP and a set
+of 𝑛 miners using mobile devices. Fig. 1 depicts an overview of this
+172
+Storage Offloading in PoC-based Mobile Blockchain Mining Mobihoc ’20, October 11–14, 2020, Boston, MA, USA
+Table 1: Summary of Notations.
+Symbol Description
+𝑝𝑠 / 𝑝𝑐 price of cloud storage / computation
+𝑣 cloud computation speed
+𝑑 download delay from the cloud to miners
+𝐷 mining difficulty parameter controlled by the system
+𝑅 blockchain mining reward
+𝑛 number of miners
+𝑚𝑖 the 𝑖-th miner
+𝑏𝑖 𝑚𝑖 ’s budget
+𝑈𝑖 / 𝑃𝑖 / 𝐶𝑖 𝑚𝑖 ’s mining utility / winning probability / cost
+𝑥𝑖 / 𝑦𝑖 𝑚𝑖 ’s cloud / self-mining units
+𝑠𝑖 storage units purchased by𝑚𝑖 , i.e., 𝑠𝑖 =𝑥𝑖+𝑦𝑖
+𝑋 / 𝑌 / 𝑆 total cloud-mining / self-mining / purchased units
+𝑋−𝑖 total cloud-mining units except𝑚𝑖 ’s, i.e., 𝑋−𝑖 =𝑋−𝑥𝑖
+𝑌−𝑖 total self-mining units except𝑚𝑖 ’s , i.e., 𝑌−𝑖 =𝑌−𝑦𝑖
+𝑟𝑖 𝑚𝑖 ’s request vector, in the form of (𝑥𝑖 , 𝑦𝑖 )
+𝒓−𝒊 / 𝒓 all miners except𝑚𝑖 ’s / all miners’ request profile
+𝑇𝑖 / 𝑇 𝑚𝑖 ’s / the whole network’s deadline
+Each storage unit is tailored as a nonce size (256KB in Burstcoin).
+network. The CSP can provide resources of storage and computation
+at a unit price set of (𝑝𝑠 , 𝑝𝑐 ). Miners participate in mining processes
+by requesting storage and/or computation resources from the CSP.
+We differentiate each miner 𝑚𝑖 in terms of his budget 𝑏𝑖 , which
+gives an upper bound on the amount of resources he can afford.
+Thus, different types of miners have different requests.𝑚𝑖 ’s goal is
+to find a strategy that lead to the highest𝑈𝑖 .
+To maximize his utility,𝑚𝑖 should decide on how many storage
+units, denoted 𝑠𝑖 , to buy from the CSP, and the ratio between cloud-
+mining and self-mining. We do not directly define the ratio as a
+variable, instead, we denote 𝑥𝑖 as the number of𝑚𝑖 ’s cloud-mining
+units and 𝑦𝑖 as the number of his self-mining units, respectively.
+Thus, the could-self mining ratio is captured as 𝑥𝑖/𝑦𝑖 . Then,𝑚𝑖 ’s
+request is in the form of 𝑟𝑖 = (𝑥𝑖 , 𝑦𝑖 ). Let 𝒓 = {𝑟1, · · · , 𝑟𝑛} and
+𝒓−𝑖 represent the request profile of all miners and all other miners
+except𝑚𝑖 , respectively. For those storage units mined in the cloud,
+𝑚𝑖 has to to pay for the storage cost as well as the computation
+cost, i.e., (𝑝𝑠 + 𝑝𝑐 )𝑥𝑖 in total, while for the remaining units mined
+in his own device, only storage cost of 𝑝𝑠𝑦𝑖 is needed. Thus,𝑚𝑖 ’s
+cost is a combination of both, i.e., 𝐶𝑖 = (𝑝𝑠 + 𝑝𝑐 )𝑥𝑖 + 𝑝𝑠𝑦𝑖 .
+As miners all want to make as much profit as possible, a com-
+petition among miners forms, in which each miner optimizes his
+utility by deciding his request 𝑟𝑖 under the current resource prices
+(𝑝𝑠 , 𝑝𝑐 ), while considering his own budget 𝑏𝑖 . Thus,𝑚𝑖 ’s optimiza-
+tion problem can be defined as follows.
+Problem 1 (OPminer).
+maximize 𝑈𝑖 = 𝑅 · 𝑃𝑖 −𝐶𝑖 , (1a)
+subject to 𝐶𝑖 ≤ 𝑏𝑖 , 𝑥𝑖 ≥ 0, 𝑦𝑖 ≥ 0, (1b)
+where 𝐶𝑖 = (𝑝𝑠 + 𝑝𝑐 )𝑥𝑖 + 𝑝𝑠𝑦𝑖 . (1c)
+Since𝑚𝑖 ’s winning probability 𝑃𝑖 is a function of multiple pa-
+rameters, including 𝑚𝑖 ’s request, i.e., 𝑟𝑖 = (𝑥𝑖 , 𝑦𝑖 ) as well as all
+other miners’ requests, i.e., 𝒓−𝑖 , an accurate definition and detailed
+explanations of 𝑃𝑖 will be given in the following section. Each miner
+𝑚𝑖 aims to maximize his utility and constraint (1b) ensures that𝑚𝑖
+is within its budget 𝑏𝑖 .
+4 MINER’S WINNING PROBABILITY
+In this section, we start with a model for traditional PoC mining
+(subsection 4.1), where miners contributes their disk resources
+and mine in their own devices like desktop computers or laptops.
+This basic model allows us to quantify the relation between the
+block finding time and miners’ storage size (subsection 4.2). We
+then analyze how the winning probability is influenced by the
+individual storage size and total storage size (subsection 4.3). We
+extend the basic model to include mobile mining and formulate how
+the download delay affects the winning probability (subsection 4.4).
+Finally, we derive the expression for miner’s winning probability
+with download delays after combining all the related parameters
+(subsection 4.5).
+4.1 Overview of PoC Mining
+Generally, PoC mining consists of plotting and mining. The plotting
+process pre-generates and stores mining-related files on miners’
+storage. Fig. 1 (a) shows 𝑚𝑖 ’s plot file, which is arranged into 𝑠𝑖
+fixed-length units (a row in Fig. 1 (a)). Each unit is called a nonce
+and is evenly divided into 4096 scoops (a cell in Fig. 1 (a)). In each
+mining round,𝑚𝑖 retrieves the 𝑗 th scoop from each of his units (the
+grey column in Fig. 1 (a)), where 𝑗 is selected by the system.𝑚𝑖
+executes hashing over every retrieved scoop and gets a hash value
+as a storage proof. All hash values are within the range of [0, 𝐷] and
+the smallest one is measured as𝑚𝑖 ’s best proof, named as a deadline
+(the circle in Fig. 1 (a)), which represents the waiting time before𝑚𝑖
+is allowed to publish his block. Thus, the smallest deadline in the
+network will be measured as the network-wide best proof and its
+owner will win the block. In fact, 𝐷 is a parameter controlling the
+mining difficulty for the miners. (Note, described above is a basic
+model, where a miner stores his plot file and self-mines using the
+same device, not involving storage offloading and cloud mining.)
+4.2 Block Finding Time and Individual Storage
+Size
+To find the winning probability of each player, we start by analyzing
+the block finding time probability distribution. We model the block
+finding time, i.e., the network-wide deadline, as a random variable
+denoted 𝑇 . This is a function related to all miners’ selection of
+storage units.
+4.2.1 Single miner’s distribution functions. In a mining round, a
+miner can get a proof (i.e., a hash value), denoted ℎ, for each of his
+contributed storage units. In fact, ℎ is a random variable, of which
+the value is subject to a uniform distribution within the range of
+[0, 𝐷] in each round. Given that miner𝑚𝑖 commits 𝑠𝑖 units of his
+storage in total, we model his deadline as a random variable denoted
+𝑇𝑖 . Obviously, 𝑇𝑖 =min
+{
+ℎ1, · · · , ℎ𝑠𝑖
+}
+. 𝑇𝑖 ’s cumulative distribution
+function (CDF), denoted 𝐹 (𝑡, 𝑠𝑖 , 𝐷), can be obtained in the below.
+𝐹 (𝑡, 𝑠𝑖 , 𝐷) =
+⎧⎪⎪⎪⎨⎪⎪⎪⎩
+0 𝑡 ≤ 0,
+1 − (1 − 𝑡/𝐷)𝑠𝑖 0 < 𝑡 < 𝐷,
+1 𝑡 ≥ 𝐷.
+(2)
+173
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA Suhan Jiang and Jie Wu
+’s deadline 
+’s 
+CD
+F 
+Figure 2: CDFs under different storage sizes given 𝐷 = 2min.
+Thereupon, the corresponding probability density function (PDF),
+denoted 𝑓 (𝑡, 𝑠𝑖 , 𝐷), follows through performing derivative over
+𝐹 (𝑡, 𝑠𝑖 , 𝐷), as is shown in Eq. (3).
+𝑓 (𝑡, 𝑠𝑖 , 𝐷) =
+{ 𝑠𝑖
+𝐷
+(1 − 𝑡/𝐷)𝑠𝑖−1 0 < 𝑡 < 𝐷,
+0 𝑜𝑡ℎ𝑒𝑟𝑤𝑖𝑠𝑒.
+(3)
+4.2.2 Whole mining network’s distribution functions. Given a min-
+ing network with 𝑛 miners, the block finding time can be expressed
+as 𝑇 = min {𝑇1, · · · ,𝑇𝑛}. We have already calculated the PDF and
+the CDF over 𝑇𝑖 for ∀𝑖 ∈ [1, 𝑛], thus the corresponding distribu-
+tion functions 𝐹𝑇 (𝑡, 𝑆, 𝐷) and 𝑓𝑇 (𝑡, 𝑆, 𝐷) can be expressed using
+Eqs. (2-3), by replacing 𝑠𝑖 with 𝑆 =
+∑
+𝑗 𝑠 𝑗 .
+4.3 Influences of Total Storage Size
+Now, we analyze how storage sizes affect 𝑃𝑖 . Intuitively, a miner’s
+winning probability should be positively related to his own storage
+size, since more storage units lead to a higher chance of smaller
+deadlines. Fig. (2) further confirms our guess, where 𝑇𝑖 ’s CDF (as
+Eq. (2) describes) hits 1 faster under a larger 𝑠𝑖 . Meanwhile, 𝑃𝑖
+should also be affected by the total mining storage space. To capture
+the exact mathematical relation between the individual winning
+probability and storage sizes (both individual and total), we start
+with a competition between only twominers𝑚𝑖 and𝑚 𝑗 , owning the
+storage sizes of 𝑠𝑖 and 𝑠 𝑗 , respectively. Obviously,𝑚𝑖 wins when he
+finds a smaller deadline. The probability that𝑚𝑖 wins is calculated
+as follows:
+𝑃𝑖 = 𝑃𝑟 [𝑇𝑖 < 𝑇𝑗 ] =
+∫∫
+𝑓 (𝑡𝑖 , 𝑠𝑖 , 𝐷) 𝑓
+(
+𝑡 𝑗 ; 𝑠 𝑗 , 𝐷
+)
+d𝑡𝑖d𝑡 𝑗
+= 1 − 𝑠 𝑗/(𝑠𝑖 + 𝑠 𝑗 ) = 𝑠𝑖/(𝑠𝑖 + 𝑠 𝑗 ).
+Thus, the probability that𝑚𝑖 wins is proportional to his fraction of
+the total storage size. That is, given a total storage of size 𝑆 ,𝑚𝑖 ’s indi-
+vidual winning probability is 𝑃𝑖 = 𝑠𝑖/𝑆 . Obviously, dedicating more
+storage space yields a proportionally higher expectation of success-
+fully mining a block. Therefore, a PoC-based incentive mechanism
+can reward smaller miners fairly according to their contribution to
+the network, thus incurring more distributed participation.
+4.4 Influences of Delay
+4.4.1 Download delay in self-mining. The expression 𝑠𝑖/𝑆 charac-
+terizes the probability that𝑚𝑖 happens to hold the smallest deadline
+among all miners. However, it is possible that the owner of the
+smallest deadline is not the block winner. Suppose, in a certain
+mining round, a miner𝑚𝑖 ’s deadline is 100 seconds, the smallest
+one among all miners’ deadlines, and another miner𝑚 𝑗 ’s deadline
+is 105 seconds, only next to𝑚𝑖 ’s deadline. If𝑚𝑖 finds his deadline
+within 100 seconds, then he propagates his block until that time
+comes and becomes the winner. However, if𝑚𝑖 ’s mining is delayed
+for some reason and hence he fails to finds his deadline within
+105 seconds, at which time𝑚 𝑗 succeeds in broadcasting his block,
+then𝑚 𝑗 becomes the winner, although he is not the owner of the
+smallest deadline. Thus, with delay, a miner’s winning probability
+is definitely discounted.
+In the traditional PoC mining, since plot file storing and mining
+happen in the same device, usually a desktop computer or a laptop,
+all deadlines can be calculated before the smallest one comes. Thus,
+it is just a race on miners’ contributed storage. However, when
+applying storage offloading, a delay, denoted 𝑑 , can be incurred in
+self-mining due to the scoop download from the cloud to a miner’s
+device. Miners cannot start self-mining until the required scoops
+are downloaded. During the waiting time, if there is a deadline
+no greater than 𝑑 calculated using VMs in the cloud, then the
+corresponding block can be successfully published and rewarded,
+although there may exist smaller deadlines not yet computed by self-
+mining. In reality, block propagation delay also damages a miner’s
+winning probability. To focus on the influence of the download
+delay, we assume propagation delay among miners is negligible.
+4.4.2 Download delay and winning probability. We now extend
+the basic model with the download delay 𝑑 . We show how 𝑑 dis-
+counts miner’s winning probability. During the download delay
+𝑑 , if the speed of cloud mining is 𝑣 , then there should be roughly
+𝑣𝑑𝑛 proofs computed in total. If the best one among them is less
+than 𝑑 , then the corresponding block definitely wins whether or
+not it is a network-wide optimal deadline. The probability, denoted
+𝛽 , that a cloud-mined block wins before the self-mining starts can
+be expressed as 𝛽 (𝑑, 𝑣) = 1− (1 − 𝑑/𝐷)𝑣𝑑𝑛 . We simplify our model
+by assuming cloud-mining can perform deadline calculations fast,
+i.e., all deadlines over total cloud-mining units 𝑋 , i.e.,
+∑𝑛
+𝑖=1 𝑥𝑖 , can
+be calculated within 𝑑 , then the corresponding probability 𝛽 can be
+refined as below.
+𝛽 (𝑑,𝑋 ) |𝑣→+∞ = 1 −
+(
+1 − 𝑑
+𝐷
+)𝑋
+. (4)
+4.5 Expression of Winning Probability
+We are now ready to express 𝑃𝑖 in the model of storage offloading,
+i.e., a miner stores his plot file in the cloud instead of his own device.
+𝑃𝑖 consists of two parts, 𝑃𝑐𝑖 and 𝑃𝑠𝑖 , jointly contributed by cloud-
+mining and self-mining, where 𝑃𝑐𝑖 and 𝑃𝑠𝑖 are functions of 𝑟𝑖 and
+𝒓−𝑖 given below:
+𝑃𝑐𝑖 (𝑟𝑖 , 𝒓−𝑖 ) =
+𝑥𝑖
+𝑆
++ 𝑥𝑖
+𝑋
+𝑌
+𝑆
+𝛽,
+𝑃𝑠𝑖 (𝑟𝑖 , 𝒓−𝑖 ) =
+𝑦𝑖
+𝑆
+− 𝑦𝑖
+𝑌
+𝑌
+𝑆
+𝛽 = 𝑦𝑖
+1 − 𝛽
+𝑆
+,
+(5)
+where 𝑌 =
+∑𝑛
+𝑖=1 𝑦𝑖 and 𝛽 = 𝛽 (𝑑,𝑋 ) is for simplicity. Next, we verify
+the validity of 𝑃𝑖 as a probability mass function.
+Theorem 1. 𝑃𝑖 = 𝑃𝑐𝑖 + 𝑃𝑠𝑖 is a valid probability mass function
+to express the winning probability of individual miners in a mobile
+blockchain mining network.
+174
+Storage Offloading in PoC-based Mobile Blockchain Mining Mobihoc ’20, October 11–14, 2020, Boston, MA, USA
+Proof. We present the full verification process by checking that∑𝑛
+𝑖=1 𝑃𝑖 = 1 holds, i.e.,∑𝑛
+𝑖=1
+𝑃𝑖 =
+∑𝑛
+𝑖=1
+(𝑃𝑐𝑖 + 𝑃𝑠𝑖 )
+=
+∑𝑛
+𝑖=1
+(𝑥𝑖+𝑦𝑖 )/𝑆+𝑌𝛽 · (𝑥𝑖/𝑋−𝑦𝑖/𝑌 )/𝑆.
+= 1+𝑌𝛽𝑑
+𝑆
+· (𝑋
+𝑋
+−𝑌
+𝑌
+) = 1. �
+We can conclude that, the winning probability we use is valid,
+hence our model is as well. Note that𝑚𝑖 ’s winning probability and
+hence its utility depends not only on its request but also on those
+of the other miners.
+5 MINER NON-COOPERATIVE GAME
+In this section, we analyze the existence and uniqueness of NE in the
+proposed miner game under different network setting assumptions
+(subsection 5.1). Since the NE point is hard to express in a closed
+form, we provide an algorithmwhere the NE point can be computed
+in a distributed way, as detailed in subsection 5.2. In subsection 5.3,
+we study a special case where all miners are homogeneous on the
+budget, where we can derive explicit expressions of each miner’s
+optimal strategies in the uniform-delay network.
+5.1 Nash Equilibrium
+5.1.1 Mining in a uniform-delay network. In this part, we assume
+the download delay 𝑑 experienced by each self-mining miner is
+uniform. We conduct analysis on Nash equilibrium (NE) in the
+uniform-delay network, and the result can be concluded in Theorem
+2. The detailed proof is provided in Appendix A.
+Theorem 2. A unique Nash equilibrium exists in OPminer in the
+uniform-delay network.
+5.1.2 Mining in a non-uniform-delay network. In reality, download
+delay cannot be uniform among all miners since their network
+settings are different. To make our analysis more realistic while
+not over-complicating our model, we use network types to charac-
+terize network settings. Miners under different network types will
+experience different delays. We allow 𝑘 types of network settings,
+and miners using type- 𝑗 network experience a download delay of
+𝑑 𝑗 . We assume 𝑋 storage units will be mined in the cloud, and 𝑌𝑗
+storage units will be mined by all type- 𝑗 miners using their de-
+vices. Thus, the mining timeline is segmented into 𝑘 + 1 periods
+based on all delay values. During period 1 (i.e., between time 0
+and 𝑑1), only 𝑋 storage units are contributed for mining. At time
+𝑑𝑖 , 𝑌𝑖 storage units will join in the mining if there is still no block
+found at that time. Thus, during period 𝑖 + 1 (i.e., between time
+𝑑𝑖 and 𝑑𝑖+1), 𝑆𝑖+1 = 𝑋 + ∑𝑖
+𝑙=1 𝑌𝑖 storage units are contributed for
+mining. We are ready to conclude every possible block finding time
+𝑇 and its corresponding probability in the below. (𝑝𝑖 represents the
+probability that a block is found in period 𝑖 , i.e., between time 𝑑𝑖−1
+and 𝑑𝑖 .)
+𝑝𝑖 =
+⎧⎪⎪⎪⎪⎨⎪⎪⎪⎪⎩
+1 − 𝛼𝑋1 𝑖 = 1,
+(1 − 𝛼𝑆𝑖𝑖 )∏𝑖−1
+𝑗=1 𝛼
+𝑆 𝑗
+𝑗 𝑖 = 2, · · · , 𝑘,∏𝑘−1
+𝑗=1 𝛼
+𝑆 𝑗
+𝑗 𝑖 = 𝑘 + 1,
+(6)
+where 𝛼 𝑗 = 1 − 𝑑 𝑗/𝐷 .
+.   .       .         .
+block finding time: 
+Probability ( )
+Figure 3: Probability of the network-wide block finding time where 𝑘 = 3.
+Fig. 3 gives an example of𝑘 = 3. Now, we consider how to express
+the winning probability 𝑃
+𝑗
+𝑖 for a miner𝑚𝑖 using type- 𝑗 network. In
+each mining round, 𝑃𝑖 can be considered as a sum of𝑚𝑖 ’s winning
+probability in each period 𝑙 , which is a product of 𝑝𝑙 and 𝑚𝑖 ’s
+storage contribution ratio during the period 𝑙 , i.e., the ratio of his
+contributed storage to the total storage in the period 𝑙 . Obviously,
+𝑚𝑖 contributes 𝑥𝑖 storage units before time 𝑑 𝑗 and 𝑠𝑖 storage units
+after that. Thus, we can calculate the winning probability for a
+type- 𝑗 miner𝑚𝑖 and his corresponding utility using Eqs. (7-8).
+𝑃
+𝑗
+𝑖 =
+∑𝑗
+𝑙=1
+𝑥𝑖𝑝𝑙
+𝑆𝑙
++
+∑𝑘+1
+𝑙=𝑗+1
+𝑠𝑖𝑝𝑙
+𝑆𝑙
+, (7)
+𝑈
+𝑗
+𝑖 =𝑅𝑃 𝑗
+𝑖 −𝐶𝑖 . (8)
+If we apply this function into the original miner game, then the
+following result can be obtained.
+Theorem 3. Given a price set {𝑝𝑠 , 𝑝𝑐 } from the CSP side, there
+exists at least one Nash equilibrium for the miner game in the non-
+uniform-delay setting.
+Proof. The uniform-delay setting is a special case where 𝑘 = 1.
+Similar to the proof for NE in Theorem 2, the existence of NE for
+miners in a non-uniform-delay network is followed by capitalizing
+on the variational inequality theory. Based on the previous analysis,
+we need to prove 𝑃
+𝑗
+𝑖 is concave in 𝑟𝑖 .
+We rewrite 𝑃 𝑗
+𝑖 to Eq. (9).
+𝑃
+𝑗
+𝑖 =
+∑𝑗−1
+𝑙=1
+𝑥𝑖𝑝𝑙
+𝑆𝑙︸��������︷︷��������︸
+part a
++ 𝑥𝑖𝑝 𝑗
+𝑆 𝑗
++
+∑𝑘+1
+𝑙=𝑗+1
+𝑠𝑖𝑝𝑙
+𝑆𝑙︸���������������������︷︷���������������������︸
+part b
+. (9)
+Based on the the proof in Theorem 2, we can obtain the fact that
+part b of Eq. (9) is a concave function. We only need to prove that
+part a is concave, each addend of which is concave. Since the sum
+of concave functions are still concave, the concavity of part a as
+well as Eq. (9) are determined. �
+Note that, we never consider the mathematical relation among
+𝑌𝑗 ’s. Thus, Theorem 3 can be obtained under any number of net-
+work types and any combinations of𝑀 miners’ network types. In
+the experiment, we conduct experiments based on several special
+network type distributions to see how each distribution affects
+miners’ decisions.
+5.2 Nash Equilibrium Algorithm
+Since it is hard to express each miner’s equilibrium strategy in an
+explicit form, although it exists, we provide an algorithm using
+strategy iterations to find miners’ equilibrium strategies.
+175
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA Suhan Jiang and Jie Wu
+Table 2: Strategy iterations given 𝑅 = 800, 𝑝𝑠 = 5, 𝑝𝑐 = 25, 𝑑1/𝑑2 = 5/6, 𝑏1 = 200, 𝑏2 = 500.
+Round
+Run Strategy Initialization 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+1 𝑥1 7 1.2 5.1 4.2 4. 5 4.4 4.4 4.4 4.4 4.4 4.4 4.4 4.4 4.4 4.4
+𝑦1 11 15.4 4.3 7.2 6.3 6.61 6.5 6.5 6.5 6.5 6.5 6.52 6.5 6.5 6.5
+𝑥2 5 8.6 7.3 7.7 7.6 7.6 7.6 7.6 7.6 7.6 7.6 7.6 7.6 7.6 7.6
+𝑦2 5 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+2 𝑥1 3 0 5.3 4.1 4.5 4.8 4.4 4.4 4.4 4.4 4.4 4.4 4.4 4.4 4.4
+𝑦1 4 18.4 3.7 7.4 6.3 6.6 6.5 6.5 6.5 6.5 6.5 6.5 6.5 6.5 6.5
+𝑥2 1 8.9 7.2 7.7 7.6 7.6 7.61 7.6 7.6 7.6 7.6 7.6 7.6 7.6 7.6
+𝑦2 10 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0 0.0
+Algorithm 1 Asynchronous Best-Response Algorithm
+Output: 𝒓 = {𝑟1, · · · , 𝑟𝑛} where 𝑟𝑖 = (𝑥𝑖 , 𝑦𝑖 ), 𝑖 ∈ {1, 𝑛}
+Input: Initialize 𝑗 as 1 and choose any feasible starting point 𝒓 (0) :
+each miner chooses the decision using the local computing
+1: for round 𝑗 do
+2: for miner 𝑖 do
+3: Update 𝑟
+( 𝑗)
+𝑖 using Eq. (12) for 𝑥𝑖 and Eq. (13) for 𝑦𝑖
+4: Send the request 𝑟
+( 𝑗)
+𝑖 to CSP
+5: CSP collects the request profile 𝒓 ( 𝑗)
+6: if 𝒓 ( 𝑗) = 𝒓 ( 𝑗−1) then Stop
+7: else increase 𝑗 by 1
+Each miner optimizes his utility by solving the OPminer prob-
+lem as follows. Using Lagrange’s multipliers 𝜆1, 𝜆2, and 𝜆3 for the
+constraints, we obtain the Lagrange function 𝐿𝑖 to reform 𝑚𝑖 ’s
+optimization problem as follows:
+𝐿𝑖 = 𝑅𝑃𝑖 −𝐶𝑖 − 𝜆1 (𝐶𝑖 − 𝑏𝑖 ) + 𝜆2𝑥𝑖 + 𝜆3𝑦𝑖 , (10)
+and the complementary slackness conditions are
+𝜆1 (𝐶𝑖 − 𝑏𝑖 ) = 0, 𝜆2𝑥𝑖 = 0, 𝜆3𝑦𝑖 = 0,
+𝜆1 > 0, 𝜆2, 𝜆3, 𝑥𝑖 , 𝑦𝑖 ≥ 0.
+(11)
+By the first-order optimality condition ∇𝐿𝑖 = 0, it immediately
+follows that 𝜆2 = 𝜆3 = 0. For simplicity, we approximates the value
+of 𝛽 by replacing𝑋 with𝑋−𝑖 . This approximation has little effect on
+the final results but makes our expression clear and simple. Thus,
+we obtain the following result.
+𝑥𝑖 =
+√
+𝛽𝑅𝑋−𝑖
+(1 + 𝜆1)𝑝𝑐
+− 𝑋−𝑖 , (12)
+𝑦𝑖 =
+√
+(1 − 𝛽)𝑅(𝑋−𝑖 + 𝑌−𝑖 )
+(1 + 𝜆1)𝑝𝑠
+− (𝑥𝑖 + 𝑋−𝑖 + 𝑌−𝑖 ), (13)
+𝐶𝑖 − 𝑏𝑖 = 0. (14)
+Solving Eq. (12) - Eq. (14) yields that
+𝜆1 = [𝑏 + (𝑝𝑠 + 𝑝𝑐 )𝑋−𝑖 + 𝑝𝑠𝑌−𝑖 ]2
+−
+[√
+𝛽𝑅𝑝𝑐𝑋−𝑖 +
+√
+(1 − 𝛽)𝑅𝑝𝑠 (𝑋−𝑖 + 𝑌−𝑖 )
+]2
+. (15)
+Hence, substituting Eq. (15) back into Eq. (12) and Eq. (13) gives
+the explicit form of the solution to the OPminer problem, i.e., each
+miner’s best response strategy. This naturally gives a distributed
+iterative algorithm, allowing each miner to iteratively update its
+strategy, given the strategies of other miners. We summarize the
+distributed iterative algorithm in Algorithm 1.
+Algorithm 1 is applicable for a uniform-delay network to find
+the unique NE point and also can be used in a non-uniform-delay
+network, where one NE point can be computed. Table 2 gives an
+example, showing how one NE point is achieved through strategy
+iterations. In this example, twominerswith different network delays
+and budgets compete with each other. Provided with different initial
+values, they finally stabilize to the same NE point (i.e., the bold
+numbers in the table).
+5.3 Nash Equilibrium among Homogeneous
+Miners
+It is difficult to express miners’ strategies explicitly. Fortunately, we
+are able to get the closed-form computation offloading solutions for
+the OPminer in a special case. We consider a homogeneous-miner
+case where each miner is homogeneous with an identical budget
+𝑏. We will provide the explicit-form expression of the offloading
+strategy for the homogeneous-miner case in the uniform-delay
+network.
+Theorem 4. The unique Nash equilibrium for miner𝑚𝑖 in the
+homogeneous-miner case is given below, provided that the network
+delay is uniform among miners.
+𝑥∗𝑖 =
+𝑏𝛽 (𝑛 − 1)
+𝑝𝑐 (𝑛 − 𝛽) , (16)
+𝑦∗𝑖 =
+𝑏 [(1 − 𝛽)𝑛𝑝𝑐 − 𝛽 (𝑛 − 1)𝑝𝑠 ]
+𝑝𝑠𝑝𝑐 (𝑛 − 𝛽) . (17)
+Proof. We obtain 𝑋 2 = 𝛽𝑅𝑋−𝑖/[(1 + 𝜆1)𝑝𝑐 ] based on Eq. (12)
+and 𝑆2 = (1 − 𝛽)𝑅(𝑋−𝑖 + 𝑌−𝑖 )/[(1 + 𝜆1)𝑝𝑠 ] based on Eq. (13), for
+each miner𝑚𝑖 . Then, 𝑋
+2/𝑆2 = 𝛽𝑋−𝑖𝑝𝑠/[(1 − 𝛽) (𝑋−𝑖 + 𝑌−𝑖 )𝑝𝑐 ] im-
+mediately comes out. Next, we calculate the summation of this
+expression for all the miners as follows:∑
+𝑛
+𝑋 2
+𝑆2
+=
+∑
+𝑛
+𝛽𝑋−𝑖𝑝𝑠
+(1 − 𝛽) (𝑋−𝑖 + 𝑌−𝑖 )𝑝𝑐
+, (18)
+𝑛
+(
+𝑋
+𝑆
+)2
+=
+𝛽𝑝𝑠
+(1 − 𝛽)𝑝𝑐
+(𝑛 − 1)𝑋
+𝑆
+. (19)
+176
+Storage Offloading in PoC-based Mobile Blockchain Mining Mobihoc ’20, October 11–14, 2020, Boston, MA, USA
+Then, 𝑋/𝑆 = 𝛽 (𝑛 − 1)𝑝𝑠/(1− 𝛽)𝑛𝑝𝑐 easily follows. Since all miners
+are homogeneous, their best response strategies are identical as
+well, i.e., 𝑋 = 𝑛𝑥𝑖 and 𝑆 = 𝑛(𝑥𝑖 + 𝑦𝑖 ). By substituting these two
+equations into Eq. (14), we obtain the NE for miner𝑚𝑖 . �
+However, the closed-form solution for homogeneous miners in
+the non-uniform-delay network is still an open problem, which we
+reserve for our future work.
+6 EVALUATION
+This section consists of three parts. First, we validate the feasibility
+for mobile miners to offload their storage to an external CSP (sub-
+section 6.1). The testbeds we use in this paper are Burstcoin [1], a
+PoC mining platform, and Google Cloud [9], providing resources
+of both storage and computation. Second, we examine how miners
+decide their optimal strategies using our proposed algorithm in the
+uniform-delay network (subsection 6.2). We conduct our experi-
+ments based on different sets of parameters to show how miners’
+decisions will be affected by external factors. Last, we take the
+network settings into consideration and analyze how non-uniform
+delays can influence the achieved equilibrium in our proposed game
+(subsection 6.3).
+6.1 Feasibility of Storage Offloading
+The most important part is to validate whether storage offloading is
+viable for PoC mining since it is the basis of our paper. To confirm
+its feasibility, we show successful Burstcoin mining using Google
+Cloud storage.
+6.1.1 Feasibility of plotting. For plotting, there are two methods.
+One is to plot directly onto the local hard drive and upload it to
+cloud service, and the other way is to plot straight from the local
+device to the cloud service by setting the cloud as a drive letter.
+As we observed, it takes around 24 hours to upload 1 TB of plot
+files under the bandwidth of 500 Mbps if choosing the first way.
+Definitely, this time can be shortened with a faster Internet speed.
+When using the second way, the plotter just shuts down if the
+bandwidth is less than 1 Gbps. There is a bandwidth threshold if
+applying the second way, and thus we suggest the first way to
+offload plot files.
+6.1.2 Feasibility of mining. If we choose cloud-mining using VMs
+provided by the CSP, the mining speed would be faster. According
+to our test, with a 2 Gbps network instance and 32 vCPU, mining
+over a plot file of 18 TB can be finished within 30 seconds, which is
+far less than the average block generation interval (240 seconds).
+For self-mining, we also test the download delay. For a plot file
+of 18 TB in total, we need to download 4068MB scoops in each
+mining round and the average delay is around 50 seconds. The
+gap between the cloud-mining end time and the self-mining start
+time rationalizes our assumption on an infinite cloud-mining speed.
+We also test the mining speed on mobile devices. Self-mining is
+slower than cloud-mining, but its speed is acceptable since we can
+finish the mining within 30 to 60 seconds, depending on the type
+of mobile devices. In general, the total time for local mining is also
+within the average block generation interval.
+Based on the data provided in the above, we can conclude that it
+is feasible for miners to use mobile devices for PoC mining through
+1 2 3 4 5
+Unit price of storage: ps
+6
+7
+8
+9
+10
+11
+St
+or
+ag
+e 
+un
+its
+ b
+y 
+cl
+ou
+d-
+m
+in
+in
+g
+1- /D=0.93
+1- /D=0.94
+1- /D=0.95
+(a) Miner’s cloud-mining storage.
+1 2 3 4 5
+Unit price of storage: ps
+0
+20
+40
+60
+80
+100
+St
+or
+ag
+e 
+un
+its
+ b
+y 
+se
+lf-
+m
+in
+in
+g 1- /D=0.93
+1- /D=0.94
+1- /D=0.95
+(b) Miner’s self-mining storage.
+Figure 4: Homogeneous miners with unlimited budgets.
+100 125 150 175 200
+Miner's budget:bi
+0
+4
+8
+12
+16
+20
+St
+or
+ag
+e 
+un
+its
+ b
+y 
+cl
+ou
+d-
+m
+in
+in
+g
+pc=10
+pc=12
+pc=15
+(a) 𝑑/𝐷 = 0.02.
+100 125 150 175 200
+Miner's budget:bi
+0
+10
+20
+30
+40
+50
+St
+or
+ag
+e 
+un
+its
+ b
+y 
+se
+lf-
+m
+in
+in
+g pc=10
+pc=12
+pc=15
+(b) 𝑑/𝐷 = 0.02.
+Figure 5: Budget impacts on homogeneous miners.
+storage offloading. On this basis, we conduct further experiments
+to confirm our theoretical analysis.
+6.2 Unique Equilibrium in the Uniform-delay
+Setting
+Our experiments evaluate the influences of important parameters
+on each miner’s strategies. We start with a small mobile PoCmining
+network with 5 homogeneous miners with unlimited budgets.
+6.2.1 Influences from the CSP side. We first consider the different
+prices at the CSP side. Fig. 4 obviously reflects that, if the CSP
+unilaterally increases storage’s price 𝑝𝑠 , miners will decrease their
+requests on storage units as well as their self-mining ratio. However,
+miners never change their investment on cloud-mining, although
+it is expensive. This is reasonable, given that miners are budget-
+unlimited. Similarly, the increase of computation price 𝑝𝑐 also dis-
+courages miners to invest on computation resources. Besides, from
+Fig. 4, we can also conclude that miner’s utility is sensitive to the
+download delay, as a slight increase of 𝑑 would cause an obvious
+decrease on the self-mining ratio. Surprisingly, this negative effect
+also influences the sales on total storage. This can be interpreted as
+follows: a longer delay decreases the mining power of the whole
+network, while in our experiment, we fix the mining difficulty pa-
+rameter 𝐷 , leading to a lower chance for miners to get reward.
+Thus, miners tend to reduce their cost investment for the purpose
+of maximizing utility. This result further confirms the necessity
+for a blockchain-based system to dynamically adjust its difficulty
+parameter.
+6.2.2 Influences from the miner side. We now investigate how the
+budget will affect miners’ strategies. We assumeminers are homoge-
+neous on their budgets 𝑏𝑖 . In Fig. 5, we can observe that, when each
+miner’s budget increases, he will prefer to invest more money in
+cloud-mining even if 𝑝𝑐 goes up. Under the setting of 𝑝𝑐 = 15, when
+we increase the miner’s budget from 100 to 125, he just slightly
+increases his investment on cloud mining (from 0 to 0.5), which
+is less than his budget increase, allowing him to invest more on
+self-mining.Next, we analyze the heterogeneous-miner scenario.
+We assume there are two miners,𝑚1 and𝑚2. We fix𝑚1’s budget
+177
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA Suhan Jiang and Jie Wu
+100 125 150 175 200
+m2's budget:b2
+2
+4
+6
+8
+10
+12
+b1=125
+b1=150
+b =175
+m
+2's 
+sto
+ra
+ge
+ u
+ni
+ts 
+by
+ 
+-m
+in
+in
+g
+(a)𝑚2’s cloud-mining storage.
+100 125 150 175 200
+m2's budget:b2
+30
+40
+50
+60
+70
+80
+m
+2's 
+sto
+ra
+ge
+ u
+ni
+ts 
+by
+ se
+lf-
+m
+in
+in
+g
+b1=125
+b1=150
+b1=175
+(b)𝑚2’s self-mining storage.
+Figure 6:𝑚2’s requests given𝑚1’s budget is fixed while𝑚2’s budget increases.
+100 125 150 175 200
+m2's budget:b2
+2
+4
+6
+8
+10
+12
+b1=125
+b1=150
+b =175
+m
+1's 
+sto
+ra
+ge
+ u
+ni
+ts 
+by
+ 
+-m
+in
+in
+g
+(a)𝑚1’s cloud-mining storage.
+100 125 150 175 200
+m2's budget:b2
+20
+30
+40
+50
+60
+70
+80
+90
+m
+1's 
+sto
+ra
+ge
+ u
+ni
+ts 
+by
+ se
+lf-
+m
+in
+in
+g
+b1=125
+b1=150
+b1=175
+(b)𝑚1’s self-mining storage.
+Figure 7:𝑚1’s requests given𝑚1’s budget is fixed while𝑚2’s budget increases.
+Table 3: Miners’ strategy profiles under different delay ratios.
+Type1 Type2 Type3
+𝜃1 : 𝜃2 : 𝜃3 𝑥 𝑦 𝑥 𝑦 𝑥 𝑦
+3 : 4 : 5 7.3 88.9 11.8 0 16.8 0
+4 : 5 : 6 12 31.7 13 0 14.8 0
+5 : 6 : 7 12.3 4.4 13.3 0 14.2 0
+Table 4: Miners’ strategy profiles under different population distributions.
+5G 4G 3G
+𝛾1 : 𝛾2 : 𝛾3 𝑥 𝑦 𝑈 /𝐶 𝑥 𝑦 𝑈 /𝐶 𝑥 𝑦 𝑈 /𝐶
+10 : 40 : 10 54 20.5 0.57 17 0 0.57 57 0 0.57
+15 : 40 : 5 35 34 0.76 18.8 0 0.73 57 0 0.73
+20 : 20 : 20 30 4 0.5 32 0 0.5 32 0 0.5
+30 : 20 : 10 20 5 0.54 33.2 0 0.54 57 0 0.54
+and constantly increase𝑚2’s budget. From Fig. 6, we can see𝑚2
+invest more on computation resources. By taking advantage of
+cloud-mining,𝑚2 can buy less storage units while still keeping his
+utility high. Since miners mutually affect each other, although𝑚1’s
+budget remains unchanged, he will also adjust his strategies as a
+best response to𝑚2’s strategy changes. Fig. 7 shows that𝑚1 also
+increases his investment on cloud-mining, as𝑚2 does.
+6.3 Equilibrium in the Non-uniform-delay
+Setting
+Miners’ selection of network types will bring different download
+delays to them. In this part, we evaluate miners’ equilibrium strate-
+gies in a mining network with non-uniform delays. We construct a
+mining network of 60 homogeneous miners with identical budgets
+and three network types for miners to choose from, where a type-𝑖
+network will incur a delay of 𝜃𝑖𝑑 (𝑖 = 1, 2, 3), where 𝜃𝑖 depends on
+the type of networks used .
+6.3.1 Influences of delay ratio. We first investigate the influence
+of different delay ratios, i.e., the values of 𝜃1 : 𝜃2 : 𝜃3, on the
+miners’ strategies. We assume each miner’s budget is 200 and each
+Table 5: Miners’ strategy profiles under different price sets.
+5G 4G 3G
+(𝑝𝑠 , 𝑝𝑐 ) 𝑥 𝑦 𝑥 𝑦 𝑥 𝑦
+(5, 15) 0 40 10 0 10 0
+(5, 20) 0 40 6.25 8.75 8 0
+(5, 25) 0 40 2.5 24.7 6.7 0
+(5, 30) 0 40 0.3 37.8 5.7 0
+network type is used by 20 miners. Given the CSP price set of
+(𝑝𝑠 , 𝑝𝑐 ) = (1, 12), Table 3 shows miners’ strategy profiles under
+different delay ratios, where𝑥 and𝑦 represent the number of storage
+units for cloud-mining and for self-mining, respectively. In each
+scenario, only type-1 miners will apply self-mining for cost saving
+since they can take advantage of their short delay. However, as
+their download delay increases, they have to reduce the ratio of
+self-mining and turn to cloud-mining. As type-2 and type-3 miners
+have long delays, they prefer cloud-mining. Compared with type-
+2 miners, type-3 miners also buy more storage units in order to
+mitigate their disadvantages caused by their longer delays.
+6.3.2 Influences of population distribution. Then, we investigate
+the influence caused by population distribution of each network
+type. We use 5G, 4G, and 3G to represent type-1, type-2, and type-3
+network, respectively. Thus, the delay ratio 𝜃1 : 𝜃2 : 𝜃3 = 3 : 20 :
+500 is obtained based on the real-world data[28]. We assume all
+miners have unlimited budgets and the CSP price set is (𝑝𝑠 , 𝑝𝑐 ) =
+(5, 30), then Table 4 shows the corresponding miner strategies
+under different population distributions, where 𝛾𝑖 represents the
+number of miners using the type-𝑖 network. We can conclude that,
+if the percentage of type-𝑖 miners increases, miners of this type
+will decrease their storage investment, while the remaining miners
+have to buy more units. Also, we observe an interesting result: even
+if miners use different network types, their rates of utility on cost
+are almost equal. This further confirms egalitarian nature of PoC
+consensus mechanism.
+6.3.3 Influences of CSP prices. Finally, we investigate the influence
+incurred by the CSP’s pricing strategy. We consider a small mining
+network with 3 miners using 5G, 4G, and 3G, respectively, i.e.,
+𝜃1 : 𝜃2 : 𝜃3 = 3 : 20 : 500. Assuming each miner has a budget
+of 200, Table 5 shows their equilibrium strategies under different
+populations. As the 5G-miner can exploit his advantage of the fast
+download speed, he prefers low-cost self-mining. However, the
+3G-miner chooses cloud-mining to avoid the winning probability
+decrease caused by his slow network, even if 𝑝𝑐 is high. For the
+intermediate 4G-miner, his strategies are tightly related to the value
+of 𝑝𝑐 , where a smaller 𝑝𝑐 is attractive.
+7 RELATEDWORK
+7.1 Blockchain Mining Consensus Mechanism
+A blockchain is viewed as a distributed ledger stored and main-
+tained by a network of nodes across the world. The key to operating
+a blockchain is its consensus mechanism, which regulates how to
+update this ledger to reach a decentralized agreement. Currently,
+Blockchain consensus mechanisms can be divided into two cate-
+gories, i.e., Proof of Concept (PoX) which requires miners to devote
+178
+Storage Offloading in PoC-based Mobile Blockchain Mining Mobihoc ’20, October 11–14, 2020, Boston, MA, USA
+resources tomining, and virtual miningwithout real-world resource
+contribution.
+7.1.1 PoX series. As the origin of PoX series, PoW [21] uses com-
+puting power for preimage searching and creates a huge amount of
+electricity waste. In [25], Proof of Exercise is proposed to replace
+useless searching in PoWwith the useful exercise of matrix product
+problems. Apart from delegation of expensive computation, PoX
+can also be designed to incentivize cheap storage provisions. The
+existing mechanisms include Proof of Capacity adopted by Burst-
+coin [1] and Spacemint [22], Proof of Retrievability [13] used in
+Permacoin [20] and Ipfs [2] etc.
+7.1.2 Virtual-mining mechanisms. Compared to PoX series, there
+are fewer virtual-mining mechanisms, among which PoS is a repre-
+sentative. In the PoS mechanism, miners decide their mining right
+based on stake, which is the amount of crypto-currencies one pos-
+sesses. There is a refined version of PoS [24], which uses coin age,
+the currency amount times the holding period, to decide reward.
+One of its implementations is Peercoin [15]. Another extension is
+delegated PoS [16]. [14] adds more security measurements to ensure
+persistence and liveness of the system. There also exist some hybrid
+consensus mechanisms atop PoW protocols and BFT [3] protocols,
+e.g. bitcoin-NG [7], PeerCensus [5] and Hybrid Consensus [23].
+7.2 Game Theory in Offloading Mechanism
+Game theory is a widely-used model in the field of offloading mech-
+anisms. A large body of existing literature [6, 10, 17, 19, 26, 27, 29–
+31, 33, 34] focuses on minimizing offloading users’ computation
+overhead in terms of energy and latency. To this end, researchers
+have developed distributed decision making methodologies. In the
+field of mobile blockchain mining offloading [12, 18, 32], there
+are few works and most of them are in the PoW-mining scenario
+where mobile miners only offload their computation to a service
+provider. In our paper, we consider mining based on a PoC mecha-
+nism, thereby storage offloading, instead of computation offloading,
+becomes the core. Meanwhile, the computation offloading is still in
+need if miners decide to mine remotely in the cloud.
+8 CONCLUSION
+We have proposed a Nash equilibrium game among the mobile
+miners for optimal storage offloading in the PoC mining setting.
+Two practical mining strategies are investigated for miners, i.e.,
+cloud-mining and self-mining. We start with a uniform network
+setting where each miner experiences the same download delay
+for self-mining. We discuss the existence and the uniqueness of
+Nash equilibrium in the proposed game and a distributed algorithm
+is proposed to achieve NE point(s). We also find the close-form
+expressions of offloading and mining strategies for homogeneous
+miners with identical budgets. Then, we extend our results to non-
+uniformed delays, where miners with different network settings
+experience different download delays. We prove that there exists
+at least one Nash equilibrium in this setting, and our previously-
+proposed algorithm still can be applied to achieve one NE point.
+We also find that a miner using a fast-speed network can decrease
+his cost on cloud resources while obtaining higher utility. This is
+reasonable since the price goes higher if subscribing to a better
+network, which can be considered as another investment source for
+mobile mining. Both numerical evaluation and testbed experiments
+on Burstcoin and Google Cloud are conducted to show the feasibil-
+ity of storage offloading and to validate the proposed models and
+theoretical results.
+9 ACKNOWLEDGEMENTS
+This research was supported in part by NSF grants CNS 1824440,
+CNS 1828363, CNS 1757533, CNS 1629746, CNS 1651947, and CNS
+1564128.
+A PROOF OF THEOREM 2
+First we show the existence of NE.
+Claim 1: There is at least one NE for the gameOPminer. Any game
+has NEs if its equivalent variational inequality (𝑉 𝐼 ) problem [8]
+has a nonempty solution set. Given a 𝑉 𝐼 problem, 𝑉 𝐼 (𝐾,𝐺), if 𝐾 is
+convex and compact, and 𝐺 is monotone on 𝐾 , then the solution
+set of 𝑉 𝐼 (𝐾,𝐺) is nonempty, closed, and convex. We define the
+equivalent VI problem 𝑉 𝐼 (𝐾,𝐺) = 𝑂𝑃 (𝑋,𝑈 ), where
+𝐺 := (∇𝑖𝑈𝑖 )𝑛𝑖=1, 𝑋 := ((𝑥𝑖 , 𝑦𝑖 ))𝑛𝑖=1, 𝑈 := (𝑈𝑖 )𝑛𝑖=1,
+𝐾 :=
+∏𝑛
+𝑖=1
+𝐾𝑖 , 𝐾𝑖 := {(𝑥𝑖 , 𝑦𝑖 ) |𝐶𝑖 ≤ 𝑏𝑖 , 𝑥𝑖 , 𝑦𝑖 ≥ 0}.
+It can be easily verified that 𝐾𝑖 is convex and closed, ∀𝑖 . Thus, 𝐾 is
+convex and compact. And𝐺 is monotone if and only if𝑈𝑖 (𝑟𝑖 , 𝒓−𝑖 ) is
+concave in 𝑟𝑖 for given 𝒓−𝑖 , ∀𝑖 , which is true as shown below. Since
+the VI problem has a nonempty solution set, the existence of NE
+thus follows the sufficient conditions. Denote 𝐻 for the Hessian
+matrix of𝑈𝑖 :
+𝐻 :=
+[
+𝑈 𝑖
+𝑥𝑥 𝑈 𝑖
+𝑥𝑦
+𝑈 𝑖
+𝑦𝑥 𝑈 𝑖
+𝑦𝑦
+]
+,
+where
+𝑈 𝑖
+𝑥𝑥 =
+𝜕2𝑈𝑖
+𝜕𝑥2𝑖
+,𝑈 𝑖
+𝑥𝑦 = 𝑈 𝑖
+𝑦𝑥 =
+𝜕2𝑈𝑖
+𝜕𝑥𝑖 𝜕𝑦𝑖
+,𝑈 𝑖
+𝑦𝑦 =
+𝜕2𝑈𝑖
+𝜕𝑦2𝑖
+.
+The expressions of the Jacobian elements are as below:
+𝜕𝑈𝑖
+𝜕𝑥𝑖
+=𝑝𝑠 + 𝑝𝑐 − 𝑅
+{
+(1 − (𝑥𝑖 + 𝑦𝑖 )/𝑆) + 𝛼𝑋ln𝛼 (𝑦𝑖 − 𝑌𝑥𝑖/𝑋 )
++
+(
+1 − 𝛼𝑋
+)
+[𝑌 (1 − 𝑥𝑖/𝑋 − 𝑥𝑖/𝑆) /𝑋 + 𝑦𝑖/𝑆]
+}
+/𝑆,
+𝜕𝑈𝑖
+𝜕𝑦𝑖
+=𝑝𝑠 − 𝑅𝛼𝑋 [1 − (𝑥𝑖 + 𝑦𝑖 )/𝑆] /𝑆.
+Next, we show𝐻 is positive definite by proving its leading principal
+minors, i.e.,𝑈 𝑖
+𝑥𝑥 and 𝑑𝑒𝑡 (𝐻 ), are bigger than 0.
+𝑑𝑒𝑡 (𝐻 ) = 𝑈 𝑖
+𝑥𝑥𝑈
+𝑖
+𝑦𝑦−𝑈 𝑖
+𝑥𝑦𝑈
+𝑖
+𝑦𝑥 =𝑅
+2 (𝜓𝜙−𝜓 ′𝜙 ′)/(𝑋 3𝑆4),
+where
+𝜓 = 4𝑋−𝑖𝑆,𝜓 ′ = 𝑆𝑋−𝑖 + 𝑦𝑖𝑋−𝑖 − 𝑥𝑖𝑌−𝑖 ,
+𝜙 = 1 − 𝛼𝑋
+(
+1 − ln𝑎𝑋
+)
+, 𝜙 ′ = 𝛼𝑋
+(
+ln𝑎𝑋
+)2
+.
+The sign of 𝑑𝑒𝑡 (𝐻 ) is decided by the value of𝜓𝜙 −𝜓 ′𝜙 ′, which is
+always positive for non-negative requested units.
+𝜓𝜙 −𝜓 ′𝜙 ′ = 4𝑋−𝑖𝑆𝜙 − [(𝑆 + 𝑦)𝑋−𝑖 − 𝑥𝑖𝑌−𝑖 ]𝜙 ′
+> 4𝑋−𝑖𝑆𝜙 − (2𝑆𝑋−𝑖 − 𝑥𝑖𝑌−𝑖 )𝜙 ′
+> 4𝑋−𝑖𝑆𝜙 − 2𝑋−𝑖𝑆𝜙 ′ = 2𝑋−𝑖𝑆 (2𝜙 − 𝜙 ′).
+Since 2𝜙 − 𝜙 ′ = 2 − 2𝛼𝑋
+(
+1 − ln𝛼𝑋
+)
+− 𝛼𝑋
+(
+ln𝛼𝑋
+)2
+is a monotone
+increasing function, it is obvious that 2𝜙 − 𝜙 ′ ≥ 2𝜙 − 𝜙 ′ |𝑋=0= 0,
+179
+Mobihoc ’20, October 11–14, 2020, Boston, MA, USA Suhan Jiang and Jie Wu
+∀𝑌 ≥ 0. Thus, 𝑑𝑒𝑡 (𝐻 ) > 0 holds. Obviously, 𝑈 𝑖
+𝑥𝑥𝑈
+𝑖
+𝑦𝑦 > 0 and
+𝑈 𝑖
+𝑦𝑦 > 0, then 𝑈 𝑖
+𝑥𝑥 > 0 is logically well-reasoned. As 𝑑𝑒𝑡 (𝐻 ) > 0
+and 𝑈 𝑖
+𝑦𝑦 > 0, ∀(𝑥𝑖 , 𝑦𝑖 ) ∈ 𝐾𝑖 , and the positive definiteness holds
+for any 𝑖 . Therefore, 𝑉 𝐼 (𝐾,𝐺) is equivalent to 𝑂𝑃 (𝑋,𝑈 ) and has a
+nonempty solution set. We thus prove that Claim 1 is legitimate.
+We finish the proof for the uniqueness of NE.
+Claim 2: There is at most one NE for the game OPminer. We first
+introduce the matrices 𝐽𝑙𝑜𝑤 , defined as
+[𝐽𝑙𝑜𝑤]𝑖 𝑗 := inf
+𝑥 ∈𝐾
+⎧⎪⎪⎪⎨⎪⎪⎪⎩
+|∇2
+𝑖𝑖𝑈𝑖 |, if 𝑖 = 𝑗,
+−1
+2
+( |∇2
+𝑖 𝑗𝑈𝑖 | + |∇2
+𝑗𝑖𝑈 𝑗 |), else.
+We prove the uniqueness of NE solution by showing that 𝐽𝑙𝑜𝑤 is a
+strictly copositive matrix. We first give the explicit-form expression
+of ∇2
+𝑖𝑖𝑈𝑖 and ∇2
+𝑖 𝑗𝑈𝑖 as follows:
+∇2
+𝑖𝑖𝑈𝑖 =𝑈
+𝑖
+𝑥𝑥 +𝑈 𝑖
+𝑦𝑦, ∇2
+𝑗 𝑗𝑈 𝑗 = 𝑈
+𝑗
+𝑥𝑥 +𝑈 𝑗
+𝑦𝑦,
+∇2
+𝑖 𝑗𝑈𝑖 =
+𝜕2𝑈𝑖
+𝜕𝑥𝑖 𝜕𝑦 𝑗
++ 𝜕2𝑈𝑖
+𝜕𝑥𝑖 𝜕𝑥 𝑗
++ 𝜕2𝑈𝑖
+𝜕𝑦𝑖 𝜕𝑦 𝑗
++ 𝜕2𝑈𝑖
+𝜕𝑥𝑖 𝜕𝑦 𝑗
+,
+∇2
+𝑗𝑖𝑈 𝑗 =
+𝜕2𝑈 𝑗
+𝜕𝑥 𝑗 𝜕𝑦𝑖
++ 𝜕2𝑈 𝑗
+𝜕𝑦 𝑗 𝜕𝑥𝑖
++ 𝜕2𝑈 𝑗
+𝜕𝑥 𝑗 𝜕𝑦𝑖
++ 𝜕2𝑈 𝑗
+𝜕𝑦 𝑗 𝜕𝑥𝑖
+.
+W.L.O.G. we show that the second-order 𝐽𝑙𝑜𝑤 is strictly coposi-
+tive.The uniqueness to generalized cases can be simply proved
+using induction, due to the repetitive pattern of the objective func-
+tion𝑈𝑖 . By the symmetry given in Eq. (20), 𝐽𝑙𝑜𝑤 can be written into
+the form:
+𝐽𝑙𝑜𝑤 =
+[
+𝑎11 𝑎12
+𝑎21 𝑎22
+]
+,
+where
+𝑎11= inf
+(𝑥1,𝑦1) ∈𝐾
+|∇2
+11𝑈1 |, 𝑎22= inf
+(𝑥2,𝑦2) ∈𝐾
+|∇2
+22𝑈2 |,
+𝑎12=𝑎21= (−1
+2
+)
+(𝑥2,𝑦2) ∈𝐾
+inf
+(𝑥1,𝑦1) ∈𝐾
+( |∇2
+12𝑈1 | + |∇2
+21𝑈2 |).
+It suffices to show that 𝑎11, 𝑎22 ≥ 0 and 𝑎12 + √
+𝑎11𝑎22 > 0, where
+the non-negativity of the first two terms are trivial.
+𝑎12 +
+√
+𝑎11𝑎22 =
+(𝑥2,𝑦2) ∈𝐾
+inf
+(𝑥1,𝑦1) ∈𝐾
+𝑅(1 − 𝛽) [1 − 2(𝑆 − 𝑥𝑖 − 𝑦𝑖 )]/𝑆2
++ 𝛽 (2𝑥𝑖 − 𝑋 )/𝑌 3 > 0.
+Then, 𝐽𝑙𝑜𝑤 is strictly copositive as shown above. Since we have
+shown that 𝐺 is continuously differentiable with the derivatives
+bounded on 𝐾 (as the derivatives are all linear on the compact
+solution space 𝐾 ),𝐺 is strictly monotone. Therefore OPminer has at
+most one solution. Now, we conclude our proof since the uniqueness
+of NE immediately follows by combining Claim 1 and Claim 2.
+REFERENCES
+[1] P Andrew. 2019. What is Burstcoin?
+[2] Juan Benet. 2014. Ipfs-content addressed, versioned, p2p file system. arXiv
+preprint arXiv:1407.3561 (2014).
+[3] Miguel Castro and Barbara Liskov. 2002. Practical Byzantine fault tolerance and
+proactive recovery. ACM Transactions on Computer Systems (TOCS) (2002).
+[4] Bram Cohen and Krzysztof Pietrzak. 2019. The Chia Network Blockchain.
+[5] Christian Decker, Jochen Seidel, and Roger Wattenhofer. 2016. Bitcoin meets
+strong consistency. In Proceedings of the 17th International Conference on Dis-
+tributed Computing and Networking. ACM.
+[6] Jianbo Du, Liqiang Zhao, Jie Feng, and Xiaoli Chu. 2018. Computation offloading
+and resource allocation in mixed fog/cloud computing systems with min-max
+fairness guarantee. IEEE Transactions on Communications 66, 4 (2018), 1594–1608.
+[7] Ittay Eyal, Adem Efe Gencer, Emin Gün Sirer, and Robbert Van Renesse. 2016.
+Bitcoin-ng: A scalable blockchain protocol. In 13th {USENIX} Symposium on
+Networked Systems Design and Implementation ({NSDI} 16). 45–59.
+[8] Franco Giannessi and Antonino Maugeri. 1995. Variational inequalities and
+network equilibrium problems. Springer.
+[9] Google. 2019. Google Cloud. https://cloud.google.com/
+[10] Tai Manh Ho, Nguyen H Tran, Cuong T Do, SM Ahsan Kazmi, Tuan LeAnh, and
+Choong Seon Hong. 2015. Data offloading in heterogeneous cellular networks:
+Stackelberg game based approach. In 2015 Asia-Pacific Network Operations and
+Management Symposium. IEEE, 168–173.
+[11] Markus Jakobsson and Ari Juels. 1999. Proofs of work and bread pudding proto-
+cols. In Secure Information Networks. Springer, 258–272.
+[12] Suhan Jiang, Xinyi Li, and Jie Wu. 2019. Hierarchical Edge-Cloud Computing for
+Mobile Blockchain Mining Game. In Proc. of the 39th IEEE International Conference
+on Distributed Computing Systems (ICDCS 2019), Vol. 15.
+[13] Ari Juels and Burton S Kaliski Jr. 2007. PORs: Proofs of retrievability for large
+files. In Proceedings of the 14th ACM conference on Computer and communications
+security. Acm.
+[14] Aggelos Kiayias, Alexander Russell, Bernardo David, and Roman Oliynykov. 2017.
+Ouroboros: A provably secure proof-of-stake blockchain protocol. In Annual
+International Cryptology Conference. Springer.
+[15] Sunny King and Scott Nadal. 2012. Ppcoin: Peer-to-peer crypto-currency with
+proof-of-stake. self-published paper, August (2012).
+[16] Daniel Larimer. 2014. Delegated proof-of-stake (dpos). Bitshare whitepaper
+(2014).
+[17] Liqing Liu, Zheng Chang, Xijuan Guo, Shiwen Mao, and Tapani Ristaniemi. 2017.
+Multiobjective optimization for computation offloading in fog computing. IEEE
+Internet of Things Journal 5, 1 (2017), 283–294.
+[18] Mengting Liu, F Richard Yu, Yinglei Teng, Victor CM Leung, and Mei Song.
+2018. Joint computation offloading and content caching for wireless blockchain
+networks. In IEEE INFOCOM 2018-IEEE Conference on Computer Communications
+Workshops.
+[19] Yang Liu, Changqiao Xu, Yufeng Zhan, Zhixin Liu, Jianfeng Guan, and Hongke
+Zhang. 2017. Incentive mechanism for computation offloading using edge com-
+puting: a Stackelberg game approach. Computer Networks 129 (2017), 399–409.
+[20] Andrew Miller, Ari Juels, Elaine Shi, Bryan Parno, and Jonathan Katz. 2014. Per-
+macoin: Repurposing bitcoin work for data preservation. In 2014 IEEE Symposium
+on Security and Privacy. IEEE.
+[21] Satoshi Nakamoto et al. 2008. Bitcoin: A peer-to-peer electronic cash system.
+(2008).
+[22] Sunoo Park, Krzysztof Pietrzak, Albert Kwon, Joël Alwen, Georg Fuchsbauer,
+and Peter Gazi. 2018. Spacemint: A cryptocurrency based on proofs of space.
+Financial Cryptography and Data Security (2018).
+[23] Rafael Pass and Elaine Shi. 2017. Hybrid consensus: Efficient consensus in the
+permissionless model. In 31st International Symposium on Distributed Computing
+(DISC 2017). Schloss Dagstuhl-Leibniz-Zentrum fuer Informatik.
+[24] Fahad Saleh. 2019. Blockchain without waste: Proof-of-stake. Available at SSRN
+3183935 (2019).
+[25] Ali Shoker. 2017. Sustainable blockchain through proof of exercise. In 2017 IEEE
+16th International Symposium on Network Computing and Applications (NCA).
+IEEE, 1–9.
+[26] Lingyang Song, Dusit Niyato, ZhuHan, and EkramHossain. 2014. Game-theoretic
+resource allocation methods for device-to-device communication. IEEE Wireless
+Communications 21, 3 (2014), 136–144.
+[27] Youming Sun, Hongxiang Shao, Xin Liu, Jian Zhang, Junfei Qiu, and Yuhua
+Xu. 2015. Traffic Offloading in Two-Tier Multi-Mode Small Cell Networks over
+Unlicensed Bands: A Hierarchical Learning Framework. TIIS 9, 11 (2015), 4291–
+4310.
+[28] Ken’s Tech Tips. 2018. Download Speeds: What Do 2G, 3G, 4G and 5G Actually
+Mean?
+[29] Xiumin Wang, Xiaoming Chen, Weiwei Wu, Ning An, and Lusheng Wang. 2016.
+Cooperative application execution in mobile cloud computing: A Stackelberg
+game approach. IEEE Communications Letters 20, 5 (2016), 946–949.
+[30] Qiufen Xia,Weifa Liang, ZichuanXu, and Bingbing Zhou. 2014. Online algorithms
+for location-aware task offloading in two-tiered mobile cloud environments. In
+Proceedings of the 2014 IEEE/ACM 7th international conference on utility and cloud
+computing. IEEE Computer Society, 109–116.
+[31] Liang Xiao, Caixia Xie, Tianhua Chen, Huaiyu Dai, and H Vincent Poor. 2016. A
+mobile offloading game against smart attacks. IEEE Access 4 (2016), 2281–2291.
+[32] Zehui Xiong, Shaohan Feng, Dusit Niyato, Ping Wang, and Zhu Han. 2018. Opti-
+mal pricing-based edge computing resource management in mobile blockchain.
+In 2018 IEEE International Conference on Communications.
+[33] Huaqing Zhang, Yong Xiao, Shengrong Bu, Dusit Niyato, Richard Yu, and Zhu
+Han. [n.d.]. Fog computing in multi-tier data center networks: a hierarchical
+game approach. In 2016 IEEE international conference on communications.
+[34] Xiaonan Zhang, Linke Guo, Ming Li, and Yuguang Fang. 2016. Social-enabled
+data offloading via mobile participation-a game-theoretical approach. In 2016
+IEEE Global Communications Conference.
+180

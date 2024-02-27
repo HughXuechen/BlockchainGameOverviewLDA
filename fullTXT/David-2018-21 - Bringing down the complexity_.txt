@@ -1,0 +1,848 @@
+21 - Bringing Down the Complexity: Fast
+Composable Protocols for Card Games
+Without Secret State
+Bernardo David1,3(B), Rafael Dowsley2,3, and Mario Larangeira1,3
+1 Tokyo Institute of Technology, Tokyo, Japan
+{bernardo,mario}@c.titech.ac.jp
+2 Aarhus University, Aarhus, Denmark
+3 IOHK, Hong Kong, China
+rafael@cs.au.dk
+Abstract. While many cryptographic protocols for card games have
+been proposed, all of them focus on card games where players have
+some state that must be kept secret from each other, e.g closed
+cards and bluffs in Poker. This scenario poses many interesting
+technical challenges, which are addressed with cryptographic tools that
+introduce significant computational and communication overheads (e.g.
+zero-knowledge proofs). In this paper, we consider the case of games
+that do not require any secret state to be maintained (e.g. Blackjack
+and Baccarat). Basically, in these games, cards are chosen at random
+and then publicly advertised, allowing for players to publicly announce
+their actions (before or after cards are known). We show that protocols
+for such games can be built from very lightweight primitives such as
+digital signatures and canonical random oracle commitments, yielding
+constructions that far outperform all known card game protocols in terms
+of communication, computational and round complexities. Moreover, in
+constructing highly efficient protocols, we introduce a new technique
+based on verifiable random functions for extending coin tossing, which
+is at the core of our constructions. Besides ensuring that the games are
+played correctly, our protocols support financial rewards and penalties
+enforcement, guaranteeing that winners receive their rewards and that
+cheaters get financially penalized. In order to do so, we build on
+blockchain-based techniques that leverage the power of stateful smart
+contracts to ensure fair protocol execution.
+1 Introduction
+Cryptographic protocols for securely playing card games among mutually
+distrustful parties have been investigated since the seminal work of Shamir
+B. David and M. Larangeira—This work was supported by the Input Output
+Cryptocurrency Collaborative Research Chair, which has received funding from
+Input Output HK.
+R. Dowsley—This project has received funding from the European research
+Council (ERC) under the European Unions’s Horizon 2020 research and innovation
+programme (grant agreement No 669255).
+c© Springer International Publishing AG, part of Springer Nature 2018
+W. Susilo and G. Yang (Eds.): ACISP 2018, LNCS 10946, pp. 45–63, 2018.
+https://doi.org/10.1007/978-3-319-93638-3_4
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-319-93638-3_4&domain=pdf
+46 B. David et al.
+et al. [20] in the late 1970s, which initiated a long line of research [3,4,8,10–
+12,14,17–19,21–24]. Not surprisingly, all of these previous works have focused
+on obtaining protocols suitable for implementing a game of Poker, which poses
+several interesting technical challenges. Intuitively, in order to protect a player’s
+“poker face” and allow him to bluff, all of his cards might need to be kept private
+throughout (and even after) protocol execution. In previous works, ensuring
+this level of privacy required several powerful but expensive cryptographic
+techniques, such as the use of zero-knowledge proofs and threshold cryptography.
+However, not all popular card games require a secret state (e.g. private cards) to
+be maintained, which is the case of the popular games of Blackjack (or 21) and
+Baccarat. In this work, we investigate how to exploit this fundamental difference
+to construct protocols specifically for games without secret state that achieve
+higher efficiency than those for Poker.
+Games Without Secret State: In games such as Baccarat and Blackjack, no
+card is privately kept by any player at any time. Basically, in such games, cards
+from a shuffled deck of closed cards (whose values are unknown to all players)
+are publicly opened, having their value revealed to all players. We say these are
+games without secret state, since no player possesses any secret state (i.e. private
+cards) at any point in the game, as opposed to games such as Poker, where the
+goal of the game is to leverage private knowledge of one’s card’s values to choose
+the best strategy. An immediate consequence of this crucial difference is that
+the heavy cryptographic machinery used to guarantee the secrecy and integrity
+of privately held cards can be eliminated, facilitating the construction of highly
+efficient card game protocols.
+Security Definitions: Even though protocol for secure card games (and
+specially Poker) have been investigated for several decades, formal security
+definitions have only been introduced very recently in Kaleidoscope [12] (for
+the case of Poker protocols) and Royale [14] (for the case of protocols for general
+card games). Concrete security issues and cases of cheating when trusting online
+casinos for playing card games are also analysed in [12]. The lack of formal
+security definitions in previous works has not only made their security guarantees
+unclear but resulted in concrete security issues, such as the ones in [3,8,23,24], as
+pointed out in [12,19]. Hence, it is important to provide security definitions that
+capture the class of protocols for card games without secret state. Adapting
+the approach of Royale [14] for defining security of protocols for general card
+games with secret state in the Universal Composability framework of [6] is a
+promising direction to tackle this problem. Besides clearly describing the security
+guarantees of a given protocol, a security definition following the approach of
+Royale also ensures that protocols are composable, meaning that they can be
+securely used concurrently with copies of themselves or other protocols.
+Enforcing Financial Rewards and Punishment: One of the main issues
+in previous protocols for card games is ensuring that winners receive their
+21 - Bringing Down the Complexity: Fast Composable Protocols 47
+rewards while preventing cheaters to keep the protocol from reaching an outcome.
+This problem was recently solved by Andrychowicz et al. [1,2] through an
+approach based on decentralized cryptocurrencies and blockchain protocols.
+They construct a mechanism that ensures that honest players receive financial
+rewards and financially punishes cheaters (who abort the protocol or provide
+invalid messages). The main idea is to have all players provide deposits of
+betting and collateral funds, forfeiting their collateral funds if they are found
+to be cheating. A cheater’s collateral funds are then used to compensate honest
+players. Their general approach has been subsequently improved and applied
+to poker protocols by Kumaresan et al. [17] and Bentov et al. [4]. However,
+protocols for Poker (resp., for general card games) using this approach have only
+been formally analysed in Kaleidoscope [12] (resp., Royale [14]), where fine tuned
+checkpoint witnesses of correct protocol execution are also proposed as means of
+improving the efficiency of the mechanism for enforcing rewards/penalties. Such
+an approach can be carried over to the case of games without secret state.
+1.1 Our Contributions
+We introduce a general model for reasoning about the composable security
+of protocols for games without secret state and a protocol that realizes
+our security definitions with support to financial rewards/penalties. We also
+introduce optimizations of our original protocol that achieve better round and
+communication complexities at the expense of a cheap preprocessing phase (in
+either the Check-in or Create Shuffled Deck procedures). Our protocols do not
+require expensive card shuffling operations that rely on zero-knowledge proofs,
+achieving much higher concrete efficiency than all previous works that support
+card games with secret state (e.g. Poker). Our contributions are summarized
+below:
+– The first ideal functionality for general card games without secret state: FCG.
+– An analysis showing that that Baccarat and Blackjack can be implemented
+by our general protocol ,i.e. in the FCG-hybrid model (Sect. 3).
+– A highly efficient protocol πCG for card games which realizes FCG along with
+optimized Protocols πCG−PRE and πCG−VRF (Theorems 1, 2 and 3).
+– A novel technique for coin tossing “extension” based on verifiable random
+functions (VRF) that is of independent interest (Sect. 5).
+We start by defining FCG, an ideal functionality that captures only games
+without secret state, which is adapted from the functionality for general card
+games with secret state proposed in Royale [14]. In order to show that such
+a restricted functionality still finds interesting applications, we show that the
+games of Blackjack and Baccarat can be implemented by FCG. Leveraging
+the fact the FCG only captures games without secret state, we construct
+protocols that rely on cheap primitives such as digital signatures and canonical
+random oracle based commitments, as opposed to the heavy zero knowledge and
+threshold cryptography machinery employed in previous works. Most notably,
+48 B. David et al.
+our approach eliminates the need for expensive card shuffling procedure relying
+on zero-knowledge proofs of shuffle correctness. In fact, no card shuffling
+procedure is needed in Protocol πCG and Protocol πCG−VRF, where card values
+are selected on the fly during the Open Card procedure. Our basic protocol πCG
+simply selects the value of each (publicly) opened card from a set of card values
+using randomness obtained by a simple commit-and-open coin tossing, which
+requires two rounds. Later we show that we perform the Open Card operation
+in one sigle round given a cheap preprocessing phase. In order to perform this
+optimization, we introduce a new technique that allows for a single coin tossing
+performed during the Check-in procedure to be later “extended” in a single
+round with the help of a VRF, obtaining fresh randomness for each Open Card
+operation.
+Related Works. Our results are most closely relate to Royale [14], the currently
+most efficient protocol for general card games with secret state, which employs
+a mechanism for enforcing financial rewards and penalties following the stateful
+contract approach of Bentov et al. [4]. In our work, we restrict the model
+of Royale to capture only games without secret state but maintain the same
+approach for rewards/penalties enforcement based on stateful contracts. As an
+advantage of restricting our model to this specific class of games, we eliminate the
+need for expensive card suffling procedures while constructing very cheap Open
+Card procedures. Moreover, we are able to construct protocols that only require
+digital signatures and simple random oracle based commitments (as well as VRFs
+for one of our optimizations), achieving much higher efficiency than Royale, as
+shown in Sect. 6. Our protocols enjoy much better efficiency for the recovery
+phase than Royale, since we employ the same compact checkpoint witnesses
+but achieve much lower communication complexity, meaning that the protocol
+messages that must be sent to the stateful contract (i.e. posted on a blockchain)
+are much shorter than those of Royale.
+2 Preliminaries
+We denote the security parameter by κ. For a randomized algorithm F , y
+$←
+F (x; r) denotes running F with input x and its random coins r, obtaining an
+output y. If r is not specified it is assumed to be sampled uniformly at random.
+We denote sampling an element x uniformly at random from a set X (resp.
+a distribution Y) by x
+$← X (resp. y
+$← Y). We denote two computationally
+indistinguishable ensembles of binary random variables X and Y by X ≈c Y .
+Security Model: We prove our protocols secure in the Universal Composability
+(UC) framework introduced by Canetti in [6]. We consider static malicious
+adversaries, who can arbitrarily deviate from the protocol but must corrupt
+parties before execution starts, having the corrupted (or honest) parties
+remain so throughout the execution. It is a well-known fact that UC-secure
+21 - Bringing Down the Complexity: Fast Composable Protocols 49
+two-party and multiparty protocols for non trivial functionalities require a
+setup assumption [7]. We assume that parties have access to a random oracle
+functionality FRO, a digital signature functionality FDSIG, a verifiable random
+function functionality FVRF and a smart contract functionality FSC. For further
+details on the UC framework as well as on the ideal functionalities, we refer the
+reader to [6] and to the full version of this paper [13].
+Verifiable Random Functions: Verifiable random functions (VRF) are a key
+ingredient of one of our optimized protocols. In order to provide a modular
+construction in the UC framework, we model VRFs as an ideal functionality
+FVRF that captures the main security guarantees for VRFs, which are usually
+modeled in game based definitions. While a VRF achieving the standard VRF
+security definition or even the simulatable VRF notion of [9] is not sufficient to
+realize FVRF, it has been shown in [15] that this functionality can be realized
+in the random oracle model under the CDH assumption by a scheme based on
+the 2-Hash-DH verifiable oblivious pseudorandom function construction of [16].
+We refer interested readers to [15] and the full version of this paper [13] for the
+definition of functionality FVRF and further discussion of its implementation.
+Stateful Contracts: We employ an ideal functionality FSC that models a
+stateful contract, following the approach of Bentov et al. [4]. We use the
+functionality FSC defined in [14] and presented in Fig. 1. This functionality is used
+to ensure correct protocol execution, enforcing rewards distribution for honest
+parties and penalties for cheaters. Basically, it provides a “Check-in” mechanism
+for players to deposit betting and collateral funds, a “Check-out” mechanism for
+ensuring that players receive their rewards according to the game outcome and
+a Recovery mechanism for identifying (and punishing) cheaters. After check-in,
+if a player suspects cheating, it can complain to FSC by requesting the Recovery
+phase to be activated, during which FSC mediates protocol execution, verifying
+that each player generates valid protocol messages. If any player is found to be
+cheating, FSC penalizes the cheaters, distributing their collateral funds among
+the honest players and ending the execution. It is important to emphasize that
+the FSC functionality can be easily implemented via smart contracts over a
+blockchain, such as Ethereum [5]. Moreover, our construction (Protocol πCG)
+requires only simple operations, i.e. verification of signatures and of random
+oracle outputs. A regular honest execution of our protocol is performed entirely
+off-chain, without intervention of the contract.
+3 Modeling Card Games Without Secret State
+Before presenting our protocols, we must formally define security for card games
+without secret state. We depart from the framework introduced in Royale [14]
+for modeling general card games (which can include secret state), restricting
+the model to the case of card games without secret state. In order to showcase
+50 B. David et al.
+Functionality FSC
+The functionality is executed with players P1, . . . , Pn and is parametrized by a
+timeout limit τ , and the values of the initial stake t, the compensation q and the
+security deposit d ≥ (n − 1)q. There is an embedded program GR that represents
+the game’s rules and a protocol verification mechanism pv.
+Players Check-in: When execution starts, FSC waits to receive from each
+player Pi the message (checkin, sid, Pi, coins(d + t), SIG.vki) containing the nec-
+essary coins and its signature verification key. Record the values and send
+(checkedin, sid, Pi, SIG.vki) to all players. If some player fails to check-in within
+the timeout limit τ or if a message (checkin-fail, sid) is received from any player,
+then send (compensation, coins(d + t)) to all players who checked in and halt.
+Player Check-out: Upon receiving (checkout-init, sid, Pj) from Pj , send
+(checkout-init, sid, Pj) to all players. Upon receiving (checkout, sid,
+Pj , payout, σ1, . . . , σn) from Pj , verify that σ1, . . . , σn are valid signatures
+by the players P1, . . . , Pn on (CHECKOUT|payout) with respect to FDSIG. If all
+tests succeed, for i = 1, . . . , n, send (payout, sid, Pi, coins(w)) to Pi, where
+w = payout[i] + d, and halt.
+Recovery: Upon receiving a recovery request (recovery, sid) from a player
+Pi, send the message (request, sid) to all players. Upon getting a message
+(response, sid, Pj ,Checkpointj , procj) from some player Pj with checkpoint wit-
+nesses (which are not necessarily relative to the same checkpoint as the ones received
+from other players) and witnesses for the current procedure; or an acknowledge-
+ment of the witnesses previous submitted by another player, forward this message
+to the other players. Upon receiving replies from all players or reaching the timeout
+limit τ , fix the current procedure by picking the most recent checkpoint that has
+valid witnesses (i.e. the most recent checkpoint witness signed by all players Pi).
+Verify the last valid point of the protocol execution using the current procedure’s
+witnesses, the rules of the game GR, and pv. If some player Pi misbehaved in the
+current phase (by sending an invalid message), then send (compensation, coins(d+
+q + balance[j] + bets[j])) to each Pj �= Pi, send the leftover coins to Pi and halt.
+Otherwise, proceed with a mediated execution of the protocol until the next check-
+point using the rules of the game GR and pv to determine the course of the actions
+and check the validity of the answer. Messages (nxt-stp, sid, Pi, proc, round) are
+used to request from player Pi the protocol message for round round of proce-
+dure proc according to the game’s rules specified in GR, who answer with messages
+(nxt-stp-rsp, sid, Pi, proc, round,msg), where msg is the requested protocol mes-
+sage. All messages (nxt-stp, sid, . . .) and (nxt-stp-rsp, sid, . . .) are delivered to
+all players. If during this mediated execution a player misbehaves or does not an-
+swer within the timeout limit τ , penalize him and compensate the others as above,
+and halt. Otherwise send (recovered, sid, proc,Checkpoint), to the parties once
+the next checkpoint Checkpoint is reached, where proc is the procedure for which
+Checkpoint was generated.
+Fig. 1. The stateful contract functionality used by the secure protocol for card games
+based on Royale [14].
+21 - Bringing Down the Complexity: Fast Composable Protocols 51
+the applicability of our model to popular games, we further present game rule
+programs for Blackjack and Baccarat, which paramterize our general card game
+functionality for realizing these games.
+Modeling General Games Without Secret State. We present an ideal
+functionality FCG for card games without secret state in Fig. 2. Our ideal
+functionality is heavily based on the FCG for games with secret state presented
+in Royale [14]. We define a version of FCG that only captures games without
+secret state, allowing us to realize it with a lightweight protocol. This version
+has the same structure and procedures as the FCG presented in Royale, except
+for the procedures that require secret state to be maintained. Namely, we
+model game rules with an embedded program GR that encodes the rules of
+the game to be implemented. FCG offers mechanisms for GR to specify the
+distribution of rewards and financially punish cheaters. Additionally, it offers
+a mechanism for GR to communicate with the players in order to request actions
+(e.g. bets) and publicly register their answers to such requests. In contrast to
+the model of Royale and previous protocols focusing on poker, FCG only offers
+two main card operations: shuffling and public opening of cards. Restricting
+FCG to these operations captures the fact that only games without secret state
+can be instantiated and allows for realizing this functionality with very efficient
+protocols. Notice that all actions announced by players are publicly broadcast
+by FCG and that players cannot draw closed cards (which might never be
+revealed in the game, constituting a secret state). As in Royale, FCG can be
+extended with further operations (e.g. randomness generation), incorporating
+ideal functionalities that model these operations. However, differently from
+Royale, these operations cannot rely on the card game keeping a secret state.
+Formalizing and Realizing Blackjack and Baccarat. In order to illustrate
+the usefulness of our general functionality FCG for games without secret state,
+we show that it can be used to realize the games of Blackjack and Baccarat.
+In the full version of this work [13], we define game rule programs GRblackjack
+and GRblackjack for Blackjack and Baccarat, respectively, which parameterize FCG
+to realize these games. Both these games requires a special player that acts as
+the “dealer” or “house”, providing funds that will be used to reward the other
+players in case they win bets. We remark that the actions taken by this special
+player are pre-determined in both GRblackjack and GRblackjack, meaning that the
+party representing the “dealer” or “house” does not need to provide inputs (e.g.
+bets or actions) to the protocol, except for providing its funds. While GRblackjack
+and GRblackjack model the behavior of this special player as an individual party
+(which would be required to provide the totality of such funds), these programs
+can be trivially modified to require each player to provide funds that will be
+pooled to represent the “dealer’s” or “house’s” funds, since all of their actions
+are deterministic and already captured by GRblackjack and GRblackjack.
+52 B. David et al.
+Functionality FCG
+The functionality is executed with players P1, . . . , Pn and is parameterized by a
+timeout limit τ , and the values of the initial stake t, the security deposit d and of
+the compensation q. There is an embedded program GR that represents the rules
+of the game and is responsible for mediating the execution: it requests actions from
+the players, processes their answers, and invokes the procedures of FCG. FCG pro-
+vides a check-in procedure that is run in the beginning of the execution, a check-out
+procedure that allows a player to leave the game (which is requested by the player
+via GR) and a compensation procedure that is invoked by GR if some player misbe-
+haves/aborts. It also provides a channel for GR to request public actions from the
+players and card operations as described below. GR is also responsible for updating
+the vectors balance and bets. Whenever a message is sent to S for confirmation or
+action selection, S should answer, but can always answer (abort, sid), in which
+case the compensation procedure is executed; this option will not be explicitly
+mentioned in the functionality description henceforth.
+Check-in: Executed during the initialization, it waits for a check-in message
+(checkin, sid, coins(d + t)) from each Pi and sends (checkedin, sid, Pi) to the re-
+maining players and GR. If some player fails to check-in within the timeout limit τ ,
+then allow the players that checked-in to dropout and reclaim their coins. Initialize
+vectors balance = (t, . . . , t) and bets = (0, . . . , 0).
+Check-out: Whenever GR requests the players’s check-out with payouts specified
+by vector payout, send (checkout, sid, payout) to S. If S answers (checkout, sid,
+payout), send (payout, sid, Pi, coins(d + payout[i])) to each Pi and halt.
+Compensation: This procedure is triggered whenever S answers a request for
+confirmation of an action with (abort, sid). Send (compensation, sid, coins(d +
+q + balance[i] + bets[i])) to each active honest player Pi. Send the remaining locked
+coins to S and stop the execution.
+Request Action: Whenever GR requests an action with description act − desc
+from Pi, send a message (action, sid, Pi, act−desc) to the players. Upon receiving
+(action-rsp, sid, Pi, act − rsp) from Pi, forward it to all other players and GR.
+Create Shuffled Deck: Whenever GR requests the creation of a shuffled deck of
+cards containing cards with values v1, . . . , vm, choose the next m free identifiers
+id1, . . . , idm, representing cards as pairs (id1, v1), . . . , (idm, vm). Choose a random
+permutation Π that is applied to the values (v1, . . . , vm) to obtain the updated cards
+(id1, v′
+1), . . . , (idm, v′
+m) such that (v′
+1, . . . , v
+′
+m) = Π(v1, . . . , vm). Send the message
+(shuffled, sid, v1, . . . , vm, id1, . . . , idm) to all players and GR.
+Open Card: Whenever GR requests to reveal the card (id, v) in public, read the
+card (id, v) from the memory and send the message (card, sid, id, v) to S. If S
+answers (card, sid, id, v), forward this message to all players and GR.
+Fig. 2. Functionality for card games without secret state FCG based on [14].
+21 - Bringing Down the Complexity: Fast Composable Protocols 53
+Protocol πCG (Part 1)
+Protocol πCG is parametrized by a security parameter 1κ, a timeout limit τ , the
+values of the initial stake t, the compensation q, the security deposit d ≥ (n − 1)q
+and an embedded program GR that represents the rules of the game. In all queries
+(sign, sid, m) to FDSIG, the message m is implicitly concatenated with NONCE and
+cnt, where NONCE
+$← {0, 1}κ is a fresh nonce (sampled individually for each query)
+and cnt is a counter that is increased after each query. Every player Pi keeps
+track of used NONCE values (rejecting signatures that reuse nonces) and implicitly
+concatenate the corresponding NONCE and cnt values with message m in all queries
+(verify, sid, m, σ, SIG.vk′) to FDSIG. Protocol πCG is executed by players P1, . . . , Pn
+interacting with functionalities FSC, FRO and FDSIG as follows:
+– Checkpoint Witnesses: After the execution of a procedure, the players store
+a checkpoint witness that consists of the lists CO and CC , the vectors balance
+and bets as well as a signature by each of the other players on the concatenation
+of all these values. Each signature is generated using FDSIG and all players check
+all signatures using the relevant procedure of FDSIG. Old checkpoint witnesses
+are deleted. If any check fails for Pi, he proceeds to the recovery procedure.
+– Recovery Triggers: All signatures and proofs in received messages are verified
+by default. Players are assumed to have loosely synchronized clocks and, after
+each round of the protocol starts, players expect to receive all messages sent
+in that round before a timeout limit τ . If a player Pi does not receive an
+expected message from a player Pj in a given round before the timeout limit τ ,
+Pi considers that Pj has aborted. After the check-in procedure, if any player
+receives an invalid message or considers that another player has aborted, it
+proceeds to the recovery procedure.
+– Check-in: Every player Pi proceeds as follows:
+1. Send (keygen, sid) to FDSIG, receiving (verification key, sid, SIG.vki).
+2. Send (checkin, sid, Pi, coins(d + t), SIG.vki) to FSC.
+3. Upon receiving (checkedin, sid, Pj , SIG.vkj) from FSC for all j �= i, j =
+1, . . . , n, initialize the internal lists of open cards CO and closed cards CC .
+We assume parties have a sequence of unused card id values (e.g. a counter).
+Initialize vectors balance[j] = t and bets[j] = 0 for j = 1, . . . , n. Output
+(checkedin, sid).
+4. If Pi fails to receive (checkedin, sid, Pj , SIG.vkj) from FSC for another
+party Pj within the timeout limit τ , it requests FSC to dropout and receive
+its coins back.
+– Compensation: This procedure is activated if the recovery phase of FSC de-
+tects a cheater, causing honest parties to receive refunds plus compensation and
+the cheater to receive the remainder of its funds after honest parties are com-
+pensated. Upon receiving (compensation, sid, Pi, coins(w)) from FSC, a player
+Pi outputs this message and halts.
+Fig. 3. Part 1 of Protocol πCG.
+54 B. David et al.
+Protocol πCG (Part 2)
+– Check-out: A player Pj can initiate the check-out procedure and leave the
+protocol at any point that GR allows, in which case all players will receive the
+money that they currently own plus their collateral refund. The players proceed
+as follows:
+1. Pj sends (checkout-init, sid, Pj) to FSC.
+2. Upon receiving (checkout-init, sid, Pj) from FSC, each Pi (for i =
+1, . . . , n) sends (sign, sid, (CHECKOUT|payout)) to FDSIG (where payout is a
+vector containing the amount of money that each player will receive accord-
+ing to GR), obtaining (signature, sid, (CHECKOUT|payout), σi) as answer.
+Player Pi sends σi to Pj .
+3. For all i �= j, Pj sends (verify, sid, (CHECKOUT|payout), σi, SIG.vki) to
+FDSIG, where payout is computed locally by Pj . If FDSIG answers all
+queries (verify, sid, (CHECKOUT|payout), σi, SIG.vki) with (verified, sid,
+(CHECKOUT|payout), 1), Pj sends (checkout, sid, payout, σ1, . . . , σn) to FSC.
+Otherwise, it proceeds to the recovery procedure.
+4. Upon receiving (payout, sid, Pi, coins(w)) from FSC, Pi outputs this mes-
+sage and halts.
+– Executing Actions: Each Pi follows GR that represents the rules of the game,
+performing the necessary card operations in the order specified by GR. If GR
+request an action with description act − desc from Pi, all the players output
+(act, sid, Pi, act − desc) and Pi executes any necessary operations. Pi broad-
+casts (action-rsp, sid, Pi, act − rsp, σi), where act − rsp is his answer and σi
+his signature on act − rsp, and outputs (action-rsp, sid, Pi, act − rsp). Upon
+receiving this message, all other players check the signature, and if it is valid
+output (action-rsp, sid, Pi, act − rsp). If a player Pj believes cheating is hap-
+pening, he proceeds to the recovery procedure.
+– Tracking Balance and Bets: Every player Pi keeps a local copy of the
+vectors balance and bets, such that balance[j] and bets[j] represent the balance
+and current bets of each player Pj , respectively. In order to keep balance and
+bets up to date, every player proceeds as follows:
+• At each point that GR specifies that a betting action from Pi takes place,
+player Pi broadcasts a message (bet, sid, Pi, beti), where beti is the value
+of its bet. It updates balance[i] = balance[i] − bi and bets[i] = bets[i] + bi.
+• Upon receiving a message (bet, sid, Pj , betj) from Pj , player Pi sets
+balance[j] = balance[j] − bj and bets[j] = bets[j] + bj .
+• When GR specifies a game outcome where player Pj receives an amount
+payj and has its bet amount updated to b′
+j , player Pi sets balance[j] =
+balance[j] + payj and bets[j] = b′
+j .
+– Create Shuffled Deck: When requested by GR to create a shuffled deck of
+cards containing cards with values v1, . . . , vm, each player Pi chooses the next
+m free identifiers id1, . . . , idm and, for j = 1, . . . , m, stores (idj , ⊥) in CO and
+vj in CC . Pi outputs (shuffled, sid, v1, . . . , vm, id1, . . . , idm).
+Fig. 4. Part 2 of Protocol πCG.
+21 - Bringing Down the Complexity: Fast Composable Protocols 55
+Protocol πCG (Part 3)
+– Open Card: Every player Pi proceeds as follows to open card with id id:
+1. Organize the card values in CC in alphabetic order obtaining an ordered
+list CC = {v1, . . . , vm}.
+2. Sample a random ri
+$← {0, 1}κ and send (sid, ri) to FRO, receiving (sid, hi)
+as response. Broadcast (sid, hi).
+3. After all (sid, hj) for j �= i and j = 1, . . . , n are received, broadcast (sid, ri).
+4. For j = 1, . . . , n and j �= i, send (sid, rj) to FRO, receiving (sid, h′
+j) as
+response and checking that hj = h′
+j . If all checks succeed, compute k =∑
+i ri mod m, proceeding to the Recovery phase otherwise. Define the
+opened card value as vk, remove vk from CC and update (id, ⊥) in CO to
+(id, vk).
+– Recovery: Player Pi proceeds as follows:
+• Starting Recovery: Player Pi sends (recovery, sid) to FSC if it starts the
+procedure.
+• Upon receiving a message (request, sid) from FSC, every player Pi sends
+(response, sid, Pi,Checkpointi, proci) to FSC, where Checkpointi is Pi’s lat-
+est checkpoint witness and proci are Pi’s witnesses for the protocol proce-
+dure that started after the latest checkpoint; or acknowledges the witnesses
+sent by another party if it is the same as the local one.
+• Upon receiving a message (nxt-stp, sid, Pi, proc, round) from FSC, player
+Pi sends (nxt-stp-rsp, sid, Pi, proc, round,msg) to FSC, where msg is the
+protocol message that should be sent at round round of procedure proc of
+the protocol according to GR.
+• Upon receiving a message (nxt-stp-rsp, sid, Pj , proc, round,msg) from
+FSC, every player Pi considers msg as the protocol message sent by Pj in
+round of procedure proc and take it into consideration for future messages.
+• Upon receiving a message (recovered, sid, proc,Checkpoint) from FSC, ev-
+ery player Pi records Checkpoint as the latest checkpoint and continues
+protocol execution according to the game rules GR.
+Fig. 5. Part 3 of Protocol πCG.
+4 The Framework
+Our framework can be used to implement any card game without secret state
+where cards that were previously randomly shuffled are publicly revealed. Instead
+of representing cards as ciphertexts as in previous works, we exploit the fact
+that publicly opening a card from a set of previously randomly shuffled cards is
+equivalent to randomly sampling card values from an initial set of card values.
+The main idea is that each opened card has its value randomly picked from a
+list of “unopened cards” using randomness generated by a coin tossing protocol
+executed by all parties. This protocol requires no shuffling procedure per se and
+requires 2 rounds for opening each card (required for executing coin tossing).
+Later on, we will show that this protocol can be optimized in different ways, but
+its simple structure aids us in describing our basic approach.
+56 B. David et al.
+When the game rules GR specify that a card must be created, it is added to
+a list of cards that have not been opened CC . When a card is opened, the parties
+execute a commit-and-open coin tossing protocol to generate randomness that is
+used to uniformly pick a card from the list of unopened cards CC , removing the
+selected card from CC and adding it to a list of opened cards CO. This technique
+works since every card is publicly opened and no player gets to privately learn
+the value of a card with the option of not revealing it to the other players,
+which allows the players to keep the list of unopened cards up-to-date. We
+implement the necessary commitments with the canonical efficient random oracle
+based construction, where a commitment is simply an evaluation of the random
+oracle on the commitment message concatenated with some randomness and
+the opening consists of the message and randomness themselves. This simple
+construction achieves very low computational and communication complexities
+as computing a commitment (and verifying and opening) requires only a single
+call to the random oracle and the commitment (and opening) can be represented
+by a string of the size of the security parameter. Besides being compact, these
+commitments are publicly verifiable, meaning that any third party party can
+verify the validity of an opening, which comes in handy for verifying that the
+protocol has been correctly executed.
+In order to implement financial rewards/penalties enforcement, our protocol
+relies on a stateful contract functionality FSC that provides a mechanism for the
+players to deposit betting and collateral funds, enforcing correct distribution
+of such funds according to the protocol execution. If the protocol is correctly
+executed, the rewards corresponding to a game outcome are distributed among
+the players. Otherwise, if a cheater is detected, FSC distributes the cheater’s
+collateral funds among honest players, who also receive a refund of their betting
+and collateral funds. After each game action (e.g. betting and card opening),
+all players cooperate to generate a checkpoint witness showing that the protocol
+has been correctly executed up to that point. This compact checkpoint witness
+is basically a set of signatures generated under each player’s signing key on the
+opened and unopened cards lists and vectors representing the players’ balance
+and bets. In case a player suspects cheating, it activates the recovery procedure
+of FSC with its latest checkpoint witness, requiring players to provide their
+most up-to-date checkpoint witnesses to FSC (or agree with the one that has
+been provided). After this point, FSC mediates protocol execution, receiving
+from all players the protocol messages to be sent after the latest checkpoint
+witness, ensuring their validity and broadcasting them to all players. If the
+protocol proceeds until next checkpoint witness is generated, the execution is
+again carried out directly by the players without involving FSC. Otherwise, if a
+player is found to be cheating (by failing to provide their messages or providing
+invalid ones), FSC refunds the honest parties and distributes among them the
+cheater’s collateral funds. Protocol πCG is presented in Figs. 3, 4 and 5.
+Security Analysis: The security of protocol πCG in the Universal
+Composability framework is formally stated in Theorem 1. In order to prove this
+21 - Bringing Down the Complexity: Fast Composable Protocols 57
+theorem we construct a simulator such that an ideal execution with this simulator
+and functionality FCG is indistinguishable from a real execution of πCG with
+any adversary. The main idea behind this simulator is that it learns from FCG
+the value of each opened card, “cheating” in the commit-and-open coin tossing
+procedure in order to force it to yield the right card value. The simulator can
+do that since it knows the values that each player has committed to with the
+random oracle based commitments and it can equivocate the opening of its own
+commitment, forcing the coin tossing to result in an arbitrary output, yielding an
+arbitrary card value. The simulation for the mechanisms for requesting players
+actions and enforcing financial rewards/penalties follows the same approach as in
+Royale [14]. Namely, the simulator follows the steps of an honest user and makes
+FCG fail if a corrupted party misbehaves, subsequently activating the recovery
+procedure that results in cheating parties being penalized and honest parties
+being compensated.
+Theorem 1. For every static active adversary A who corrupts at most n −
+1 parties, there exists a simulator S such that, for every environment Z, the
+following relation holds:
+IDEALFCG,S,Z ≈c HYBRIDFRO,FDSIG,FSC
+πCG,A,Z .
+The proof is presented in the full version of this work [13].
+5 Optimizing Our Protocol
+In this section, we construct optimized protocols that improve on the round
+complexity of the open card operation, which represents the main efficiency
+bottleneck of our framework. The basic protocol constructed in the previous
+section requires a whole “commit-then-open” coin tossing to be carried out for
+each card that is opened. Even though this coin tossing can be implemented
+efficiently in the random oracle model, its inherent round complexity implies that
+each card opening requires 2 rounds. We show how the open card operation can
+be executed with only 1 round while also improving communication complexity
+but incurring a higher local space complexity (linear in the number of cards)
+for each player in the Shuffle Card operation. Next, we show how to achieve the
+same optimal round complexity with a low constant local space complexity.
+Lower Round and Communication Complexities: A straightforward
+way to execute the Open Card operation in one round is to pre-process the
+necessary commitments during the Shuffle Cards operation. Basically, in order
+to pre-process the opening of m cards, all players broadcast m commitments
+to random values in the Shuffle Cards phase. Later on, every time the Open
+Card operation is executed, each player broadcasts an opening to one of their
+previously sent commitments. Besides making it possible to open cards in only
+one round, this simple technique reduces the communication complexity of
+58 B. David et al.
+Protocol πCG−PRE
+– Create Shuffled Deck: When requested by GR to create a shuffled deck
+of cards containing cards with values v1, . . . , vm, each player Pi creates
+CO = {(id1, ⊥), . . . , (idm, ⊥)} and CC = {v1, . . . , vm} following the instruc-
+tions of πCG. Moreover, for l = 1, . . . , m, Pi samples a random ri,l
+$← {0, 1}κ
+and sends (sid, ri,l) to FRO, receiving (sid, hi) in response. Pi broadcasts
+(sid, hi,1, . . . , hi,m). After all (sid, hj,1, . . . , hj,m) for j �= i and j = 1, . . . , n
+are received, Pi outputs (shuffled, sid, v1, . . . , vm, id1, . . . , idm).
+– Open Card: Each player Pi proceeds as follows to open card with id id:
+1. Organize the card values in CC in alphabetic order obtaining an ordered
+list CC = {v1, . . . , vm}.
+2. Broadcast (sid, ri,l), where hi,l is the next available (still closed) commit-
+ment generated in the Shuffle Cards operation.
+3. For j = 1, . . . , n and j �= i, send (sid, rj,l) to FRO, receiving (sid, h′
+j,l)
+in response and checking that hj,l = h′
+j,l. If all checks succeed, compute
+k =
+∑
+i ri mod m, proceeding to the Recovery phase otherwise. Define the
+opened card value as vk, remove vk from CC and update (id, ⊥) in CO to
+(id, vk).
+Fig. 6. Protocol πCG−PRE (only phases that differ from Protocol πCG are described).
+the Open Card operation, since each player only broadcasts one opening per
+card (but no commitment). However, it requires each player to store (n − 1)m
+commitments (received from other players) as all well as m openings (for their
+own commitments). Protocol πCG−PRE is very similar to Protocol πCG, only
+differing in the Shuffle Card and Open Card operations, which are presented
+in Fig. 6. The security of this protocol is formally stated in Theorem 2.
+Theorem 2. For every static active adversary A who corrupts at most n −
+1 parties, there exists a simulator S such that, for every environment Z, the
+following relation holds:
+IDEALFCG,S,Z ≈c HYBRIDFRO,FDSIG,FSC
+πCG−PRE,A,Z .
+The proof is very similar to that of Theorem 1, a sketch is presented in the
+full version of this work [13].
+Lower Round and Space Complexities via Coin Tossing Extension:
+Even though the previous optimization reduces the round complexity of our
+original protocol, it introduces a high local space complexity overhead, since
+each party needs to store the preprocessed commitments. In order to achieve
+low round complexity without a space complexity overhead, we show that a
+single coin tossing can be “extended” to open an unlimited number of cards.
+With this technique, we first run a coin tossing in the Check-in phase, later
+extending it to obtain new randomness used to pick each card that is opened.
+21 - Bringing Down the Complexity: Fast Composable Protocols 59
+Protocol πCG−VRF
+– Check-in: When requested by GR to shuffle cards with identifiers (id1, . . . , idm)
+to be shuffled, each Pi proceeds as follows:
+1. Execute the steps of the Check-in phase of πCG.
+2. Send (KeyGen, sid) to FVRF, receiving (Verification Key, sid,VRF.vki)
+in response. Sample a random seedi
+$← {0, 1}κ and send (sid, seedi) to
+FRO, receiving (sid, hi) in response. Broadcast (sid,VRF.vki, hi).
+3. After all (sid,VRF.vkj , hj) for j �= i and j = 1, . . . , n are received, broad-
+cast (sid, seedi).
+4. For j = 1, . . . , n and j �= i, send (sid, seedj) to FRO, receiving (sid, h′
+j)
+in response and checking that hj = h′
+j . If all checks succeed, compute
+seed =
+∑
+i seedi, proceeding to the Recovery phase otherwise. Set cnt = 1
+and broadcast message (shuffled, sid, id1, . . . , idm).
+– Open Card: Every player Pi proceeds as follows to open card with id id:
+1. Organize the card values in CC in alphabetic order obtaining an ordered
+list CC = {v1, . . . , vm}.
+2. Send (EvalProve, sid, seed|cnt) to FVRF, receiving (Evaluated, sid,
+yi, πi) in response. Broadcast (sid, yi, πi).
+3. For j = 1, . . . , n and j �= i, send (Verify, sid, seed|cnt, yj , πj ,VRF.vkj) to
+FVRF, checking that FVRF answers with (Verified, sid, seed|cnt, yj , πj , 1).
+If all checks succeed, compute k =
+∑
+i yi mod m, proceeding to the Re-
+covery phase otherwise. Define the opened card value as vk, remove vk from
+CC , update (id, ⊥) in CO to (id, vk) and increment the counter cnt.
+Fig. 7. Protocol πCG−VRF (only phases that differ from Protocol πCG are described).
+We develop a new technique for extending coin tossing based on verifiable
+random functions, which is at the core of our optimized protocol. The main idea
+is to first have all parties broadcast their VRF public keys and execute a single
+coin tossing used to generate a seed. Every time a new random value is needed,
+each party evaluates the VRF under their secret key using the seed concatenated
+with a counter as input, broadcasting the output and accompanying proof. Upon
+receiving all the other parties’ VRF output and proof, each party verifies the
+validity of the output and defines the new random value as the sum of all outputs.
+Protocol πCG−VRF is very similar to Protocol πCG, only differing in the Shuffle
+Card and Open Card operations, which are presented in Fig. 7. The security of
+this protocol is formally stated in Theorem 3.
+Theorem 3. For every static active adversary A who corrupts at most n −
+1 parties, there exists a simulator S such that, for every environment Z, the
+following relation holds:
+IDEALFCG,S,Z ≈c HYBRIDFRO,FDSIG,FVRF,FSC
+πCG−VRF,A,Z .
+The proof is very similar to that of Theorem 1, a sketch is presented in the
+full version of this work [13].
+60 B. David et al.
+6 Concrete Complexity Analysis
+In this section, we analyse our protocols’ computational, communication, round
+and space complexities, showcasing the different trade-offs obtained by each
+optimization. We compare our protocols with Royale [14], which is the currently
+most efficient protocol for general card games (with secret state) that enforces
+financial rewards and penalties. We focus on the Create Shuffled Deck and Open
+Card operations, which represent the main bottlenecks in card game protocols.
+Interestingly, our protocols eliminate the need for expensive zero knowledge
+proofs of shuffle correctness in the Create Shuffled Card, which are the most
+expensive components in previous works. Protocol πCG only requires a simple
+coin tossing to perform the Open Card procedure at the cost of one extra round
+(in comparison to previous protocols), while our optimized protocols πCG−PRE
+and πCG−VRF implement this operation with a single round.
+Table 1. Complexity comparison of the Shuffle Cards and Open Card operation of
+Protocols πCG, πCG−PRE and πCG−VRF with n and m cards, excluding checkpoint witness
+signature generation costs. The cost of calling the random oracle is denoted by H and
+the cost of a modular exponentiation is denoted by Exp. The size of elements of G and
+Z are denoted by |G| and |Z|, respectively.
+Operation Protocol Computational Communication Space Rounds
+Open card πCG n H 2nκ 0 2
+πCG−PRE (n − 1) H nκ nmκ 1
+πCG−VRF 3n H
++(4n − 1) Exp
+3nκ + n |Z|) n |G| + κ 1
+Royale [14] n H +4n Exp n |G| + 2n |Z| 2m |G| 1
+Create
+shuffled deck
+πCG 0 0 0 0
+πCG−PRE m H nmκ 0 1
+πCG−VRF 0 0 0 0
+Royale [14] n H +
+(2 log(�√m�)
++4n −
+2)m Exp
+n(2m + �√m�) G
++5n�√m� Z
+0 n
+We estimate the computational complexity of the Shuffle Cards and Open
+Card operations of our protocols in terms of the number of RO calls and
+modular exponentiations. We present complexity estimates excluding the cost
+of generating the checkpoint witness signatures, since these costs are the same
+in both Royale and our protocols (1 signature generation and n − 1 signature
+verifications). The communication and space complexities are estimated in terms
+of the number of strings of size κ, and elements from G and Z. In order to estimate
+concrete costs, we assume that FRO is implemented by a hash function with κ
+21 - Bringing Down the Complexity: Fast Composable Protocols 61
+bits outputs. Moreover, we assume that FVRF is implemented by the 2-Hash-DH
+verifiable oblivious pseudorandom function construction of [16] as discussed in
+Sect. 2. This VRF construction requires 1 modular exponentiation to generate a
+key pair, 3 modular exponentiations and 3 calls to the random oracle to evaluate
+an input and generate a proof, and 4 modular exponentiations and 3 calls to the
+random oracle to verify an output given a proof. A verification key is one element
+of a group G and the output plus proof consist of 3 random oracle outputs and
+an element of a ring Z of same order as G. The estimates for Royale are taken
+from [14].
+Our concrete complexity estimates are presented in Table 1. Notice that
+our basic protocol πCG and our optimized protocol πCG−VRF do not require a
+Create Shuffled Deck operation at all, while Protocol πCG−PRE requires a cheap
+Create Shuffled Cards operation where a batch of commitments to random
+values are performed. In fact, our protocols eliminate the need for expensive
+zero knowledge proofs of shuffle correctness, which is the main bottleneck in
+previous works such as Royale [14], the currently most efficient protocol for card
+games with secret state. Protocol πCG−PRE improves on the round complexity
+of the Open Card operation of protocol πCG, requiring only 1 round and the
+same computational complexity but incurring in a larger space complexity as
+each player must locally store nmκ bits to complete this operation, since they
+need to store a number of pre-processed commitments that depends on both
+the number of players and the number of cards in the game. We solve this local
+storage issue with Protocol πCG−VRF, which employs our “coin tossing extension”
+technique to achieve local space complexity independent of the number of cards,
+which tends to be much larger than the number of players. We remark that the
+computational complexity of the Open Card operation of πCG−VRF is equivalent
+to that of Royale [14], while the communication and space complexities are much
+lower.
+References
+1. Andrychowicz, M., Dziembowski, S., Malinowski, D., Mazurek, �L.: Fair two-party
+computations via bitcoin deposits. In: Böhme, R., Brenner, M., Moore, T., Smith,
+M. (eds.) FC 2014. LNCS, vol. 8438, pp. 105–121. Springer, Heidelberg (2014).
+https://doi.org/10.1007/978-3-662-44774-1 8
+2. Andrychowicz, M., Dziembowski, S., Malinowski, D., Mazurek, L.: Secure
+multiparty computations on bitcoin. In: 2014 IEEE Symposium on Security and
+Privacy, pp. 443–458. IEEE Computer Society Press, May 2014
+3. Barnett, A., Smart, N.P.: Mental poker revisited. In: Paterson, K.G. (ed.)
+Cryptography and Coding 2003. LNCS, vol. 2898, pp. 370–383. Springer,
+Heidelberg (2003). https://doi.org/10.1007/978-3-540-40974-8 29
+4. Bentov, I., Kumaresan, R., Miller, A.: Instantaneous decentralized poker. In:
+Takagi, T., Peyrin, T. (eds.) ASIACRYPT 2017. LNCS, vol. 10625, pp. 410–440.
+Springer, Cham (2017). https://doi.org/10.1007/978-3-319-70697-9 15
+5. Buterin, V.: White paper (2013). https://github.com/ethereum/wiki/wiki/White-
+Paper. Accessed 12 May 2017
+https://doi.org/10.1007/978-3-662-44774-1_8
+https://doi.org/10.1007/978-3-540-40974-8_29
+https://doi.org/10.1007/978-3-319-70697-9_15
+https://github.com/ethereum/wiki/wiki/White-Paper
+https://github.com/ethereum/wiki/wiki/White-Paper
+62 B. David et al.
+6. Canetti, R.: Universally composable security: a new paradigm for cryptographic
+protocols. In: 42nd FOCS, pp. 136–145. IEEE Computer Society Press, October
+2001
+7. Canetti, R., Fischlin, M.: Universally composable commitments. In: Kilian, J. (ed.)
+CRYPTO 2001. LNCS, vol. 2139, pp. 19–40. Springer, Heidelberg (2001). https://
+doi.org/10.1007/3-540-44647-8 2
+8. Castellà-Roca, J., Sebé, F., Domingo-Ferrer, J.: Dropout-tolerant TTP-free mental
+poker. In: Katsikas, S., López, J., Pernul, G. (eds.) TrustBus 2005. LNCS, vol. 3592,
+pp. 30–40. Springer, Heidelberg (2005). https://doi.org/10.1007/11537878 4
+9. Chase, M., Lysyanskaya, A.: Simulatable VRFs with applications to multi-theorem
+NIZK. In: Menezes, A. (ed.) CRYPTO 2007. LNCS, vol. 4622, pp. 303–322.
+Springer, Heidelberg (2007). https://doi.org/10.1007/978-3-540-74143-5 17
+10. Crépeau, C.: A secure poker protocol that minimizes the effect of player coalitions.
+In: Williams, H.C. (ed.) CRYPTO 1985. LNCS, vol. 218, pp. 73–86. Springer,
+Heidelberg (1986). https://doi.org/10.1007/3-540-39799-X 8
+11. Crépeau, C.: A zero-knowledge poker protocol that achieves confidentiality of the
+players’ strategy or how to achieve an electronic poker face. In: Odlyzko, A.M.
+(ed.) CRYPTO 1986. LNCS, vol. 263, pp. 239–247. Springer, Heidelberg (1987).
+https://doi.org/10.1007/3-540-47721-7 18
+12. David, B., Dowsley, R., Larangeira, M.: Kaleidoscope: an efficient poker protocol
+with payment distribution and penalty enforcement. Cryptology ePrint Archive,
+Report 2017/899 (2017). http://eprint.iacr.org/2017/899
+13. David, B., Dowsley, R., Larangeira, M.: 21 - bringing down the complexity: fast
+composable protocols for card games without secret state. Cryptology ePrint
+Archive, Report 2018/303 (2018). https://eprint.iacr.org/2018/303
+14. David, B., Dowsley, R., Larangeira, M.: ROYALE: a framework for universally
+composable card games with financial rewards and penalties enforcement.
+Cryptology ePrint Archive, Report 2018/157 (2018). https://eprint.iacr.org/2018/
+157
+15. David, B., Gaži, P., Kiayias, A., Russell, A.: Ouroboros praos: an adaptively-secure,
+semi-synchronous proof-of-stake protocol. Cryptology ePrint Archive, Report
+2017/573 (2017). https://eprint.iacr.org/2017/573. (to appear in Eurocrypt 2018)
+16. Jarecki, S., Kiayias, A., Krawczyk, H.: Round-optimal password-protected secret
+sharing and T-PAKE in the password-only model. In: Sarkar, P., Iwata, T. (eds.)
+ASIACRYPT 2014. LNCS, vol. 8874, pp. 233–253. Springer, Heidelberg (2014).
+https://doi.org/10.1007/978-3-662-45608-8 13
+17. Kumaresan, R., Moran, T., Bentov, I.: How to use bitcoin to play decentralized
+poker. In: Ray, I., Li, N., Kruegel, C. (eds.) ACM CCS 2015, pp. 195–206. ACM
+Press, New York (2015)
+18. Schindelhauer, C.: A toolbox for mental card games. Technical report, University
+of Lübeck (1998)
+19. Sebe, F., Domingo-Ferrer, J., Castella-Roca, J.: On the security of a repaired
+mental poker protocol. In: Third International Conference on Information
+Technology: New Generations, pp. 664–668 (2006)
+20. Shamir, A., Rivest, R.L., Adleman, L.M.: Mental poker. In: Klarner, D.A. (ed.)
+The Mathematical Gardner, pp. 37–43. Springer, Boston (1981). https://doi.org/
+10.1007/978-1-4684-6686-7 5
+21. Wei, T.: Secure and practical constant round mental poker. Inf. Sci. 273, 352–386
+(2014)
+22. Wei, T., Wang, L.-C.: A fast mental poker protocol. J. Math. Cryptol. 6(1), 39–68
+(2012)
+https://doi.org/10.1007/3-540-44647-8_2
+https://doi.org/10.1007/3-540-44647-8_2
+https://doi.org/10.1007/11537878_4
+https://doi.org/10.1007/978-3-540-74143-5_17
+https://doi.org/10.1007/3-540-39799-X_8
+https://doi.org/10.1007/3-540-47721-7_18
+http://eprint.iacr.org/2017/899
+https://eprint.iacr.org/2018/303
+https://eprint.iacr.org/2018/157
+https://eprint.iacr.org/2018/157
+https://eprint.iacr.org/2017/573
+https://doi.org/10.1007/978-3-662-45608-8_13
+https://doi.org/10.1007/978-1-4684-6686-7_5
+https://doi.org/10.1007/978-1-4684-6686-7_5
+21 - Bringing Down the Complexity: Fast Composable Protocols 63
+23. Zhao, W., Varadharajan, V.: Efficient TTP-free mental poker protocols. In:
+International Conference on Information Technology: Coding and Computing
+(ITCC 2005) - Volume II, vol. 1, pp. 745–750, April 2005
+24. Zhao, W., Varadharajan, V., Mu, Y.: A secure mental poker protocol over the
+internet. In: Proceedings of the Australasian Information Security Workshop
+Conference on ACSW Frontiers 2003 - Volume 21, ACSW Frontiers 2003, pp.
+105–109, Darlinghurst, Australia. Australian Computer Society Inc. (2003)
+	21 - Bringing Down the Complexity: Fast Composable Protocols for Card Games Without Secret State
+	1 Introduction
+	1.1 Our Contributions
+	2 Preliminaries
+	3 Modeling Card Games Without Secret State
+	4 The Framework
+	5 Optimizing Our Protocol
+	6 Concrete Complexity Analysis
+	References

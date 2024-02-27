@@ -1,0 +1,1018 @@
+LNCS 4450 - New Chosen-Ciphertext Attacks on NTRU
+New Chosen-Ciphertext Attacks on NTRU
+Nicolas Gama1 and Phong Q. Nguyen2
+1 École normale supérieure, DI, 45 rue d’Ulm, 75005 Paris, France
+nicolas.gama@ens.fr
+2 CNRS/École normale supérieure, DI, 45 rue d’Ulm, 75005 Paris, France
+http://www.di.ens.fr/~pnguyen
+Abstract. We present new and efficient key-recovery chosen-ciphertext
+attacks on NTRUencrypt. Our attacks are somewhat intermediate be-
+tween chosen-ciphertext attacks on NTRUencrypt previously published
+at CRYPTO ’00 and CRYPTO ’03. Namely, the attacks only work in the
+presence of decryption failures; we only submit valid ciphertexts to the
+decryption oracle, where the plaintexts are chosen uniformly at random;
+and the number of oracle queries is small. Interestingly, our attacks can
+also be interpreted from a provable security point of view: in practice,
+if one had access to a NTRUencrypt decryption oracle such that the
+parameter set allows decryption failures, then one could recover the se-
+cret key. For instance, for the initial NTRU-1998 parameter sets, the
+output of the decryption oracle on a single decryption failure is enough
+to recover the secret key.
+1 Introduction
+NTRU [8] is one of the fastest public-key cryptosystems known, offering both en-
+cryption (under the name NTRUencrypt) and digital signatures (under the
+name NTRUSign [7]) using inexpensive operations on polynomials with small
+coefficients. Besides efficiency, another interesting feature of NTRU compared to
+traditional public-key cryptosystems based on factoring or discrete logarithm is
+its potential resistance to quantum computers: no efficient quantum algorithm is
+known for the NP-hard lattice problems related to the security ofNTRU. The secu-
+rity and insecurity of NTRUprimitives has been an active researchtopic in the past
+10 years, and NTRU is now being considered by the IEEE P1363.1 standards [12].
+While cryptanalysis has been rather successful on NTRU signatures (the ba-
+sic version of NTRUSign has recently been broken in [14], and all the versions
+of its ancestor NSS were successfully attacked [4,5]), it can be argued that no
+significant weakness has ever been found on NTRU encryption. To date, the
+most dangerous attacks on NTRUencrypt are perhaps key-recovery chosen-
+ciphertext attacks. The first key-recovery chosen-ciphertext attacks were found
+by Jaulmes and Joux [13] at CRYPTO ’00, and used few oracle queries. However,
+the attacks used invalid ciphertexts of very special shape, and do not seem to
+work for all NTRU instantiations. In particular, they can easily be thwarted by
+an appropriate padding scheme (as is often the case in public-key encryption),
+T. Okamoto and X. Wang (Eds.): PKC 2007, LNCS 4450, pp. 89–106, 2007.
+c© International Association for Cryptologic Research 2007
+90 N. Gama and P.Q. Nguyen
+which is anyway necessary to achieve strong security notions. At CRYPTO ’03,
+Howgrave-Graham et al. [11] realized that an unusual property of NTRUen-
+crypt known as decryption failure gave rise to much more powerful chosen-
+ciphertext attacks. Until the publication of [11] (and even [10]), all parameter
+sets proposed by NTRU allowed decryption failures: the ciphertext of a ran-
+domly chosen message could fail to decrypt correctly when using the NTRU
+decryption algorithm. Although the probability of decryption failures was small,
+it was significant enough (ranging from 2−12 to 2−40) not to be ignored in prac-
+tice: an attacker might realistically collect decryption failures. The most power-
+ful chosen-ciphertext attack of [11] then allowed to attack any instantiation of
+NTRU, independently of the padding scheme, and using only a weak decryption
+oracle which asserts if a given (valid) ciphertext failed to decrypt or not. How-
+ever, this attack required a large number of decryption failures (estimated to be
+about a million by [11]), and had not been fully implemented. In particular, the
+attack uses in the final stage a sophisticated algorithm by Gentry and Szydlo [5]
+(designed to attack the NSS signature scheme), which is polynomial time, but
+has to the best of our knowledge not been fully implemented.
+Our results. In this paper, we present new and efficient chosen-ciphertext at-
+tacks on NTRUencrypt. Our attacks are somewhat intermediate between the
+attacks of Jaulmes and Joux [13], and those of Howgrave-Graham et al. [11].
+Like [11], the attacks are based on decryption failures and only query the de-
+cryption oracle on valid ciphertexts. However, unlike [11], we do not only ask
+whether a given (valid) ciphertext fails to decrypt, we ask for the full output
+of the NTRU decryption algorithm on that (valid) ciphertext, like in an usual
+chosen-ciphertext attack: when there is a decryption failure, this will provide
+additional information. As a result, the number of decryption failures required
+to make the attack successful is much lower than in [11], which makes it possible
+to fully implement the attack in practice and check its efficiency. For instance,
+for the initial NTRU-1998 parameter sets, a decryption query on a single de-
+cryption failure is enough to recover the private key. For more recent parameter
+sets, the number of required decryption failures increases but is at most a few
+hundreds. The efficiency of our attacks seems to confirm the importance of re-
+moving decryption failures in NTRUencrypt, as was first suggested in [11]:
+it should be noted that the latest version [10] of NTRUencrypt modifies the
+NTRU parameters so that no decryption failure can ever occur. Furthermore,
+because we query the decryption oracle on random ciphertexts of messages uni-
+formly chosen at random, our attacks can also be interpreted from a security
+point of view. If one could simulate the NTRU decryption algorithm, one would
+be able to recover the NTRU secret key in practice.
+Road map. The paper is organized as follows. In Section 2, we provide back-
+ground on NTRUencrypt, and we introduce the model of our attacks. In
+Section 3, we study the probability distributions of the coefficients of the poly-
+nomials used during decryption, and we analyze the information obtained in the
+presence of decryption failures. In Section 4, we derive a first chosen-ciphertext
+attack against the initial instantiation NTRU-1998 of NTRUencrypt, which
+New Chosen-Ciphertext Attacks on NTRU 91
+can recover the secret key using a single decryption failure. Finally, in Section 5,
+we present a general chosen-ciphertext attack against all instantiations of NTRU
+allowing decryption failures. It is perhaps worth noting that our attacks make
+no use of lattices.
+2 Background
+2.1 Definitions and Notation
+NTRUencrypt operations take place in the quotient ring of polynomials P =
+Z[X ]/(XN − 1), where N is an integer. If f(X) is a polynomial in P , for all
+k ∈ [0, N −1], fk denotes the coefficient of Xk and for all x ∈ C, f(x) represents
+the evaluation of f at x. The convolution product h = f ∗g of two polynomials f
+and g in P is given by hk =
+∑
+i+j≡k mod N fi · gj . Several different measures of
+the size of a polynomial will be useful. We define the norm of a polynomial f
+in the usual way, as the square root of the sum of the squares of its coefficients:
+‖f‖ =
+(∑N−1
+i=0 f2
+i
+)1/2
+. We also define the “standard deviation” of a polynomial
+f as σ(f) =
+(
+∑N
+i=1
+(
+fi − f(1)
+N
+)2
+)1/2
+. Note that ‖f‖ = σ(f) if the average value
+f(1)
+N of the coefficients of the polynomial is equal to zero.
+2.2 The NTRU Encryption Scheme
+The NTRU [8] cryptosystem has many possible instantiations. It uses a set of
+parameters whose values will be given later:
+– An integer N . This fundamental parameter in NTRUencrypt is taken to be
+prime to prevent attacks due to Gentry [3], and sufficiently large to prevent
+lattice attacks.
+– Two relatively prime integers p and q, or alternatively the polynomial p =
+X + 2 and a prime number q (which does not divide 2N + 1), so that the
+elements p and q generate prime ideals in P . Standard practice is to take
+q to be close to a power of 2 between N/2 and N , and p to be either the
+integer 2, 3 or the polynomial 2 + X [1,2].
+– Four subsets Lf , Lg, Lr, Lm of P used for key generation and encryption.
+The polynomials in all these subsets have very small coefficients and may
+further be sparse.
+– A bijection ψ between Lm mod p and Lm. The set of plaintexts is Lm.
+The key generation, encryption and decryption primitives are as follows:
+Key generation
+1: Choose f ∈ Lf and g ∈ Lg uniformly at random such that f is invertible in
+P modulo q and modulo p.
+2: Set Fq = f−1 mod q and Fp = f−1 mod p.
+3: The private key is (f, Fp).
+4: The public key is H = p · g ∗ Fq mod q.
+92 N. Gama and P.Q. Nguyen
+Note that in NTRUencrypt, the polynomial g is not necessary for decryption,
+and therefore is not included in the private key. However, g could easily be
+deduced from f thanks to H ∗ f = p · g mod q.
+Encryption. The encryption algorithm E is probabilistic.
+Input: A message m ∈ Lm, and a public key H .
+Output: A ciphertext e ∈ E(m).
+1: Select r ∈ Lr uniformly at random.
+2: return e = r ∗ H + m mod q.
+To achieve strong security notions, NTRU implementations additionally use
+paddings: the message m is preprocessed and r might depend on m and hash
+functions. In this paper, for any m ∈ Lm we denote by E(m) the set of all possi-
+ble ciphertexts of the plaintext m, and by E(Lm) their union over all plaintexts
+m. These sets take possible paddings into account, hence E(Lm) is also the set
+of all validly generated ciphertexts.
+Decryption. The decryption algorithm D provided by NTRU is very efficient,
+but may not work correctly on all inputs, depending on the parameter set.
+Input: A ciphertext e ∈ E(Lm) and a private key (f, Fp).
+Output: A plaintext D(e) = m ∈ Lm.
+1: Compute a mod q = e ∗ f mod q.
+2: Using a centering procedure, try to recover the integer polynomial a = p · r ∗
+g + f ∗ m ∈ P from a mod q.
+3: Compute m mod p = a ∗ Fp mod p.
+4: return The plaintext m = ψ(m mod p).
+Note that the operations performed by the decryption algorithm could in theory
+be applied to any polynomial in P mod q, not only ciphertexts in E(Lm), and
+this would still output a polynomial in Lm. The chosen-ciphertext attacks of
+[13] relied on this extra-functionality: they used invalid ciphertexts which do not
+belong to E(Lm).
+For all the NTRU parameter sets proposed until 2005 [10], the centering pro-
+cedure used in Step 2 could fail to recover a. Thus, there may exist valid cipher-
+texts e ∈ E(m) whose decryption D(e) is not equal to m. Such events have been
+called decryption failures in [11]. Note that the decryption algorithm could also
+perform additional checks: for instance, it can extract the random polynomial r
+used by E from the formula r ∗ H = (e − D(e)) mod q, thanks to the notion of
+pseudo-inverse (see [16]). Then, it can check whether r is really in Lr, or whether
+the potential paddings requirements are met. In particular, we have a plaintext-
+checking oracle: given a ciphertext and a plaintext, we can check whether the
+ciphertext corresponds to the plaintext.
+2.3 Instantiations of NTRU
+One difficulty with analyzing NTRU is the significant number of variants. Dif-
+ferent choices of parameters can completely transform the security of NTRU: an
+New Chosen-Ciphertext Attacks on NTRU 93
+attack against a particular instantiation of NTRU may not work against other
+instantiations. In this section, we recall the three main instantiations of NTRU
+which have been proposed in the past eight years.
+NTRU-1998. In the initial instantiation of NTRU [8], p is equal to 3 and q
+is a power of 2 (for example q = 128). The subset Lm is the set of ternary
+polynomials with coefficients in {−1, 0, 1}, and the bijection ψ between Lm mod p
+and Lm is defined by selecting the representative −1, 0 or 1 of each coefficient
+mod 3. The set Lf is defined as T (df , df − 1) where T (i, j) is the subset of
+ternary polynomials containing exactly i times 1 and j times −1. Finally, Lg =
+T (dg, dg) and Lr = T (dr, dr). Naturally, one drawback with this instantiation
+is the conversion between binary messages and their ternary representation in
+Lm. As an example, the parameters N = 263, q = 128, df = 50, dg = 24 and
+dr = 16 were recommended for high security. Each parameter set in [8] leads to
+a decryption failure every 215 encryptions of random messages, experimentally.
+NTRU-2001. In the standards [1,2], a new instantiation is proposed, where p is
+the polynomial X + 2 and q is a prime number. The subset Lm is the set of
+binary polynomials with coefficients in {0, 1}, and Lf is the subset of polyno-
+mials of the form 1 + p ∗ F with F ∈ B(dF ), where B(dF ) denotes the set of
+binary polynomials with exactly dF coefficients equal to 1. The other subsets
+are Lg = B(dg) and Lr = B(dr). The bijection ψ between a plaintext m and its
+representative modulo X + 2 (which is the evaluation at X = −2) is non-trivial.
+Mathematically, the function ψ computes the binary decomposition
+∑N−1
+i=0 νi2i
+of m(−2), and identifies it with the polynomial
+∑N−1
+i=0 νiX
+i ∈ Lm. More details
+for an efficient implementation are given in [9]. The main advantage of having
+the private key f of the form 1 + p ∗ F is that the inverse Fp modulo p is equal
+to 1, so the final multiplication by Fp in the decryption process disappears. The
+average number of encryptions of random messages leading to a decryption fail-
+ure ranges from 212 to 225, depending on the parameter set [1,2]. (see [11] for
+more information).
+NTRU-2005. In the last standard [10], the polynomial p = X+2 disappears and is
+replaced by the integer p = 2. Furthermore, the use of product-form polynomials
+(introduced in [9]) is recommended as a replacement of binary polynomials: so
+f has the form 1 + p · F with F ∈ X (df ), which means that F = f1 ∗ f2 + f3
+with each f1, f2, f3 ∈ B(df). The other subsets are Lg = B(N/2), Lr = X (dr)
+and Lm is the set of binary polynomials. Generally, dF and dr are equal and are
+very small (e.g. between N/25 and N/20). More importantly, since it had been
+discovered [11] that decryption failures could be a threat, the prime number q
+has been multiplied by a factor of at least 2 so that no decryption failure can
+ever happen: one drawback is that the resistance to lattice attacks is weakened.
+But it is interesting to analyze what would happen if q had the same size as in
+previous instantiations. In this case, the problem of finding the private key from
+the public key seems as hard as in previous instantiations. But the proportion
+of decryption failures would also be the same as in the previous instantiations.
+94 N. Gama and P.Q. Nguyen
+In this paper, we want to analyze attacks based on decryption failures, so when
+we refer to NTRU-2005, we actually mean a modified version with a smaller q.
+2.4 The Attack Model, and Comparison with Previous Attacks
+In a chosen-ciphertext attack, a decryption oracle is given to an attacker. As
+a precomputation, the attacker can submit as many ciphertexts as he wants
+to the oracle. Then using the collected information, he must either recover a
+private key or be able to decrypt a challenge ciphertext. For NTRU, the notion
+of decryption oracle is ambiguous because of decryption failures. Here, like [11],
+by decryption oracle, we do not mean an ideal algorithm which would extract
+m from a ciphertext in E(m) without any failure, but the decryption algorithm
+D provided by NTRU. In the following, we only consider key-recovery chosen-
+ciphertext attacks.
+The majority of previous chosen-ciphertext attacks against NTRU work by
+running the algorithm D on special polynomials in P mod q, which are gener-
+ally not valid ciphertexts in E(Lm). Following our terminology, these attacks
+do not use decryption failures. For example, the article of Jaulmes and Joux
+at CRYPTO’00 [13] presents two chosen-ciphertext attacks on NTRU-1998. By
+sending roughly ten special polynomials to the oracle, an attacker recovers the
+product of the key Fp and a low hamming-weight polynomial. After an exhaus-
+tive search which takes a couple of minutes for the highest security parameters,
+the attacker recovers Fp and deduces the private key f . Note that the bijection
+between Fp and f only exists in the NTRU-1998 instantiation.
+The second attack of [13] queries the decryption oracle N times on very close
+inputs. Again, the input polynomials are in general not validly generated cipher-
+texts in E(Lm). If f is binary or ternary, the output of the decryption oracle
+then discloses the value and the position of many coefficients of f . Thus, with
+less than a thousand calls to the decryption oracle, the private key f is fully
+recovered. This attack can be rewritten and remains valid for NTRU-2001, but
+fails on NTRU-2005, when f is in product form.
+Other papers, like Han et al.’s paper [6], present chosen-ciphertext attacks
+with the assumption that the user has power on m and r, which is not compatible
+with the strongest paddings.
+The first paper to introduce and use decryption failures in a chosen-ciphertext
+attack is Howgrave-Graham et al.’s paper [11] at CRYPTO’03, where the authors
+present (among others) a key-recovery chosen-ciphertext attack against NTRU-
+2001 working with any padding scheme. The oracle is weak: it only accepts valid
+ciphertexts in E(Lm) and only indicates whether or not there is a decryption
+failure. The authors of [11] claim that if they are given a million decryption
+failures, they can recover the polynomial XNf(X)f( 1
+X ), and then recover the
+private key thanks to an algorithm of Gentry and Szydlo [5], which was intro-
+duced to break a former version of NTRU signatures. The main advantage of this
+attack is that since all messages are validly generated, it is compatible with any
+padding, including the very restrictive ones. However, the number 1,000,000 is
+only a heuristic estimate, and the algorithm of Gentry and Szydlo [5] recovering
+New Chosen-Ciphertext Attacks on NTRU 95
+f from XNf(X)f( 1
+X ) is proved polynomial time, but has to our knowledge not
+yet been fully implemented in practice.
+In this paper, we also use decryption failures. Our attack model is interme-
+diate between the restrictive chosen-ciphertext attack of Jaulmes and Joux [13],
+and the realistic model in Howgrave-Graham et al.’s attack [11]. The oracle is
+only queried during the search for decryption failures, which is performed by
+Algorithm 1. With this description, we clearly see that the decryption oracle is
+Algorithm 1. Find a random decryption failure
+Input: A NTRU parameter set, a public key H and the decryption oracle D.
+Output: A decryption failure as (m,r, m′) where D(m + r ∗ H) = m′ �= m.
+1: repeat
+2: Generate a random message m ∈ Lm and encrypt it with E to obtain a valid
+ciphertext e.
+3: Remember (or recover) the random polynomial r used by E.
+4: Submit the ciphertext e to the decryption oracle D.
+5: until there is a decryption failure (m′ = D(e) �= m)
+6: return the triplet (m, r,m′).
+only used on validly generated ciphertexts. Furthermore, these ciphertexts are
+not even chosen by the attacker, but are randomly generated. For these reasons,
+the attacker is less powerful than in Jaulmes and Joux’ attack [13]. However,
+the attacker has access to the output m′, which gives more information than
+in Howgrave-Graham et al.’s attack [11]. We will see in the next sections the
+number of decryption failures which is necessary to recover the private key.
+3 Analysis of Decryption Failures
+3.1 The Decryption Process
+In Section 2.2, we only gave a sketch of the decryption primitive. In this section,
+we give a detailed implementation (see Algorithm 2), in order to explain decryp-
+tion failures. In the first step of the decryption algorithm D, when calculating
+a mod q = f ∗ e mod q, one actually computes
+a mod q = f ∗ e = f ∗ (r ∗ h + m) = p · r ∗ g + f ∗ m mod q
+The polynomials r, g, f and m have very small coefficients, so heuristically the
+coefficients of the integer polynomial a = p · r ∗ g + f ∗ m satisfy:
+∀i ∈ [0..N − 1], ai ∈
+[
+a(1)
+N
+− q
+2
+;
+a(1)
+N
++
+q
+2
+[
+. (1)
+Note that all the parameter sets of NTRU given in Section 2.3 make it possible
+to compute a(1)
+N without knowing r or m. If Condition (1) holds, a may be
+recovered exactly from a mod q in the ring P (using Step 9 of Algorithm 2).
+96 N. Gama and P.Q. Nguyen
+Algorithm 2. Decryption oracle D
+Input: A validly generated ciphertext e and the instantiation of NTRU (and a hidden
+private key (p, f, Fp)).
+Output: The decryption of e (which might be incorrect).
+1: compute a mod q = f ∗ e mod q.
+2: if instantiation=NTRU-1998 then
+3: Select the representative aest ∈ P of a mod q which has all its coefficients in
+[− q
+2 ; q
+2 [.
+4: else
+5: Compute r1 = r(1),f1 = f(1), and g1 = g(1) using the definition of Lr,Lf and
+Lg.
+6: Compute m(1) mod q = e(1) − r1 ∗ H(1) mod q,
+7: Choose m1 in [N
+2 − q
+2 ; N
+2 + q
+2 [ so that m1 ≡ m(1) mod q.
+8: Compute a1 = p · r1 · g1 + f1 · m1.
+9: Select the representative aest ∈ P of a mod q which has all its coefficients in
+[a1
+N
+− q
+2 ; a1
+N
++ q
+2 [
+10: end if
+11: Compute m′ = aest ∗ Fp mod p.
+12: return ψ(m′).
+In the NTRU-1998 instantiation, the mean value a(1)
+N of the coefficients of a is
+equal to m(1)
+N , and is therefore between -1 and 1. For this reason, it is equivalent
+to choose every coefficient of a in [− q
+2 ; q
+2 [ at Step 3. Finally a mod p is equal
+to f ∗ m mod p and the multiplication by Fp at Step 11 recovers m mod p, and
+therefore the plaintext m.
+Decryption only works if the condition (1) is fulfilled. Unfortunately, this
+condition does not always hold: depending on the choice of Lm and Lr , it
+may happen for some rare m and r, that some coefficients of a lie outside the
+centering range. In this case, the output m′ = D(e) will (almost always) differ
+from the original plaintext m. These events are the so-called decryption failures
+[11], which will be reused in this paper to construct key-recovery attacks on
+NTRUencrypt.
+We now analyze the probability distribution of the coefficients of a in the
+particular case of a decryption failure. In order to simplify Condition (1), it is
+possible to translate the polynomials so that the average value of their coefficients
+is always zero. We say that a polynomial a is zero-centered if a(1) = 0, where a(1)
+is the evaluation of the polynomial at 1, that is, the sum of the coefficients of a.
+Given any polynomial in P or R, we can recenter this polynomial by subtracting
+an appropriate multiple of the polynomial (1 + X + · · · + XN−1), as shown in
+the following elementary lemma:
+Lemma 1. The following function is an algebra homomorphism:
+R[X ]/
+(
+XN − 1
+)
+→ R[X ]/
+(
+XN − 1
+)
+A → Ǎ = A − A(1)
+N
+(1 + X + · · · + XN−1)
+New Chosen-Ciphertext Attacks on NTRU 97
+Then Condition (1) can be rewritten as: there is a decryption failure if and only
+if the polynomial ǎ = p · ř ∗ ǧ + f̌ ∗ m̌ satisfy:
+∃i ∈ [0..N − 1], |ǎi| >
+q
+2
+. (2)
+3.2 Probability Assumptions
+In the following, we will often need to assume that certain objects are random.
+More precisely, for any deterministic function ϕ from Lm×Lr (e.g. the encryption
+function (m, r) → m+r∗H or the function (m, r) → p·r∗g+f ∗m implicitly used
+in the decryption process), we say that a polynomial z = ϕ(m, r) is randomly
+chosen in the image of ϕ if m and r are uniformly and independently chosen in
+the finite subsets Lm and Lr. Here, we focus on the particular case of the centered
+polynomials ǎ, which are computed from m and r with the deterministic formula
+ǎ = p · ř ∗ ǧ + f̌ ∗ m̌. In order to analyze the distribution of their coefficients, we
+need to make two simplifying assumptions:
+Assumption 1. If z ∈ P is a binary or ternary polynomial uniformly chosen
+at random, then the coefficients of the zero-centered polynomial ž are all inde-
+pendent.
+Assumption 2. If a and b are randomly and independently drawn from finite
+sets of zero-centered polynomials and if their coefficients are all independent,
+then the coefficients of the product c = a ∗ b are all independent.
+These assumptions are rather strong. However, one can hope that it is not that
+far from the reality, due to the following: the average value of the coefficients of
+a zero-centered polynomial is constant and equal to zero, so when a coefficient
+is bigger than expected, the others will tend to be smaller. For this reason, there
+is a small anti-correlation between different coefficients: the paper [17] shows
+a correlation Corr(ci, cj) = − 1
+N−1 if i and j are distinct indexes. There is a
+small inaccuracy due to this anti-correlation, but the effect is very small when
+N grows. Furthermore, we will see that experimentally, if one coefficient has
+not the expected size, then the others behave correctly. Thus the effect of the
+anti-correlation is in fact very limited.
+3.3 Shape of Decryption Failures
+In the decryption algorithm D, since r and m are randomly chosen independently
+of the keys f and g, the coefficients of the polynomial ǎ are assumed to be
+independent by Assumptions 1 and 2. As we saw in Section 3.1, a decryption
+failure only occurs if Condition (2) holds. In this case, at least one coefficient
+of the polynomial ǎ = p · ǧř + f̌m̌ is outside the range [− q
+2 ; q
+2 [. Using these
+assumptions, we deduce two heuristics:
+Heuristic 1. In case of a decryption failure, then with extremely high probabil-
+ity, there is exactly one coefficient ǎk of ǎ which is outside [− q
+2 ; q
+2 [
+98 N. Gama and P.Q. Nguyen
+Explanation. We denote by pe the probability to choose (r, m) leading to a de-
+cryption failure. Because of the independence assumption, the probability for
+one coefficient of ǎ to be outside the range [− q
+2 ; q
+2 [ is pa = 1− (1 − pe)
+1
+N ≈ 1
+N pe.
+The probability that exactly one coefficient of ǎ is too big, is pone =
+(
+N
+1
+)
+· pa(1−
+pa)N−1 ≈ pe(1− N−1
+N pe). Thus in case of a decryption error, the probability that
+only one coefficient of ǎ is too big is pone/pe ≈ (1− N−1
+N pe). Since the probability
+of decryption failure pe is always very small, the last probability is almost equal
+to 1. 	
+When a decryption failure occurs, all the coefficients except one are in the correct
+interval. The second heuristic guesses the value of this overflowing coefficient.
+Heuristic 2. In case of a decryption failure, the overflowing coefficient of ǎk
+defined by Condition (2) is very close to ± q
+2 . More precisely, for standard NTRU
+parameters, we expect that ǎk = ±
+(
+q
+2 + ε
+)
+where ε ≤ 5.
+Explanation. The distribution of a coefficient ǎk should be a discrete hyperge-
+ometric distribution whose mean is 0, and whose standard deviation is smaller
+than q
+4 . If so, it would decrease much faster than a geometric distribution for the
+rare values greater than q
+2 . Then the expectation of the value of the overflowing
+coefficient of ǎ would be very close to q
+2 . 	
+3.4 Experiments
+To check the validity of our heuristics, we performed experiments on the main
+NTRU instantiations: NTRU-1998, NTRU-2001 and the slightly modified version
+of NTRU-2005 seen in Section 2.3. We obtained approximately one decryption
+failure every 25,000 messages, and we collected about 4,000 decryption failures
+for each parameter set. For every decryption failure, we obtained exactly one
+overflowing coefficient in ǎ, and in more than 90% of the cases, the absolute
+value of this coefficient was lower than q
+2 + 5. So the two heuristics seem to be
+verified in practice.
+However, in our experiments, the distribution of overflowing coefficients in
+case of a decryption failure does not decrease as fast as was announced in the
+explanation of Heuristic 2 (see Figure 1). Heuristic 2 is nevertheless true for
+every parameter set tested, but this is only an experimental fact.
+The two graphs in Figure 1 represent the experimental distribution of the
+coefficients of a random polynomial ǎ = p · ř ∗ ǧ + f̌ ∗ m̌ satisfying Condition (2).
+The black bars represent the distribution of the overflowing coefficient (whose
+absolute value is greater than q
+2 ), and the grey boxes represent the distribution
+of the other coefficients. The two curves are based on the NTRU-2005 instanti-
+ation, the first one with p = 2,q = 67,N = 127 and binary polynomials, and the
+second one with p = 2,q = 67,N = 127 and product-form polynomials. When
+the polynomial ǎ contains an overflowing coefficient, there exists a rotation of m̌
+(resp. ř) which is either positively or negatively correlated with the key f̌ (resp.
+p · ǧ), depending on whether the overflowing coefficient is positive or negative
+New Chosen-Ciphertext Attacks on NTRU 99
+gaussian(−0.153609, 6.719)
+other coefficients
+overflowing coefficients
+-40 -30 -20 -10 0 10 20 30 40
+0.6
+0.08
+0.06
+0.04
+0.02
+0
+0.5
+0.4
+0.3
+0.2
+0.1
+0
+ov
+er
+fl
+ow
+in
+g
+co
+eff
+s.
+p
+ro
+b
+a.
+ot
+h
+er
+co
+eff
+s.
+p
+ro
+b
+ab
+il
+it
+y
+other coefficients
+overflowing coefficients
+gaussian(-0.109,12.3)
+-80 -60 -40 -20 0 20 40 60 80
+0.05 0.3
+0.04
+0.03
+0.02
+0.01
+0
+0.25
+0.2
+0.15
+0.1
+0.05
+0
+ot
+he
+r
+co
+eff
+s.
+pr
+ob
+ab
+ili
+ty
+ov
+er
+flo
+w
+in
+g
+co
+eff
+s.
+pr
+ob
+a.
+Fig. 1. Experimental densities
+(see Section 5). In these two particular examples, there are more positive corre-
+lations, but this is not the general case.
+4 A New Chosen-Ciphertext Attack Against NTRU-1998
+We will now describe chosen-ciphertext attacks on NTRU which only require few
+decryption failures to recover the private key. In this section, we consider the
+special case of NTRU-1998. The first attack uses the fact that a single decryption
+failure is enough to recover Fp up to a shift. It turns out that in NTRU-1998, the
+choice of p = 3 and f a ternary polynomial makes it possible to recover f from
+f mod p or Fp mod p. Thus, one can recover a circular shift of the private key
+f in the quotient ring P , which is enough to decrypt. The attack is summarized
+in Algorithm 3.
+Algorithm 3. A key-recovery chosen-ciphertext attack on NTRU-1998
+Input: A public key H of NTRU-1998.
+Output: A private key (f, Fp).
+1: Find a decryption failure (m,r, m′) using Algorithm 1.
+2: compute F ′
+p ← (m′ − m) mod p where p = 3.
+3: f ′ ← F −1
+p mod p (chose the coefficients of f ′ in {−1, 0, 1}.
+4: if g′ = (f ′ ∗ H ∗ p−1) mod q /∈ Lg restart;.
+5: return (f ′, F ′
+p).
+4.1 Description of the Attack
+The parameters sets of [8] give rise to a decryption failure every 25,000 encryp-
+tions, independently of the security level. Thus, after say 50,000 calls to the
+100 N. Gama and P.Q. Nguyen
+decryption oracle, we may reasonably assume that we were able to find a mes-
+sage m ∈ Lm and a blinding polynomial r ∈ Lr leading to a decryption failure,
+and we know the polynomial m′ �= m returned by the decryption oracle. Then
+if Heuristic 1 is satisfied, there is exactly one coefficient ak of a = prg + fm
+which is not in the centering range. Thus, there exists an integer α ∈ Z such
+that a − αqXk satisfies Condition (1), and it is precisely this polynomial which
+is computed instead of a during the decryption algorithm. In the last step of the
+decryption, a − αq · Xk is taken modulo p and multiplied by Fp, so the incorrect
+plaintext returned is:
+m′ = Fp ∗ (fm − αq · Xk) mod p = m − (αq mod p) · Xk ∗ Fp.
+Since there was a decryption failure and since p = 3, we are sure that α′ =
+αq mod p is equal to ±1. Therefore, by considering the difference m − m′, we
+recover a rotation (up to a sign) F ′
+p = α′Xk ∗ Fp of the polynomial Fp from the
+private key. It is then easy to invert F ′
+p mod p in order to find the second part
+of the key f ′ = α′XN−k ∗ f . As we saw at the beginning of the section, the
+computed polynomials (f ′, F ′
+p) form a secret key equivalent to (f, Fp), so it is
+not necessary to find the value of k.
+4.2 Experiments
+We have implemented the attack described by Algorithm 3. In practice, the first
+decryption failure is found before 40,000 calls to the oracle D. As seen previously,
+the probability for (f ′, F ′
+p) computed in steps 2 and 3 to be a valid private key
+is higher than 1 − pe ≈ 24999
+25000 . In this case, the polynomial g′ computed in step
+4 is a rotation of g, and the algorithm ends. We chose 4 keys at random in each
+parameter set of [8], and we collected 50 decryption failures per key. Instead of
+stopping the execution once a circular shift of the key had been found, we ran the
+attack on all the decryption failures obtained on the NTRU-1998 instantiation.
+Each one disclosed a rotation (up to a sign) of the private key, which is an
+equivalent private key.
+5 A General Attack Against All NTRU Instantiations
+The attack on NTRU-1998 seen in the last section cannot be applied to more
+recent instantiations of NTRU. Indeed, in the original implementation of NTRU,
+the choice of p = 3 and a ternary key f made it possible to recover entirely f
+from Fp . But in recent optimizations, the choice of f = 1 + p · F implies that
+Fp is always equal to 1, and does not leak any information about f . However,
+it is still possible to construct a key-recovery algorithm, using this time a few
+hundreds of decryption failures. Our attack builds on [11], where it was noticed
+that each decryption failure gave rise to an approximation of an (unknown) ro-
+tation of f and g. Here, we further notice that the full output of the decryption
+oracle enables us to find out which rotation it is. In other words, the output of
+the oracle on each decryption failure discloses two polynomials, which have a
+New Chosen-Ciphertext Attacks on NTRU 101
+majority of coefficients in common with the secret keys f and g (without any
+rotation). Unfortunately, the approximation provided by the decryption oracle
+does not reveal the exact position of the correct coefficients. In this attack, we
+therefore average many approximations of f deduced from independent decryp-
+tion failures, in order to compute a more accurate approximation, until f can
+be recovered by rounding. The attack will be described with p being an integer.
+However it works on every instantiation of NTRU, even if p is the polynomial
+X + 2. In this case, the only difference is that we have to replace the multi-
+plication p · g by the convolution product p ∗ g. The attack is summarized by
+Algorithm 4.
+Algorithm 4. A general key-recovery chosen-ciphertext attack
+Input: A public key H .
+Output: A secret key (f, Fp).
+1: p ← 0; S ← 0.
+2: estimate α ← 2
+2
+(
+‖f̌‖2+‖p·ǧ‖2
+) using NTRU parameters.
+3: loop
+4: Find a decryption failure (m,r, m′) using Algorithm 1.
+5: Find the integer k such that mk �= m′
+k.
+6: V ← (mk, mk−1, . . . , m
+k−N+1 mod N
+, rk, rk−1, . . . , rk−N+1 mod N
+).
+7: ε ← sign(〈V , S〉) or +1 if 〈V , S〉 = 0.
+8: S ← S + εV ; z ← z + 1.
+9: let f =
+∑N−1
+i=0 round( 1
+αz
+S1 + f(1)
+N
+)Xi.
+10: if f ∗ H ∗ p−1 mod q ∈ Lg, then return (f, f−1 mod p).
+11: let f ′ =
+∑N−1
+i=0 round(− 1
+αz
+S1 + f(1)
+N
+)Xi.
+12: if f ′ ∗ H ∗ p−1 mod q ∈ Lg, then return (f ′, f ′−1 mod p).
+13: end loop.
+5.1 Description of the Attack
+Again, we assume that we were able to find m ∈ Lm and r ∈ Lr such that
+the ciphertext m + rH is decrypted as m′ �= m. This time, m and r are not
+zero-centered, so it is necessary to use the centering homomorphism in order
+to use Condition (1). From Heuristic 1, we know that there exists ε = ±1 and
+k ∈ [0, N − 1] such that p · ř ∗ ǧ + m̌ ∗ f̌ − εq · Xk has all its coefficients in
+[− q
+2 ; q
+2 [. Thus, the output of the decryption algorithm is m′ = m + Xk mod p,
+and k is therefore the only index where the coefficients m and m′ differ. Hence,
+the value of k is disclosed and the kth coefficient is the overflowing coefficient, so:
+∣
+∣
+∣
+∣
+∣
+∣
+N−1∑
+j=0
+m̌k−j mod N f̌j +
+N−1∑
+j=0
+řk−j modNpǧj
+∣
+∣
+∣
+∣
+∣
+∣
+≥ q
+2
+If we call V the vector (m̌(k−0) modN , . . . , m̌(k−N+1) modN , ř(k−0) modN , . . . ,
+ř(k−N+1) modN ) and K the vector (f̌0, . . . , f̌N−1, p · ǧ0, . . . , p · ǧN−1) representing
+the private key, the previous inequality can be rewritten as |〈V , K〉| ≥ q
+2 . Thus,
+102 N. Gama and P.Q. Nguyen
+either V is very correlated with K or it is strongly anti-correlated. And K is in
+one-to-one correspondence with the private key. Note that since the sum of the co-
+efficients of V is equal to zero, the squared norm ‖V ‖2 is the sum of the variance of
+m and r. It is a constant σ2 depending only on the NTRU parameter set. Likewise,
+‖K‖2 is the sum of the variances of the keys f and g, and it depends only on the
+parameter set. For instance, in NTRU-2005 with binary polynomials, the private
+key f is equal to 1 + 2F where F is binary and contains exactly dF ones. There-
+fore ‖f‖2 =
+∑N−1
+j=0 f2
+j = 1 + 4dF . After centering the polynomial,
+∥
+∥f̌
+∥
+∥2
+= ‖f‖2 −
+1
+N f2(1) where f(1) = 1+2dF , so
+∥
+∥f̌
+∥
+∥2
+= 4·dF (N−dF−1)
+N . Using the same kind of ar-
+guments for ‖p · ǧ‖2, we show that ‖K‖2 = 4
+N · (dF (N − dF − 1) + 2dg(N − dg))
+in NTRU-2005.
+hyperplane V · K = q
+2
+Sphere ‖ V ‖2= σ2
+V (i)s
+Key vector K
+Expectation(V ) = V ·K
+‖K‖2 · K
+Fig. 2. Simplified case
+Simplified case. In the simplified case, only positive correlations occur, and
+Heuristic 2 suggests that the inequality |〈V , K〉| ≥ q
+2 is in fact almost an equal-
+ity. Then, as shown in Figure 2, such a vector V is located on the hypersphere
+at the intersection of the sphere of equation ‖V ‖2 = σ2 and the hyperplane
+of equation |〈V , K〉| = q
+2 . If we gather many independent decryption failures,
+we will obtain many V (i)’s in this hypersphere. Their expectation is the center
+of the hypersphere, which is the multiple q
+2||K||2 · K of the private key vector.
+Therefore if we consider n vectors V (i)s coming from independent decryption
+failures, then their mean value 1
+n
+∑n
+i=1 V (i) shall converge to q
+2||K||2 · K when n
+grows. In practice, q
+2||K||2 seems to be greater than 1
+16 in every instantiation of
+NTRU containing decryption failures. For this reason, if n is of the order of N ,
+we expect to have enough accuracy to recover the full key K.
+Real case. In reality, there may be both positive and negative correlations be-
+tween V and K. Therefore, V is located on the union of two opposite hyper-
+spheres ‖V ‖2 = σ2 ∩ 〈V , K〉 = ± q
+2 (see Figure 3). Unfortunately, the pro-
+portion of positive and negative correlations (which depends on the fractional
+part of a(1)
+N ) may be equal to 1
+2 in the worst case. In this case, the expecta-
+tion of V is zero. We must be able to decide whether the correlation between
+V and K is positive or not. The best test would be to compute directly the
+dot product 〈V , K〉, but we do not know K. Therefore, in our algorithm, we
+New Chosen-Ciphertext Attacks on NTRU 103
+distribution of
+εn+iV
+(n+i)
+approxn(V ) = 1
+n
+∑n
+i=1 εiV
+(i)
+Half space 〈V , approxn(V )〉 ≥ 0
+Hyperspheres ‖V ‖2 = σ2 and 〈V , K〉 = ± q
+2
+Key vector ±K
+Fig. 3. Real case
+try to guess for each V (i), a sign εi = ±1 such that 〈εiV
+(i), K〉 ≥ q
+2 for all i,
+or 〈εiV
+(i), K〉 ≤ − q
+2 for all i. In order to do that, we arbitrarily set ε1 = 1,
+and recursively set εn+1 = sign(〈V (n+1),
+∑n
+i=1 εi
+iV 〉), hoping that
+∑n
+i=1 εiV
+(i)
+is not orthogonal to K (as shown in Figure 3). Then, as suggested on the figure,
+the sum
+∑n
+i=1 εiV
+(i) will slowly take the direction of K or −K, and like in the
+simple case, the average vector 1
+n
+∑n
+i=1 εiV
+(i) will converge to ± q
+2||K||2 · K.
+5.2 Experiments
+We have implemented the attack described by Algorithm 4. Both the encryption,
+decryption algorithms and the attack were implemented using the NTL library
+[15] without any running-time optimization. Indeed, since the attack only con-
+sists of adding a few hundreds of vectors, its running time is negligible compared
+to the time of collecting the required number of decryption failures. We refer to
+[8,10,9] for the actual running time of an efficient implementation of the encryp-
+tion and the decryption algorithm.
+As shown in Table 1, the number of decryption failures needed in order to
+fully recover the private key (even for highest parameters) is a few hundreds.
+Recall that there is a decryption failure every 215 encryptions: this means that
+the total number of calls to the decryption oracle is about 223, which takes less
+than two days with an unoptimized version of the encryption and decryption
+algorithms. As shown in Figure 4, the main idea of the algorithm is to build an
+approximation of the private key vector. The more decryption failures we use, the
+more accurate the approximation. Since the secret key has integer coefficients,
+the approximation eventually reaches a precision level where a simple rounding
+procedure is enough to fully recover the key.
+These two graphs represent the distribution of the coefficients of the estima-
+tion of the key (that is the vector S/z of Algorithm 4 line 9) for NTRU-2005
+with product-form keys with N = 251, q = 113. The different levels of grey
+represent the value of the corresponding key coefficient. The attack works only
+if the different colors are well separated (by the dotted vertical lines). The first
+graph is obtained after gathering 150 decryption failures, and the second after
+250 decryption failures. In the first graph, there is only one black bar which is
+misplaced (in the fi = 2 area, so after 150 decryption failures, we have recovered
+104 N. Gama and P.Q. Nguyen
+-0.2 -0.1 0 0.1 0.2 0.3 0.4 0.5
+16
+12
+corresponds to fi = 0
+corresponds to fi = 2
+corresponds to fi = 4
+8
+4
+0
+corresponds to fi = 4
+corresponds to fi = 2
+corresponds to fi = 0
+corresponds to fi = 5
+-0.2 -0.1 0 0.1 0.2 0.3 0.4
+12
+8
+4
+0
+Fig. 4. Coefficients of the estimation of the key in the algorithm
+Table 1. Experiments
+type NTRU N p q dF number of
+decryption
+failures used
+number of digits
+of f recovered
+NTRU-1998 167 3 128 32 50 N-3
+100 N (all)
+NTRU-2001 251 X+2 127 40 80 N-1
+140 N (all)
+NTRU-2005 binary 251 2 127 64 80 N-2
+(using a smaller q) 130 N (all)
+NTRU-2005 product form 251 2 113 9 100 N-3
+(using a smaller q) 150 N-1
+250 N (all)
+all bits of f with exactly 1 error. In the second graph, the colors are well sepa-
+rated, so the private key is fully recovered.
+5.3 Potential Improvements
+Here, we discuss potential improvements which might further lower the number
+of required decryption failures.
+Exhaustive search. The number of errors in Table 1 between the private key and
+the estimation is very small during the last half of the algorithm. If we assume
+that there are less than three errors of at most one unit in our estimation, then
+the number of possible keys is bounded by 8
+(
+N
+2
+)
++4
+(
+N
+2
+)
++2N . Even with N = 251,
+it is possible to perform this exhaustive search in practice. In Table 1, the number
+of decryption failures needed to recover the private key up to 3 errors is half of
+New Chosen-Ciphertext Attacks on NTRU 105
+the number required to fully recover the key. Hence, exhaustive search would
+divide the number of calls to the decryption oracle by a factor 2.
+Lattice attack. Instead of performing an exhaustive search, we may use a lattice
+reduction algorithm. Once we get a sufficiently accurate approximation of the
+vector K = (f, p · g), the distance between this approximation of K and the
+lattice generated by the NTRU public basis should be extremely small compared
+to its shortest vector. In this case, we may hope that lattice reduction algorithms
+can recover the whole private key from this approximation in practice.
+Acknowledgements. Part of this work is supported by the Commission of the Eu-
+ropean Communities through the IST program under contract IST-2002-507932
+ECRYPT.
+References
+1. Consortium for Efficient Embedded Security. Efficient embedded security standards
+#1: Implementation aspects of NTRU and NSS, 2001.
+2. Consortium for Efficient Embedded Security. Efficient embedded security standards
+#1: Implementation aspects of NTRUEncrypt and NTRUSign, 2002.
+3. C. Gentry. Key recovery and message attacks on NTRU-composite. In Proc. of
+Eurocrypt ’01, volume 2045 of LNCS. IACR, Springer-Verlag, 2001.
+4. C. Gentry, J. Jonsson, J. Stern, and M. Szydlo. Cryptanalysis of the NTRU signa-
+ture scheme (NSS) from Eurocrypt 2001. In Proc. of Asiacrypt ’01, volume 2248
+of LNCS. Springer-Verlag, 2001.
+5. C. Gentry and M. Szydlo. Cryptanalysis of the revised NTRU signature scheme.
+In Proc. of Eurocrypt ’02, volume 2332 of LNCS. Springer-Verlag, 2002.
+6. D. Han, J. Hong, J. W. Han, and D. Kwon. Key recovery attacks on NTRU without
+ciphertext validation routine. ACISP 2003, LNCS 2727:pages 274–284, 2003.
+7. J. Hoffstein, N. A. Howgrave-Graham, J. Pipher, J. H. Silverman, and W. Whyte.
+NTRUSIGN: Digital signatures using the NTRU lattice. In Proc. of CT-RSA,
+volume 2612 of LNCS. Springer-Verlag, 2003.
+8. J. Hoffstein, J. Pipher, and J. Silverman. NTRU: a ring based public key cryptosys-
+tem. In Proc. of ANTS III, volume 1423 of LNCS, pages 267–288. Springer-Verlag,
+1998. First presented at the rump session of Crypto ’96.
+9. J. Hoffstein and J. H. Silverman. Optimizations for NTRU. In Public-key Cryptog-
+raphy and Computational Number Theory. DeGruyter, 2000. available at http://
+www.ntru.com.
+10. N. Howgrave-Graham, J. H. Silverman, and W. Whyte. Choosing parameter sets
+for NTRUEncrypt with NAEP and SVES-3.
+11. N. A. Howgrave-Graham, P. Q. Nguyen, D. Pointcheval, J. Proos., J. H. Silverman,
+A. Singer, and W. Whyte. The impact of decryption failures on the security of
+NTRU encryption. In Proc. of the 23rd Cryptology Conference (Crypto ’03), volume
+2729 of LNCS, pages 226–246. IACR, Springer-Verlag, 2003.
+12. IEEE. P1363.1 Public-Key Cryptographic Techniques Based on Hard Problems over
+Lattices, June 2003. IEEE., Available from http://grouper.ieee.org/groups/
+1363/lattPK/index.html.
+13. E. Jaulmes and A. Joux. A chosen ciphertext attack on NTRU. In Proc. of Crypto
+’00, volume 1880 of LNCS. IACR, Springer-Verlag, 2000.
+http://www.ntru.com
+http://www.ntru.com
+http://grouper.ieee.org/groups/1363/lattPK/index.html
+http://grouper.ieee.org/groups/1363/lattPK/index.html
+106 N. Gama and P.Q. Nguyen
+14. P. Q. Nguyen and O. Regev. Learning a parallelepiped: cryptanalysis of GGH and
+NTRU signatures. In S. Vaudenay, editor, Proc. of Eurocrypt ’06, volume 4004 of
+LNCS, pages 271–288. Springer, 2006.
+15. V. Shoup. Number Theory C++ Library (NTL) version 5.4. Available at http://
+www.shoup.net/ntl/.
+16. J. H. Silverman. Invertibility in truncated polynomial rings. Technical report,
+NTRU Cryptosystems, 2003. Technical reports available at http://www.ntru.com.
+17. J. H. Silverman and W. Whyte. Technical report n. 18, version 1: Estimating
+decryption failure probabilities for ntruencrypt. Technical report, NTRU Cryp-
+tosystems, 2005.
+ http://www.shoup.net/ntl/
+ http://www.shoup.net/ntl/
+	Introduction
+	Background 
+	Definitions and Notation
+	The NTRU Encryption Scheme
+	Instantiations of NTRU
+	The Attack Model, and Comparison with Previous Attacks
+	Analysis of Decryption Failures
+	The Decryption Process
+	Probability Assumptions
+	Shape of Decryption Failures
+	Experiments
+	A New Chosen-Ciphertext Attack Against NTRU-1998
+	Description of the Attack
+	Experiments
+	A General Attack Against All NTRU Instantiations
+	Description of the Attack
+	Experiments
+	Potential Improvements

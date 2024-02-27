@@ -1,0 +1,564 @@
+Homomorphic Decryption in Blockchains via Compressed Discrete-Log Lookup Tables
+Homomorphic Decryption in Blockchains
+via Compressed Discrete-Log Lookup
+Tables
+Panagiotis Chatzigiannis1(B), Konstantinos Chalkias2, and Valeria Nikolaenko2
+1 Novi/Facebook/George Mason University, Fairfax, USA
+pchatzig@gmu.edu
+2 Novi/Facebook, Fairfax, USA
+{kostascrypto,valerini}@fb.com
+Abstract. Many privacy preserving blockchain and e-voting systems
+are based on the modified ElGamal scheme that supports homomorphic
+addition of encrypted values. For practicality reasons though, decryption
+requires the use of precomputed discrete-log (dlog) lookup tables along
+with algorithms like Shanks’s baby-step giant-step and Pollard’s kanga-
+roo. We extend the Shanks approach as it is the most commonly used
+method in practice due to its determinism and simplicity, by propos-
+ing a truncated lookup table strategy to speed up decryption and reduce
+memory requirements. While there is significant overhead at the precom-
+putation phase, these costs can be parallelized and only paid once and
+for all. As a starting point, we evaluated our solution against the widely-
+used secp family of elliptic curves and show that we can achieve storage
+reduction by 7x–14x, depending on the group size. Our algorithm can
+be immediately imported to existing works, especially when the range of
+encrypted values is known, such as in Zether, PGC and Solidus protocols.
+Keywords: Discrete log · ElGamal · Homomorphic encryption ·
+Precomputation
+1 Introduction
+Over the last few years, we have witnessed an increasing number of decentralized
+payment systems that use the additively homomorphic ElGamal scheme to offer
+non-interactive confidential amounts [2,6,8,10,11]. However, for efficiency pur-
+poses, this ElGamal variant requires a precomputed discrete-log lookup table.
+The latter is because the ciphertext carries the message in the exponent of the
+group’s base point, and without caching, it’s only decryptable via bruteforcing.
+Typically, for most financial applications, the max transaction amount ranges
+from 232 to 264, as this is usually enough to encode even the largest reasonable
+balance. Generating and loading a table for billions and trillions of elements is
+impractical though, especially for constrained devices such as mobile phones,
+IoT devices and light clients in general. For instance, when using the 256-bit
+c© Springer Nature Switzerland AG 2022
+J. Garcia-Alfaro et al. (Eds.): DPM 2021/CBT 2021, LNCS 13140, pp. 328–339, 2022.
+https://doi.org/10.1007/978-3-030-93944-1_23
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-93944-1_23&domain=pdf
+https://doi.org/10.1007/978-3-030-93944-1_23
+Homomorphic Decryption in Blockchains 329
+secp256k1 elliptic curve where a group point is serialized in 33 bytes (in com-
+pressed form), 132 GB are required to store 232 elements in binary format.
+While solutions exist that trade storage space for less computations, they
+increase the overall storage costs by several orders of magnitude or they are not
+deterministic. In this paper we propose an extra layer of compression that is com-
+patible with Shanks algorithm (also known as baby-step giant-step), that reduces
+the lookup table size by a constant factor without any additional decryption cost.
+Our methods only require a precomputation phase and produce collision-free
+tables1 with size independent of the elliptic curve field size; the larger the size,
+the better the compression rate. We also leverage the fact that some blockchain
+systems’ encrypted content (e.g., Zether [6]) is accompanied by range proofs,
+and we use this information to slightly speed up decryption.
+In the implementation section, we present a few strategies for precomputations
+and actually provide complete compressed lookup tables for NIST’s secp256r1
+curve as a starting point. Protocol designers can follow our recommendations to
+also create tables for curves of their choice, which will eventually result in a tem-
+plate repository for the most popular curves that will help the adoption and effi-
+ciency of additively homomorphic encryption schemes in general.
+2 Background
+Here we provide background on small dlog lookups. We first describe how modi-
+fied ElGamal encryption works as a common use-case, then review related works
+in improving lookup table efficiency for recent blockchain-based systems requir-
+ing such tables, which can benefit from our work.
+2.1 Additively Homomorphic ElGamal Encryption
+Modified ElGamal encryption [19] consists of the following algorithms:
+– pp ← Setup(1λ): On input of security parameter λ, outputs public parameters
+pp = (G, g, p) where g is generator of cyclic group G of prime order p. We
+consider these parameters as a default input to all following algorithms and
+we omit them for simplicity.
+– (pk , sk) ← Gen(): Outputs a secret-public key pair as sk ← Zp, pk = gsk .
+– (c1, c2) ← Enc(pk , x): Samples r ← Zp, computes c1 = gr, c2 = gx · pkr and
+outputs ciphertext C = (c1, c2).
+– x ← Dec(sk , (c1, c2)): Compute gx = c2/c
+sk
+1 . While x cannot be directly
+computed from gx, it can be recovered through a pre-computed lookup table,
+assuming that the message space is relatively small, i.e., up to 232.
+The scheme is additively homomorphic because it holds that EncA(pk , x1) ·
+EncB(pk , x2) = (c1A
+· c1B
+, c2A
+· c2B
+) = Enc(pk , x1 + x2).
+1 Similar compression techniques are also discussed in [3], but our work focuses on
+collision-free tables per group to completely avoid false positives.
+330 P. Chatzigiannis et al.
+Also, note that the message space is in Zp, and thus 0 is not included. There
+are various methods to support encryption of 0, for instance by mapping the
+message space {0, ..., p − 2} to {1, ..., p − 1} at the application layer.
+2.2 Improving Efficiency of Discrete Log Lookup Operations
+A naive approach for lookup tables would require precomputing all (x, gx) tuples
+up to a maximum value and storing them in a file, where x ∈ [1, N ]; N is usually
+a power of 2, thus N = 2n. Typically, generating this file requires resource-
+intensive bruteforcing and O(N) storage, but the lookup cost is amortized to
+O(1).
+Shanks algorithm [18] enables a space-time tradeoff for the naive solution. It
+defines a baby-step with stores (x, gx) for all x ∈ [1, 2α] in a lookup table M ,
+and up to 2β giant-steps, with α + β = n. To recover the discrete log of c = gx,
+it computes the giant step as g2
+α
+, initializes counter i → 0, and checks if c/gi2α
+exists in M . If the lookup is successful: return x + i · 2α, else increment i and
+repeat lookup. This algorithm has O(2α) storage and requires 2β multiplications
+(elliptic curve point additions) in the worst case, which can be amortized per
+application. There are also followup works that improve on the average expected
+computation costs by a constant factor [4,17].
+Existing practical approaches for finding dlog in a small interval build on
+top of Pollard’s rho and kangaroo methods [1,3,12,13,16], mainly focusing on
+improving the average-case complexity. In contrast, we mainly focus on Shanks
+method, because its practical average-case complexity is within a constant factor
+of its worst-case complexity, thus giving an algorithm that will perform well in
+practice for all instances (even for adversarially chosen ones).
+2.3 Related Blockchain Works that Require Precomputed Tables
+Solidus [8] is a permissioned, distributed payment system that associates user
+accounts with Banks, which in turn maintain a private data structure containing
+their user account public keys and the respective balances. Solidus utilizes mod-
+ified ElGamal encryption to achieve its needed additive homomorphism, with
+balances represented in the exponent. The authors apply Shanks algorithm in
+their implementation to represent up to 232 values.
+Zether [6] is a distributed confidential payment system implemented on top
+of an Ethereum smart contract by converting Ethereum coins to native Zether
+tokens. These tokens are represented in encrypted form within the contract
+internal state using the additively homomorphic version of ElGamal encryption
+scheme, and are accompanied by range proofs. Original Zether’s implementa-
+tion considers a range of 232, but supporting 64 bits is possible by splitting into
+2 amounts of 32 bits each (most and least significant bits, respectively); then
+encrypt each one of them separately. Interestingly, the authors refer to decryp-
+tion via bruteforcing without references to optimized solutions or precomputed
+tables. As they claim, this is not considered an issue because a) decryption is hap-
+pening off-chain b) bruteforcing would occur only rarely, i.e., when the amount
+is unknown.
+Homomorphic Decryption in Blockchains 331
+PGC [10] is another distributed, confidential payment system, which uses a
+customized ElGamal encryption variant with an extra generator h in its public
+parameters that enables proving relations between ciphertexts encrypted under
+different public keys. PGC is one of the few works that recognizes the problem
+of efficient small dlog lookup tables, and while it highlights the greater efficiency
+of heuristic approaches like kangaroo, it still opts for Shanks to enable easy
+amortization for the time-space tradeoff and parallelization. In their proof of
+concept implementation [2], the authors assume up to 232 values and utilize
+a 264 MB lookup table by precomputing 223 33-byte secp256k1 elements; then
+requiring at most 29 = 512 giant Shanks steps during decryption.
+Quisquis cryptocurrency [11] has a unique account balance representation,
+combining public keys and additively homomorphic commitment scheme tuples
+with balances represented in an exponent within the commitment. The system
+considers ranges up to 232 without specifying any time-space tradeoff algorithm.
+Although blockchains is our primary focus, other areas that use homomorphic
+encryption would also benefit from our construction, e.g. e-voting schemes [15].
+3 Methodology
+Our goal is to compute a lookup table for gx ∀x ∈ [1, 2n]. Assuming an elliptic
+curve (EC) over a finite field Fq for a security parameter λ, the uncompressed
+serialized representation of an EC point is 2logq bits. Typically however, a com-
+pressed format of q′ = logq + 1 bits is selected, where only one coordinate and
+additional sign bit are enough to reconstruct the EC point. We define our initial
+table construction algorithm ComputeTable() with output to file f : Pick some
+τ < q′, append gx = b1b2 . . . bτ to f where bi ∈ (0, 1).
+Then our second important optimization relies on picking a “truncation”
+parameter τ . As it involves the birthday paradox, τ needs to be carefully con-
+sidered. Picking a τ too small (meaning that the “chopped” portion of gx is
+large), many collisions among the whole table will occur, which might result in
+ambiguities during lookup operations (e.g. on ElGamal decryption).
+Therefore at this stage we elect a conservative approach similarly to [14].
+Note that an approximation of collision probability2 via Taylor series expansion
+is Pr[n, τ ] ≈ 1 − 1/e2
+(2n−τ−1)
+. One can safely pick τ = 80 for a table with
+232 elements, because Pr[∃ collision] ≈ 1/132, 000. ComputeTable() provides an
+immediate benefit for memory and computation requirements, bringing down
+storage from q′2n to τ2n.
+3.1 Ideal Truncation
+The first precomputation phase ComputeTable() was a warm-up and required to
+minimize memory and storage requirements; essentially all our methods for com-
+pressing lookup tables rely on truncating (or omitting) redundant information
+from small dlog lookup tables. We describe our generic approach as follows:
+2 While we assume the binary representation of gx is random, we can employ a hash
+function if g has some special property.
+332 P. Chatzigiannis et al.
+Given the precomputed table in f (which is already less than half the size
+of the naively-precomputed full table), there exists an ideal encoding where
+each value can be uniquely represented with n bits of information, thus bring-
+ing the total size of the table to n2n bits. We denote this ideal encoding as
+Fideal(gx) → g̃x where |g̃x| = n. Note that this ideal encoding does not depend
+on q′. For decrypting gx, we would need to sequentially parse the table until its
+encoding g̃x is found, and return its position in the file as x. Essentially, this ideal
+encoding Fideal is a compression technique that provides great savings in storage;
+in particular, the end compression ratio is q′
+n and the space cost savings are
+significant in typical implementation scenarios where n << q′. Note that after
+the compressed table has been computed, there are no additional computation
+costs during decryption, as the lookup costs remain amortized O(1).
+The above technique is compatible with existing algorithms with time-space
+tradeoffs, as discussed in Sect. 2.2. For instance, one could implement Shanks
+algorithm with an even smaller baby-step lookup table. In this case however,
+uniqueness must still be ensured not just for the values in the baby-step lookup
+table, but for all possible values generated by the giant steps, else any ambiguity
+would still make a ciphertext decryption possible into different values. Therefore,
+the baby-step lookup table would be n2α bits in size using the ideal encoding
+Fideal. As an example, Zether with the NIST-P256 curve, 232 − 1 max value and
+Shanks parameters α = 24, β = 8, would normally have a lookup table of size
+264 ·224 bits or about 528 MB. Using an ideal encoding Fideal, its size would only
+be 32 · 224 bits or about 64 MB (decreased by a factor of 8.25), which is the best
+possible compression that can be achieved while ensuring unique representation
+of all elements.
+3.2 Variable-Length Truncation
+In the previous paragraph we described an ideal encoding function Fideal which
+maps values gx of length q′ to short, unique bit strings a of length n. However,
+assuming all gx values have a uniform distribution, constructing such an ideal
+function that ensures uniqueness among all strings is challenging and potentially
+impractical to find. Therefore to approximate this ideal encoding as much as
+possible, we define VarTruncate(), shown in Algorithm 1.
+In a nutshell, this algorithm works as follows. Similarly to Shanks scheme, we
+pick the baby-step giant-step parameters α and β respectively. We also choose
+truncation parameters τstart and τstop (where τstart > τstop), which respectively
+direct the algorithm on how many bits should start the binary representation
+for each element with, and how many bits should try to represent the elements
+in an unambiguous way. The algorithm also needs as input data a set of uncom-
+pressed precomputed tables A1, ...,Ap, which are partitioned to lower RAM
+requirements. Then the algorithm, after initializing a variable truncation index
+table C, it starts from the “conservative” truncation parameter τstart and checks
+uniqueness of truncated elements for a baby-step table A2 against all truncated
+elements of a (precomputed) full table A1. If a collision is found, we update the
+respective index in C with the previous collision-free truncation parameter τ .
+Homomorphic Decryption in Blockchains 333
+Input : Generator g, Shanks parameters α, β, truncation start-stop
+τstart,τstop, p = # of partitions
+Data : Precomputed tables for [1, 2α+β ]: A1, ..., Ap
+Output : List C that stores where collisions found per index
+B ← [ ] , C ← [0]2
+α
+;
+for i = 1, i = 2α, i + + do
+B.append(gi)
+end
+\\ Check for collisions between elements of B and those from 2α + 1 to g2α+β
+for τ = τstart; τ ≥ τstop; τ - - do
+for i = 1, i ≤ p, i + + do
+Aτ ← set();
+for elem in Ai do
+\\ we skip the first 2a elements in A1 only
+if i �= 1 ∨ elem.index > 2α then
+\\ elem[τ ] = truncated-elem to τ
+Aτ .add(elem[τ ])
+end
+end
+for elem in B do
+if C[elem.index] == 0 then
+if elem[τ ] ∈ Aτ then
+C[elem.index] = τ
+end
+end
+end
+end
+end
+\\ Check for “self”-collisions among elements of B
+for τ = τstart; τ ≥ τstop; τ - - do
+Bτ ← map(key : elem[τ ], value : boolean); \\ stores (key, value) pairs
+\\ 1st pass to track collisions
+for elem in B do
+if elem[τ ] /∈ Bτ then
+Bτ .add(elem[τ ], false)
+end
+else
+Bτ .set(elem[τ ], true)
+end
+end
+\\ 2nd pass to update C
+for elem in B do
+if Bτ .getV alue(elem[τ ]) == true ∧ C[elem.index] < τ then
+C[elem.index] = τ
+end
+end
+end
+Algorithm 1: Variable truncation algorithm VarTruncate()
+334 P. Chatzigiannis et al.
+This process is repeated by decrementing that parameter (i.e. truncating more
+bits). Note this process is done in two separate phases, one for checking for col-
+lisions of baby-step elements against all values in range (2α, 2α+β ] (to ensure
+that no collisions occur even when doing giant steps) and then for self-collisions
+between baby step elements.
+Therefore from C we can serialize the respective table for 2α elements by
+interleaving (�log(τstart−τstop)	) bits per element. These bits encode the variable
+length and is necessary to make serialized parsing possible. Alternatively, we
+can reduce the number of those encoding bits by assigning them into k groups
+G1, G2, .., Gk, therefore needing �logk	 bits per element. For instance, we can
+decrement τ by 2 bits each time instead of 1, and group G1 would represent
+lengths of τstart and τstart −1 bits, group G2 would represent lengths of τstart −2
+and τstart−3 bits etc. Also, depending on the results, we might have these groups
+contain an uneven number of bit representations. For example, truncating with
+τstart usually turns out to contain relatively very few elements, and therefore
+devoting a group for a very small population won’t be efficient overall. Still each
+group G must encode the maximum τ that is included in that group, denoted
+by max τG. The total size of the serialized lookup table will then be
+k∑
+i=1
+(max τGi
+· |Gi|) + �logk	 · 2α
+where
+∑k
+i=1 |Gi| = 2α and max τGk
+= τstart. Note that even though the “group-
+ing” approach reduces the factor �logk	 · 2α, the granularity of the algorithm is
+also reduced, which overall increases the total size. On the other hand, more fine-
+grained groups will decrease the overall needed storage of the serialized lookup
+table, but will result in slightly increased computation cost in hashmap lookups3.
+As a special case of VarTruncate(), we can define FixedTruncate() (equivalently
+to [14]) where the algorithm stops when at least one collision is found. This
+essentially implies having a single group G1 for all bit truncations we consider.
+In this case, no length encoding bits are needed, however the overall space savings
+are not optimal.
+3.3 Optimizations
+Although FixedTruncate() is a great step for decreasing lookup table costs, there
+is still room for further compression. In a concrete example with n = 32, the
+probability of no-collision for τ = 62 is about 13% so attempting to truncate to a
+set with non-colliding elements might not be easy. However we can pick τ random
+bit positions instead and make non-collision tests, and keep testing combinations
+of those positions until we successfully get a non-colliding set. Then, the resulting
+3 Note that the cost of a hashmap lookup is insignificant compared to elliptic curve
+(EC) point addition (about 40 times in our implementation), while a scalar to EC
+point multiplication is around 32 times more expensive than EC point addition using
+the double-and-add method for small 32-bit scalars.
+Homomorphic Decryption in Blockchains 335
+Input : Generator g, truncation paramenters τstart,τstop and encryption c
+Data : Hashmap M for variable-length truncated elements in the range
+[1, 2α]
+Output : Value x where gx = c
+s ← g2α
+;
+for i ← 0; i < 2β ; i + + do
+for � = τstop, � = τstart, � + + do
+if c[�] ∈ M then
+return M.idx(c[�]) + i2α
+end
+end
+c ← c/s;
+end
+return “Not found”
+Algorithm 2: Lookup decryption algorithm
+truncated table needs to be accompanied by the subset of those indices that it
+corresponds to, and only these indices would need to be looked up on receipt of
+gx. We refer to these bits as the subset. Note that in the above example, for τ = 60
+the probability of success becomes very small and given the computationally
+intensive process of finding a non-colliding subset makes further compression
+using this method practically infeasible. As an alternative and more practical
+approach, one can try hashing all points with some salt/counter, then truncate
+and check for collisions, instead of looking for optimized subsets [3].
+3.4 Relaxed Collisions and Template Distribution
+In the algorithms previously discussed, we require zero collisions among trun-
+cated elements. However we could tolerate a few collisions among those elements
+(say κ collisions), which would reduce the table size even more as discussed in [3].
+In case of ambiguity due to collisions in the lookup operations, up to κ exponen-
+tiations will be needed (worst case) to resolve this. As that these collisions imply
+additional exponentiations during lookup, this approach is essentially a space-
+computation tradeoff. For instance, in VarTruncate() group Gk (or even group
+Gk−1) typically contain relatively few elements, so one could discard these groups
+entirely to save 1 bit per element of encoding overhead, and provide those ele-
+ments in a separate list L; then, one exponentiation would be needed in those
+(rare) cases.
+Note that in some environments (e.g. limited connectivity, expensive cellu-
+lar data etc.), downloading lookup tables, even if compressed, might still be
+prohibitive. However, one could construct a template using the output C from
+VarTruncate() or even simply τ from FixedTruncate(), and distribute these val-
+ues only, which can be used as “advice” for the decrypting party to run the
+respective sub-algorithms directly with much less heavy computations.
+336 P. Chatzigiannis et al.
+4 Implementation
+As discussed, the precomputation phase for compressing lookup tables is the
+most computationally-intensive process. The lookup table would need to be pre-
+computed first using ComputeTable(), then further compress it by VarTruncate()
+or FixedTruncate(). However as shown from the existing applications in Sect. 2.3,
+a typical table decrypts up to 232 values, and further optimizations are required
+to perform this step in a reasonable time with consumer-grade hardware.
+First, given that exponentiations are more expensive computationally, instead
+of computing gx for all x ∈ [1, n] separately, we can iteratively compute each
+gx = gx−1 · g as multiplications are cheaper operations. Also, naively loading a
+huge table in memory and checking for collisions might be prohibitive in terms
+of computation and RAM. Therefore, we divide the table into parts (similar to
+our approach in Algorithm 1), then cross-check for collisions among all of them.
+Note that the precomputation phase can be further improved by paralleliza-
+tion, e.g. assign threads to different truncation factors and merge the computed
+results after. Also, although a hashmap is usually preferred, for variable-length
+encoding, a trie structure might also be used for storing the needed compressed
+elements in memory, otherwise a few truncate-retries in the hashmap might be
+required. Again we stress that this computationally-intensive phase only needs
+to be performed once per curve and parameter set.
+4.1 Truncation Algorithm Evaluation
+We first implement FixedTruncate() for the secp256r1 and secp256k1 curves. We
+truncated from the MSB side by omitting the sign bit and we derived tables
+of unique size for 232 with 64 bits per value, which results from 141 GB to a
+compressed 34 GB table in binary format, providing a compression factor over
+1:4.
+Table 1. Variable length trunca-
+tion for the secp256k1 curve with
+n = 32, α = 20, β = 12, k = 4.
+Bits Bits
++encod-
+ing
+# ele-
+ments
+Total
+size
+32 35 385479 13491765
+36 39 599610 23384790
+40 43 59450 2556350
+44 47 3786 177942
+48 51 238 12138
+52 55 12 660
+56 59 1 59
+Size: 4.72 MB Compress: 1:6.98
+As discussed, the compression factor
+increases with the security parameter, e.g. for
+the secp521r1 curve it would be 1:8.35. As
+a starting point, we provide a precomputed
+table for the secp256r1 curve and 228 values
+[9] of 2 GB size. This table can be safely used
+in conjunction with Shanks up to 232 values,
+as it is part of a 232 truncated table where
+we ensure that no collisions exist. Normally,
+a final exponentiation would be needed to
+ensure that no value outside this range (or
+even a “garbage” value) has been encrypted
+with same prefix (or suffix), but we leverage
+existing range proofs in many blockchain sys-
+tems to ensure this is not a possibility. How-
+ever, if no indication about the max value exists, the final exponentiation can
+Homomorphic Decryption in Blockchains 337
+be performed by utilizing the faster “windowed” methods, such as w-ary non-
+adjacent form (wNAF), which require small cache tables to speed up the expo-
+nentiation cost by a large degree [5].
+For VarTruncate(), we evaluate our compression factor with the secp256k1
+curve for n = 32, α = 20, β = 12 and k = 7. These parameters are consistent with
+existing implementations in the blockchain domain as we discussed in Sect. 2.3,
+and our results are shown in Table 1. Note this requires �logk	 = 3 bits of length
+encoding per element, which overall results in about 393 KB encoding overhead.
+We also performed tests for n = 20, α = 20, β = 0 and k = 7 for the secp256k1
+and secp521r1 curves, where we achieved a compression factor of 1:10 and 1:20
+respectively. For k = 4 in the secp256k1 curve shown in Table 1, the compression
+factor slightly reduces to 1:6.85.
+4.2 Complexity Analysis and Comparison
+For generating a compressed lookup table gx for x ∈ [1, 2n], our algorithm
+VarTruncate() includes a computationally intensive overhead in addition to just
+generating the table, similar to [14]. Specifically, [14] has an O(2n) computa-
+tional overhead, while our algorithm has O(k2n) complexity. However this addi-
+tional cost is paid only once for a specific set of parameters, while our algorithm
+achieves a) a significant improvement in compression factor and b) collision free
+encoding which simplifies used data structures.
+For recovering the discrete log of gx, the probabilistic [3] has O(c2n/3) com-
+putation and storage complexity on average (for a very small c < 2), while our
+decryption computational cost involves O(2β) multiplications and O(k2β) map
+lookups in the worst case, where k is the number of utilized truncation groups.
+Note that regular Shanks has a lookup multiplication complexity of O(2β2), for
+β2 > β (typically, for 256-bit curves β2 ≈ β + 3), when using the same precom-
+puted table size with our scheme.
+5 Conclusion
+We presented and implemented several methods for dlog table compression by
+wisely truncating the serialized bytes of elliptic curve points, while guarantee-
+ing no collisions. The proposed deterministic algorithm results in faster table
+lookups in addition to reduced storage and memory requirements. Although our
+technique relies on a potentially expensive precomputation phase, it is performed
+once per curve group and desired table size. Concretely, we show how we com-
+press such tables for small ranges by up to a factor of 7 to 14 for 256 and 521-bit
+curves, respectively. For instance, the PGC [10] protocol currently implements
+a precomputed table of 264 MB table size (using α = 23 and β = 9) for a 256-
+bit curve and 232 max amount range [2]. With our algorithm, that could be
+improved by requiring a variable-length table of roughly 38 MB, which would
+make it applicable to mobile wallets and blockchain IoT devices.
+338 P. Chatzigiannis et al.
+Our work has additional advantages when encrypted content is accompanied
+by range proofs [7] or when faster windowed exponentiations are applied [5].
+We also pave the way for the cryptography and blockchain community to create
+publicly-available compressed tables for commonly-used elliptic curves, by pro-
+viding the first compressed 232 lookup table for the secp256r1 curve [9]. Finally,
+we introduce the concept of optimized compression templates per curve, which
+will help developers and apps to recompute and verify such tables faster, espe-
+cially when downloading is expensive or if bigger ranges (i.e. up to 240) are
+required.
+References
+1. Cube-root discrete-logarithm algorithms for secure groups. http://cr.yp.to/dlog/
+cuberoot.html
+2. libpgc: a c++ library for pretty good confidential transaction system. https://
+github.com/yuchen1024/libPGC/tree/master/PGC openssl/PGC
+3. Bernstein, D.J., Lange, T.: Computing small discrete logarithms faster. In: Gal-
+braith, S., Nandi, M. (eds.) INDOCRYPT 2012. LNCS, vol. 7668, pp. 317–338.
+Springer, Heidelberg (2012). https://doi.org/10.1007/978-3-642-34931-7 19
+4. Bernstein, D.J., Lange, T.: Two grumpy giants and a baby. Cryptology ePrint
+Archive, Report 2012/294 (2012). http://eprint.iacr.org/2012/294
+5. Blake, I.F., Murty, V.K., Xu, G.: A note on window τ -naf algorithm. Inf. Process.
+Lett. 95(5), 496–502 (2005)
+6. Bünz, B., Agrawal, S., Zamani, M., Boneh, D.: Zether: towards privacy in a smart
+contract world. In: Bonneau, J., Heninger, N. (eds.) FC 2020. LNCS, vol. 12059, pp.
+423–443. Springer, Cham (2020). https://doi.org/10.1007/978-3-030-51280-4 23
+7. Bünz, B., Bootle, J., Boneh, D., Poelstra, A., Wuille, P., Maxwell, G.: Bulletproofs:
+short proofs for confidential transactions and more. In: IEEE S&P (2018)
+8. Cecchetti, E., Zhang, F., Ji, Y., Kosba, A.E., Juels, A., Shi, E.: Solidus: confidential
+distributed ledger transactions via PVORM. In: ACM CCS 2017 (2017)
+9. Chatzigiannis, P.: Compressed small discrete-log table python code and secp256r1
+precomputed table. https://github.com/PanosChtz/Homomorphic-DLog-lookup-
+tables
+10. Chen, Yu., Ma, X., Tang, C., Au, M.H.: PGC: decentralized confidential pay-
+ment system with auditability. In: Chen, L., Li, N., Liang, K., Schneider, S. (eds.)
+ESORICS 2020. LNCS, vol. 12308, pp. 591–610. Springer, Cham (2020). https://
+doi.org/10.1007/978-3-030-58951-6 29
+11. Fauzi, P., Meiklejohn, S., Mercer, R., Orlandi, C.: Quisquis: a new design for anony-
+mous cryptocurrencies. In: Galbraith, S.D., Moriai, S. (eds.) ASIACRYPT 2019.
+LNCS, vol. 11921, pp. 649–678. Springer, Cham (2019). https://doi.org/10.1007/
+978-3-030-34578-5 23
+12. Galbraith, S.D., Gaudry, P.: Recent progress on the elliptic curve discrete log-
+arithm problem. Des. Codes Cryptogr. 78(1), 51–72 (2015). https://doi.org/10.
+1007/s10623-015-0146-7
+13. Galbraith, S.D., Wang, P., Zhang, F.: Computing elliptic curve discrete logarithms
+with improved baby-step giant-step algorithm. Cryptology ePrint Archive, Report
+2015/605 (2015). http://eprint.iacr.org/2015/605
+14. Mavroudis, V.: Computing small discrete logarithms using optimized lookup tables
+(2015). USCB, Koç Lab
+http://cr.yp.to/dlog/cuberoot.html
+http://cr.yp.to/dlog/cuberoot.html
+https://github.com/yuchen1024/libPGC/tree/master/PGC_openssl/PGC
+https://github.com/yuchen1024/libPGC/tree/master/PGC_openssl/PGC
+https://doi.org/10.1007/978-3-642-34931-7_19
+http://eprint.iacr.org/2012/294
+https://doi.org/10.1007/978-3-030-51280-4_23
+https://github.com/PanosChtz/Homomorphic-DLog-lookup-tables
+https://github.com/PanosChtz/Homomorphic-DLog-lookup-tables
+https://doi.org/10.1007/978-3-030-58951-6_29
+https://doi.org/10.1007/978-3-030-58951-6_29
+https://doi.org/10.1007/978-3-030-34578-5_23
+https://doi.org/10.1007/978-3-030-34578-5_23
+https://doi.org/10.1007/s10623-015-0146-7
+https://doi.org/10.1007/s10623-015-0146-7
+http://eprint.iacr.org/2015/605
+Homomorphic Decryption in Blockchains 339
+15. Peng, K., Aditya, R., Boyd, C., Dawson, E., Lee, B.: Multiplicative homomorphic
+e-voting. In: Canteaut, A., Viswanathan, K. (eds.) INDOCRYPT 2004. LNCS, vol.
+3348, pp. 61–72. Springer, Heidelberg (2004). https://doi.org/10.1007/978-3-540-
+30556-9 6
+16. Pollard, J.M.: Monte Carlo methods for index computation mod p. Math. Comput.
+32, 918–924 (1978)
+17. Pollard, J.M.: Kangaroos, monopoly and discrete logarithms. J. Cryptol. 13(4),
+437–447 (2000). https://doi.org/10.1007/s001450010010
+18. Shanks, D.: Five number-theoretic algorithms (1973)
+19. Ugus, O., Hessler, A., Westhoff, D.: Performance of additive homomorphic ec-
+elgamal encryption for tinypeds. 6. Fachgespräch Sensornetzwerke (2007)
+https://doi.org/10.1007/978-3-540-30556-9_6
+https://doi.org/10.1007/978-3-540-30556-9_6
+https://doi.org/10.1007/s001450010010
+	Homomorphic Decryption in Blockchains via Compressed Discrete-Log Lookup Tables
+	1 Introduction
+	2 Background
+	2.1 Additively Homomorphic ElGamal Encryption
+	2.2 Improving Efficiency of Discrete Log Lookup Operations
+	2.3 Related Blockchain Works that Require Precomputed Tables
+	3 Methodology
+	3.1 Ideal Truncation
+	3.2 Variable-Length Truncation
+	3.3 Optimizations
+	3.4 Relaxed Collisions and Template Distribution
+	4 Implementation
+	4.1 Truncation Algorithm Evaluation
+	4.2 Complexity Analysis and Comparison
+	5 Conclusion
+	References

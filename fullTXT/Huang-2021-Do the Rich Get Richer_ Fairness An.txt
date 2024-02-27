@@ -1,0 +1,1817 @@
+Do the Rich Get Richer? Fairness Analysis for Blockchain Incentives
+Do the Rich Get Richer?
+Fairness Analysis for Blockchain Incentives
+Yuming Huang
+∗
+National University of Singapore
+huangyuming@u.nus.edu
+Jing Tang
+∗
+National University of Singapore
+isejtang@nus.edu.sg
+Qianhao Cong
+National University of Singapore
+cong_qianhao@u.nus.edu
+Andrew Lim
+National University of Singapore
+isealim@nus.edu.sg
+Jianliang Xu
+Hong Kong Baptist University
+xujl@comp.hkbu.edu.hk
+ABSTRACT
+Proof-of-Work (PoW) is the most widely adopted incentive model
+in current blockchain systems, which unfortunately is energy inef-
+ficient. Proof-of-Stake (PoS) is then proposed to tackle the energy
+issue. The rich-get-richer concern of PoS has been heavily debated
+in the blockchain community. The debate is centered around the
+argument that whether rich miners possessing more stakes will
+obtain higher staking rewards and further increase their potential
+income in the future. In this paper, we define two types of fairness,
+i.e., expectational fairness and robust fairness, that are useful for
+answering this question. In particular, expectational fairness illus-
+trates that the expected income of a miner is proportional to her
+initial investment, indicating that the expected return on invest-
+ment is a constant. To better capture the uncertainty of mining
+outcomes, robust fairness is proposed to characterize whether the
+return on investment concentrates to a constant with high proba-
+bility as time evolves. Our analysis shows that the classical PoW
+mechanism can always preserve both types of fairness as long as
+the mining game runs for a sufficiently long time. Furthermore, we
+observe that current PoS blockchains implement various incentive
+models and discuss three representatives, namely ML-PoS, SL-PoS
+and C-PoS. We find that (i) ML-PoS (e.g., Qtum and Blackcoin) pre-
+serves expectational fairness but may not achieve robust fairness,
+(ii) SL-PoS (e.g., NXT) does not protect any type of fairness, and
+(iii) C-PoS (e.g., Ethereum 2.0) outperforms ML-PoS in terms of ro-
+bust fairness while still maintaining expectational fairness. Finally,
+massive experiments on real blockchain systems and extensive
+numerical simulations are performed to validate our analysis.
+ACM Reference Format:
+Yuming Huang, Jing Tang, Qianhao Cong, Andrew Lim, and Jianliang Xu.
+2021. Do the Rich Get Richer? Fairness Analysis for Blockchain Incentives.
+In Proceedings of the 2021 International Conference on Management of Data
+(SIGMOD ’21), June 20–25, 2021, Virtual Event, China. ACM, New York, NY,
+USA, 14 pages. https://doi.org/10.1145/3448016.3457285
+∗
+Yuming Huang and Jing Tang contributed equally. Corresponding author: Jing Tang.
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+© 2021 Association for Computing Machinery.
+ACM ISBN 978-1-4503-8343-1/21/06. . . $15.00
+https://doi.org/10.1145/3448016.3457285
+1 INTRODUCTION
+1.1 Background
+Since 2008, blockchain has attracted a plethora of interests from
+both academia and industry. Essentially, a blockchain is a decentral-
+ized public ledger that contains all current and historical updates in
+the system. Since blockchain can achieve community trust without
+third parties, it can be used in numerous real-world applications,
+such as cryptocurrency, smart contract, voting and bidding systems.
+Particularly, Bitcoin [50] is the first and the most popular
+permission-less blockchain system, which stores user transactions
+within sequentially linked blocks. New transactions are confirmed
+when they are packed into newly generated blocks. The block gen-
+eration process is called mining and a network node that potentially
+produces blocks is known as a miner. To generate new blocks, min-
+ers should find a solution to a cryptographic puzzle, referred to as
+Proof-of-Work (PoW) [35]. To incentivize the maintenance of the
+Bitcoin network, the miners who successfully contribute a valid
+proof will be rewarded. As a consequence, miners compete with
+one another by operating more computational devices to seek more
+incentives. Such a competition, unfortunately, incurs striking en-
+ergy consumption. Presently, the total electricity consumption by
+Bitcoin miners amounts to 74 TWh, exceeding Austria (70 TWh),
+Switzerland (58 TWh) and Singapore (47 TWh) [2, 14]. For sus-
+tainable development, Proof-of-Stake (PoS) [74] is proposed as an
+alternative of PoW. Instead of competing for computation power,
+PoS miners are more likely to win if they possess more stakes
+(e.g., cryptocurrency). Therefore, the PoS protocol eliminates elec-
+tricity consumption and significantly reduces waste of electricity.
+However, the blockchain community raises concerns about the
+PoS protocol that it may make the rich become richer because rich
+miners possessing more stakes are likely to obtain more rewards
+and further increase their potential income in the future [10, 59].
+Such a rich-get-richer phenomenon (also known as the Matthew
+effect) is obviously unfair to miners and eventually harms decentral-
+ization of the network when the majority of stakes are controlled
+by a few rich miners [8, 38, 42, 62]. In particular, resource accu-
+mulation may increase the risk of transactions rollback and data
+tampering, damaging to data reliability and integrity, e.g., double
+spending. Despite the young age of blockchain, resource accumula-
+tion has caused several severe accidents. For example, very recently
+in August 2020, the transactions in Ethereum Classic were roll-
+backed because of a 51% attack, resulting in a loss of 1.68 million
+dollars [51]. To our knowledge, the rich-get-richer concern of the
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+790
+https://doi.org/10.1145/3448016.3457285
+https://doi.org/10.1145/3448016.3457285
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3448016.3457285&domain=pdf&date_stamp=2021-06-18
+PoS protocol has been scarcely studied though it has been heatedly
+debated. We aim to tackle this issue by leveraging the notion of
+fairness, which is one of the principles of fairness, accountability
+and transparency (FAT) of responsible data science [28].
+1.2 Contributions
+In this study, we focus on the fairness of incentive models for PoW
+and PoS protocols, which is the key to address the rich-get-richer
+concern of PoS. We formally define two types of fairness, i.e., ex-
+pectational fairness and robust fairness. Specifically, expectational
+fairness characterizes the relation between the resource controlled
+by a miner and her expected reward. However, this naive definition
+might be insufficient to capture the uncertainty of reward in the
+real world. As an example, suppose that a miner initially possesses
+20% of the entire stakes and consider two possible mining games.
+That is, the miner always receives 20% of the total rewards in the
+first game, whereas she wins all rewards with a probability of 20%
+and gets nothing with the remaining probability in the second game.
+Apparently, the expected rewards obtained from both games are ex-
+actly the same, i.e., both games are fair in expectation. However, the
+reward allocation in the second game is obviously more uncertain,
+thereby increasing the risk of her income. To reveal the uncertainty
+of reward, we further propose a novel concept of robust fairness
+that describes the relation between the actual rewards obtained
+by a miner from a random outcome with respect to the stochastic
+process of a mining game and her initial investment.
+Based on our definitions of fairness, we conduct analysis on
+PoW and PoS incentives. In PoW, the selection of a block proposer
+is based on the hash power controlled by each miner, which is
+independent of previous mining outcomes. In particular, a miner
+proposes a block with a probability being proportional to the hash
+power controlled by her, and we find that this mechanism can
+ensure both types of fairness. Our analysis on the PoW incentive
+model is confirmed with experiments on Geth client (v1.9.11) [19].
+In PoS, stakes serve as a competing resource and the probability
+of a miner proposing a new block is based on her current stakes
+which depend not only on her initial investment but also on the
+rewards received in previous mining outcomes. Moreover, there
+are various implementations of PoS incentives resulting in different
+types of behavior. In this paper, we analyze three representative
+PoS incentive models, namely multi-lottery PoS (ML-PoS) for Qtum
+[75] and Blackcoin [69], single-lottery PoS (SL-PoS) for NXT [72]
+and compound PoS (C-PoS) for Ethereum 2.0 [25], which cover the
+present popular blockchain systems.
+Specifically, ML-PoS enables the probability of a miner propos-
+ing a new block being proportional to her current possessed stakes,
+which preserves expectational fairness. However, the return on
+investment of a miner under this protocol may not concentrate to a
+constant even after the mining game runs for a long time because
+of the accumulated effect of the Markov chain. Our experimental
+evaluations on real blockchain systems and numerical simulations
+reveal that allocating more initial stakes in the early stage of mining
+process and/or reducing the reward of each block are helpful to
+improve robust fairness. Meanwhile, SL-PoS is devised by leverag-
+ing a single-lottery scheme to determine a block proposer, unlike
+ML-PoS that uses a multi-lottery scheme. However, we find that
+SL-PoS can accomplish neither expectational fairness nor robust
+fairness as rich miners have a higher return on investment. In fact,
+with the advantages accumulated during mining, the game will
+run to monopolization almost surely, incurring the Matthew ef-
+fect. Recently, C-PoS introduces an additional inflation reward by
+distributing base incentives to every miner proportional to their
+possessed stakes. Our analysis shows that in addition to preserv-
+ing expectational fairness, such an inflation reward is useful for
+reducing the uncertainty of mining income so that robust fairness
+is more likely to be achieved.
+In summary, our main contributions are as follows.
+(1) We propose two types of fairness for blockchain incentives,
+i.e., expectational fairness and robust fairness, to characterize
+the relation between the resource controlled by a miner and
+her rewards obtained from a mining game.
+(2) We conduct a thorough theoretical analysis on fairness for the
+most widely adopted PoW incentive protocol and three popu-
+lar PoS incentive protocols. In the context of fairness, these
+protocols are generally ranked in the following descending
+order: PoW, C-PoS, ML-PoS and SL-PoS.
+(3) We carry out extensive experiments on real blockchain sys-
+tems and numerical simulations to evaluate the fairness of
+different incentive protocols. Experimental results confirm our
+theoretical findings and shed light on the future development
+of fair incentive protocols.
+1.3 Organizations
+Section 2 discusses the details of the PoW incentive protocol and
+three PoS incentive protocols. Section 3 analyzes expectational
+fairness and Section 4 studies robust fairness for the mentioned
+four incentive protocols. Section 5 carries out experimental evalu-
+ations and numerical simulations. Section 6 discusses the lessons
+we learned from fairness analysis. Section 7 reviews related work,
+and Section 8 concludes the paper.
+2 INCENTIVE MODELS OF BLOCKCHAINS
+Miners compete for proposing a valid block to append it to the
+current blockchain, which is incentivized by rewards. The chance of
+winning the competition usually depends on the resource controlled
+by miners, e.g., computation power and staking power. In this
+section, we introduce the incentive protocols of Proof-of-Work
+(PoW) and Proof-of-Stake (PoS) that are widely adopted by many
+popular blockchain systems.
+2.1 PoW Incentive Model
+A new block is accepted by a PoW network after a cryptographic
+puzzle is solved by miners [50]. Specifically, a PoW puzzle is to
+find a valid nonce such that Hash(nonce, . . . ) < 𝐷 ,1 where 𝐷 is a
+pre-defined mining difficulty. The Hash(·) function maps a nonce
+to an integer uniformly distributed in the range [0, 2256 − 1]. As a
+result, the event that the hash value is less than 𝐷 meets Bernoulli
+distribution with a success probability of
+𝐷
+2
+256
+. While 𝐷 is much
+less than 2
+256
+by design, it is almost impossible to solve the puzzle
+in one single trial. The likelihood of a miner solving the puzzle
+1
+Apart from the argument nonce, the Hash( ·) function has some other arguments
+like the merkle root of packed transactions and the hash value of the previous block,
+e.g., Hash(nonce, merkle root, previous hash) .
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+791
+depends on the number of nonce per unit time she can check. For
+instance, we assume that there are two miners 𝐴 and 𝐵 who can
+verify 𝐻𝐴 and 𝐻𝐵 hashes every day, respectively. Therefore, the
+number of valid blocks found by 𝐴 (resp. 𝐵) during one day is very
+well approximated to a Poisson random variable with mean `𝐴 =
+𝐷𝐻𝐴
+2
+256
+(resp. `𝐵 =
+𝐷𝐻𝐵
+2
+256
+). Then, the probability that miner 𝐴 (resp.
+𝐵) will win the next block can be computed as follows. Specifically,
+let 𝑇𝐴 (resp. 𝑇𝐵 ) be the arrival time of the next block for 𝐴 (resp. 𝐵).
+With respect to the Poisson process, it is well known that 𝑇𝐴 and
+𝑇𝐵 follow negative exponential distributions with rate parameters
+`𝐴 and `𝐵 [63, Section 2.2], respectively, i.e., the probability density
+function of 𝑇𝐴 is 𝑓 (𝑡𝐴; `𝐴) = `𝐴e−`𝐴𝑡𝐴 for 𝑡𝐴 ≥ 0. If miner 𝐴 wins
+the next block, 𝐴 must find a valid block earlier than 𝐵 such that
+𝑇𝐴 < 𝑇𝐵 . Therefore, the probability of miner 𝐴 winning the next
+block is
+Pr[𝑇𝐴 < 𝑇𝐵] =
+∫ ∞
+0
+∫ 𝑡𝐵
+0
+`𝐴e
+−`𝐴𝑡𝐴`𝐵e
+−`𝐵𝑡𝐵
+d𝑡𝐴 d𝑡𝐵
+=
+`𝐴
+`𝐴+`𝐵 =
+𝐻𝐴
+𝐻𝐴+𝐻𝐵
+.
+2.2 Multi-Lottery PoS Incentive Model
+Despite of its popularity, PoW incurs massive energy consumption
+as the mining competition relies on computation power. To eradi-
+cate the waste of computation resource, PoS protocols are invented,
+where the competition depends on staking power instead. In the fol-
+lowing, we introduce the multi-lottery PoS incentive model [69, 75],
+referred to as ML-PoS. Stakeholders of ML-PoS blockchains cre-
+ate a valid block if a candidate block satisfies the condition that
+Hash(time, . . . ) < 𝐷 · stake, where time represents the times-
+tamp when the candidate block is generated, 𝐷 is a pre-determined
+mining difficulty and stake is the value of stakes possessed. Since
+Hash(·) is uniformly distributed in the range [0, 2256−1], the event
+that a candidate block becomes valid meets Bernoulli distribution
+with a success probability of
+𝐷 ·stake
+2
+256
+. Thus, if a miner possesses
+more stakes, she is more likely to create a new block successfully.
+Moreover, miners will try at different timestamps until a candidate
+block becomes valid. The trials are independent of timestamps fol-
+lowing the same Bernoulli distribution. Again, we assume that there
+are two miners 𝐴 and 𝐵 possessing 𝑆𝐴 and 𝑆𝐵 stakes, respectively.
+We refer to 𝑇𝐴 (resp. 𝑇𝐵 ) as the number of timestamps miner 𝐴
+(resp. 𝐵) has checked until 𝐴 (resp. 𝐵) meets the first success times-
+tamp. It is easy to see that𝑇𝐴 and𝑇𝐵 follow geometric distributions
+with probability parameters 𝑝𝐴 =
+𝐷𝑆𝐴
+2
+256
+and 𝑝𝐵 =
+𝐷𝑆𝐵
+2
+256
+, respectively,
+i.e., Pr[𝑇𝐴 = 𝑡] = (1 − 𝑝𝐴)𝑡−1𝑝𝐴 . Furthermore, if 𝐴 wins the next
+block,𝐴 finds a valid block with fewer timestamps than 𝐵 such that
+𝑇𝐴 < 𝑇𝐵 or 𝐴 has a chance of 50% when 𝑇𝐴 = 𝑇𝐵 to break the tie. It
+is easy to get that
+Pr[𝑇𝐴 < 𝑇𝐵] =
+∑︁∞
+𝑡𝐵=1
+∑︁𝑡𝐵−1
+𝑡𝐴=1
+(1 − 𝑝𝐴)𝑡𝐴−1𝑝𝐴 (1 − 𝑝𝐵)𝑡𝐵−1𝑝𝐵
+=
+𝑝𝐴 − 𝑝𝐴𝑝𝐵
+𝑝𝐴 + 𝑝𝐵 − 𝑝𝐴𝑝𝐵
+.
+Similarly, Pr[𝑇𝐴 = 𝑇𝐵] =
+𝑝𝐴𝑝𝐵
+𝑝𝐴+𝑝𝐵−𝑝𝐴𝑝𝐵 . Therefore, the probability
+of 𝐴 winning the next block is
+Pr[𝑇𝐴 < 𝑇𝐵] +
+1
+2
+· Pr[𝑇𝐴 = 𝑇𝐵] =
+𝑝𝐴 − 𝑝𝐴𝑝𝐵/2
+𝑝𝐴 + 𝑝𝐵 − 𝑝𝐴𝑝𝐵
+.
+Moreover, the time interval between two blocks is around 5–10 min-
+utes by design. Thus, 𝑝𝐴 and 𝑝𝐵 are sufficiently small (e.g., 1/1200),
+which indicates that 𝑝𝐴𝑝𝐵 is negligible. As a result,𝐴 wins the next
+block with a probability of
+𝑝𝐴
+𝑝𝐴+𝑝𝐵 =
+𝑆𝐴
+𝑆𝐴+𝑆𝐵 .
+Remark. In ML-PoS, the Hash(·) function depends on time
+(i.e., timestamp) instead of nonce as in PoW. Using time ensures
+that each miner has exactly one trial at each timestamp. Hence,
+the number of trials depends only on staking power so that the
+mining completion is independent of computation power. However,
+if nonce is applied, miners might try different nonces at each times-
+tamp. As a result, the number of trials would rely on computation
+power as well.
+2.3 Single-Lottery PoS Incentive Model
+Another variant of PoS incentive model uses the single-lottery
+protocol [72], referred to as SL-PoS. Unlike ML-PoS where multiple
+trials are involved at different timestamps when miners compete for
+a block, SL-PoS only allows a single trial for each block. Specifically,
+each miner is assigned a lottery ticket represented by time, which is
+given by time = basetime ·Hash(pk, . . . )/stake, where basetime
+is a pre-determined constant, pk denotes the miner’s public key, and
+stake refers to the miner’s staking power. The protocol works as
+follows: (i) time determines when the candidate block will become
+valid, and (ii) the first valid block (i.e., the onewith the smallest value
+of time) will be accepted by the current blockchain whereas the
+other candidates will be discarded. Again, the miner who possesses
+more stakes has a better chance to get a smaller value of time
+and hence she is more likely to be selected as the proposer of
+the next block. Consider the two-miner scenario where miner 𝐴
+and miner 𝐵 control 𝑆𝐴 and 𝑆𝐵 stakes, respectively. Without loss
+of generality, we assume that 𝑆𝐴 ≤ 𝑆𝐵 . Let 𝑇𝐴 (resp. 𝑇𝐵 ) denote
+the waiting time of 𝐴’s (resp. 𝐵’s) candidate block becoming valid,
+i.e., 𝑇𝐴 = basetime · Hash(pk𝐴, . . . )/𝑆𝐴 where pk𝐴 is 𝐴’s public
+key and Hash(pk𝐴, . . . ) is a random number uniformly distributed
+in the range [0, 2256 − 1] with respect to pk𝐴 . If 𝐴 wins the next
+block, the waiting time of 𝐴 should be smaller than that of 𝐵 such
+that 𝑇𝐴 < 𝑇𝐵 or 𝐴 has a chance of 50% when 𝑇𝐴 = 𝑇𝐵 . Therefore,
+the probability of miner 𝐴 winning the next block is
+Pr[𝑇𝐴 < 𝑇𝐵] +
+1
+2
+· Pr[𝑇𝐴 = 𝑇𝐵]
+=
+∑︁
+2
+256−1
+ℎ𝐵=0
+∑︁ 𝑆𝐴ℎ𝐵
+𝑆𝐵
+−1
+ℎ𝐴=0
+1
+2
+256·2 + 1
+2
+∑︁
+2
+256−1
+ℎ𝐵=0
+1
+2
+256·2
+=
+𝑆𝐴
+2𝑆𝐵
+· 2
+256 − 1
+2
+256
++ 1
+2 · 2256
+≈ 𝑆𝐴
+2𝑆𝐵
+, (1)
+where ℎ𝐴 = Hash(pk𝐴, . . . ) and ℎ𝐵 = Hash(pk𝐵, . . . ).
+Discussion. In PoW, ML-PoS and SL-PoS, the reward is determined
+by the likelihood of a miner proposing a new block. However, unlike
+PoW and ML-PoS, we find that the success probability of a miner
+proposing a new block in SL-PoS is not proportional to her staking
+power in general. In particular, the above analysis shows that the
+probability of miner 𝐴 winning the next block is
+𝑆𝐴
+2𝑆𝐵
+<
+𝑆𝐴
+𝑆𝐴+𝑆𝐵
+when 𝑆𝐴 < 𝑆𝐵 , e.g.,
+𝑆𝐴
+2𝑆𝐵
+≈ 1
+2
+· 𝑆𝐴
+𝑆𝐴+𝑆𝐵 when 𝑆𝐴 ≪ 𝑆𝐵 .
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+792
+2.4 Compound PoS Incentive Model
+Recently, a compound PoS incentive protocol, referred to as C-PoS,
+is deployed by the next generation Ethereum 2.0 [25]. Miners will
+be rewarded as (i) proposers who propose a new block and (ii)
+attesters who verify the validity of a block. Specifically, a miner will
+be assigned one identity for every 32 Ethers deposited in the smart
+contract. These identities are randomly and disjointly partitioned to
+32 shards as attesters to verify transactions in parallel. In addition,
+one identity will be selected uniformly at random from every shard
+as the block proposer. During each mining epoch, a miner can
+receive 3 · base · vote incentives for each attester identity she
+controls, where base is a pre-determined constant, vote is the
+percentage of attesters that stay online and actively submit votes
+(which is usually close to 100%). Meanwhile, a total of
+1
+8
+· base ·
+𝑁 incentives are provided for block proposers because of their
+contributions to their newly proposed blocks in each epoch, where
+𝑁 is the total number of identities assigned to all miners. Consider
+a two-miner scenario in a generalized C-PoS, where miners 𝐴 and
+𝐵 possess 𝑆𝐴 and 𝑆𝐵 stakes, respectively. Let 𝑣 and 𝑤 denote the
+total rewards for attesters and proposers, respectively. Assume that
+there are 𝑃 shards. Then, miner 𝐴 will obtain 𝑣 · 𝑆𝐴
+𝑆𝐴+𝑆𝐵 stakes as
+attesters and𝑤 · 𝑋
+𝑃
+stakes as proposers, where 𝑋 is the number of
+blocks proposed by 𝐴 in the epoch following binomial distribution
+Bin
+(
+𝑃,
+𝑆𝐴
+𝑆𝐴+𝑆𝐵
+)
+. Therefore, the total reward for𝐴 is 𝑣 · 𝑆𝐴
+𝑆𝐴+𝑆𝐵 +𝑤 · 𝑋
+𝑃
+,
+where 𝑋 ∼ Bin
+(
+𝑃,
+𝑆𝐴
+𝑆𝐴+𝑆𝐵
+)
+.
+Remark. Tomaintain the total reward for attesters (or proposers) in
+each epoch stable, Ethereum 2.0 slowly decreases the value of base
+as additional identities are rewarded after each epoch. In particular,
+𝑣 +𝑤 is around 1 Ether and 𝑣 is ∼20 times of𝑤 in Ethereum 2.0 [25].
+3 EXPECTATIONAL FAIRNESS
+Fairness is one of the most important concerns for the design of in-
+centive mechanisms. Intuitively, in a blockchain system with a fair
+incentive mechanism, the reward of a miner should be proportional
+to the amount of resource (e.g., computation power in PoW and
+staking power in PoS) that she obtains. That is, the return on invest-
+ment is identical for every miner. In this section, we first introduce
+our assumptions and the definition of expectational fairness and
+then analyze such fairness for the aforementioned four incentive
+protocols, namely PoW, ML-PoS, SL-PoS and C-PoS.
+3.1 Assumption and Definition
+We consider permission-less blockchains for all the protocols ana-
+lyzed and make the following assumptions.
+(1) Only two miners, i.e., miner 𝐴 and miner 𝐵, are competing for
+proposing blocks in the network.
+(2) Initially, the resource share of miner 𝐴 (resp. 𝐵) is 𝑎 (resp. 𝑏).
+Without loss of generality, 𝑎 and 𝑏 are normalized such that
+𝑎 + 𝑏 = 1.
+(3) The reward of each mining epoch remains the same, i.e., 𝑤
+proposer reward and 𝑣 inflation reward (e.g., attester reward
+in C-PoS).
+(4) Both miners 𝐴 and 𝐵 do not perform additional action after a
+mining game starts.
+Without loss of generality, we focus on studying the relationship
+between the original mining share of miner𝐴 and the total rewards
+obtained by 𝐴. The simple two-miner model in Assumption 1 is for
+the sake of brevity. In Section 6.1, we elaborate how to generalize
+it to the scenario with multiple miners, e.g., considering 𝐵 as a set
+of miners in PoW [21, 40]. In Assumption 2, the resource share
+represents the hash power ratio controlled by miners in PoW and
+the proportion of the initial amount of stakes possessed in PoS. As
+to Assumption 3, blockchain systems may change rewards when
+time evolves. For example, Bitcoin halves its block reward every
+210,000 blocks. However, the current halving period of Bitcoin is
+around four years, which is a long time that can asymptotically
+support the assumption that the reward of each block remains
+unchanged [27, 49]. Also note that the values of𝑤 and 𝑣 reflect the
+relative relation between an initial resource and a reward permining
+epoch, since 𝑎 and 𝑏 are normalized. According to Assumption 4,
+we assume that both PoW and PoS miners passively participate
+in the mining game and do not perform any additional action like
+withdrawal or top-up [34, 39].
+Our aim is to study whether a miner with a fraction of the total
+resource can finally obtain the same fraction of reward in expecta-
+tion. To achieve this goal, we leverage the concept of expectational
+fairness which is formally defined as follows.
+Definition 3.1 (Expectational Fairness). An incentive mechanism
+preserves expectational fairness for miner 𝐴 possessing a fraction
+𝑎 of the total resource if𝐴 receives a fraction _𝐴 of the total reward
+satisfying E[_𝐴] = 𝑎.
+3.2 Expectational Fairness for PoW
+Initially, miner𝐴 (resp. miner 𝐵) controls a fraction 𝑎 (resp.𝑏 = 1−𝑎)
+of the total hash power (i.e., mining rigs). The miner who success-
+fully creates a new block will be rewarded an incentive𝑤 . Let _𝐴
+represent the fraction of rewards received by miner 𝐴 after a total
+of 𝑛 blocks are appended to the blockchain. The total number 𝑛_𝐴
+of blocks proposed by 𝐴 follows a binomial distribution Bin(𝑛, 𝑎).
+Therefore, the expected reward of miner𝐴 is 𝑛𝑤𝑎 and hence the ex-
+pectation of the reward fraction is always equal to 𝑎. This indicates
+that PoW achieves expectational fairness, i.e., the expected reward
+of miner 𝐴 is proportional to her initial computation power.
+Theorem 3.2. PoW achieves expectational fairness.
+3.3 Expectational Fairness for ML-PoS
+At the beginning, miner 𝐴 (resp. miner 𝐵) owns a fraction 𝑎 (resp.
+𝑏 = 1− 𝑎) of the total stakes. Each block gives a reward of𝑤 stakes.
+Unlike PoW, the chance that𝐴 can win a block not only depends on
+the initial staking power (i.e., 𝑎) but also relies on previous mining
+outcomes. Specifically, the probability of 𝐴 proposing a new block
+is determined by 𝐴’s current staking power, including the initial
+stakes and the earned stakes. For example, if a miner is “lucky” to
+mine some blocks, her expected rewards will be improved in the
+future as the volume of her stakes increases. In the following, we
+show that ML-PoS still preserves expectational fairness.
+Theorem 3.3. ML-PoS achieves expectational fairness.
+Intuitively, the rationality behind Theorem 3.3 is from the fact
+that ML-PoS enables the probability of a miner proposing a new
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+793
+block being proportional to her currently possessed stakes. That
+is, the conditional expected reward for miner 𝐴 is proportional to
+her currently possessed stakes for each block. Taking expectation
+over the randomness of her possessed stakes, we can obtain that
+the expected reward for miner 𝐴 is proportional to her expected
+possessed stakes for each block, which concludes the theorem. Due
+to space limitations, we omit all proofs, and interested readers are
+referred to the appendix in our technical report [33] for details.
+3.4 Expectational Fairness for SL-PoS
+As we discussed in Section 2.3, different from ML-PoS, the proba-
+bility that 𝐴 wins a block under SL-PoS is
+𝑎
+2𝑏
+≤ 𝑎 when 𝑎 ≤ 𝑏. As
+a result, unless 𝑎 = 𝑏, the expected reward of 𝐴 is not guaranteed
+to be proportional to her initial resource share 𝑎 and hence SL-PoS
+does not preserve expectational fairness.
+Theorem 3.4. SL-PoS does not ensure expectational fairness even
+after an infinity number of blocks are proposed.
+3.5 Expectational Fairness for C-PoS
+Different from ML-PoS, in each mining epoch of C-PoS, the net-
+work randomly selects 𝑃 block proposers and each proposer will
+receive a proposer reward of
+𝑤
+𝑃
+(e.g., 𝑃 = 32 in Ethereum 2.0 [25]).
+In addition, the system also provides a total of 𝑣 inflation reward
+(e.g., attester reward in Ethereum 2.0 [25]) to all miners. Both the
+probability of proposer selection and the allocation of inflation re-
+ward are proportional to miners’ present staking power. Therefore,
+analogous to ML-PoS, C-PoS still preserves expectational fairness
+although it is more complicated.
+Theorem 3.5. C-PoS achieves expectational fairness.
+4 ROBUST FAIRNESS
+In the previous section, we analyze the stochastic process of the
+mining procedure leveraging the concept of expectational fairness.
+However, people usually care more about fairness in every possible
+outcome rather than a simple expectation. Expectational fairness,
+unfortunately, cannot provide such analysis. To tackle this issue, in
+this section, we propose a new concept of robust fairness, which
+can better characterize the relation between the initial investment
+and the reward distribution.
+4.1 Definition of Robust Fairness
+Robust fairness, intuitively, implies that the random outcome of a
+miner’s reward is concentrated to its initial investment with a high
+probability. To capture the concept of robust fairness, we define
+(Y, 𝛿)-fairness as follows.
+Definition 4.1 ((Y, 𝛿)-Fairness). For any given pair of parameters
+(Y, 𝛿) such that Y ≥ 0 and 0 ≤ 𝛿 ≤ 1, an incentive mechanism
+preserves an (Y, 𝛿)-fairness for miner 𝐴 possessing a fraction 𝑎 of
+the total resource if 𝐴 receives a fraction _𝐴 of the total reward
+satisfying
+Pr
+[
+(1 − Y)𝑎 ≤ _𝐴 ≤ (1 + Y)𝑎
+]
+≥ 1 − 𝛿.
+Definition 4.1 defines bicriteria fairness. Note that the definition
+of (Y, 𝛿)-fairness does not explicitly include the total number 𝑛
+of blocks (or epochs for C-PoS) for competing.
+2
+Usually, _𝐴 will
+gradually converge as long as 𝑛 increases. Thus, our analysis of
+(Y, 𝛿)-fairness is carried out on a large value of 𝑛, including a special
+case where 𝑛 goes to infinity. In the rest of the paper, we also
+say that an Y-fairness is achieved with a probability at least 1 − 𝛿 ,
+which exactly means that (Y, 𝛿)-fairness is preserved. According
+to Definition 4.1, smaller values of Y and/or 𝛿 indicate a higher
+level of fairness. In particular, an incentive mechanism preserving
+(0, 0)-fairness, which is absolutely fair, is an ideal protocol.
+4.2 Robust Fairness for PoW
+For the PoW incentive protocol, let 𝐹 (𝑘 ;𝑛, 𝑎) be the cumulative
+distribution function of the random variable 𝑛_𝐴 , i.e.,
+𝐹 (𝑘 ;𝑛, 𝑎) := Pr[𝑛_𝐴 ≤ 𝑘] =
+𝑘∑︁
+𝑖=0
+(
+𝑛
+𝑖
+)
+𝑎𝑖 (1 − 𝑎)𝑛−𝑖 .
+In addition, let Δ(Y;𝑛, 𝑎) be a function of Y, 𝑛, 𝑎 such that
+Δ(Y;𝑛, 𝑎) := 𝐹 (⌊𝑛(1 + Y)𝑎⌋;𝑛, 𝑎) − 𝐹 (⌈𝑛(1 − Y)𝑎⌉;𝑛, 𝑎).
+Thus, Δ(Y;𝑛, 𝑎) = Pr
+[
+(1 − Y)𝑎 ≤ _𝐴 ≤ (1 + Y)𝑎
+]
+. Therefore, to
+achieve an (Y, 𝛿)-fairness for miner 𝐴, the incentive parameters 𝑛
+and 𝑎 must satisfy that Δ(Y;𝑛, 𝑎) ≥ 1 − 𝛿 . However, Δ(Y;𝑛, 𝑎) is
+complicated, which cannot clearly and explicitly reveal the require-
+ments. To tackle this issue, we make use of Hoeffding inequality
+[32], which provides a neat expression of an upper bound on the
+probability that the sum of bounded independent random variables
+deviates from its expected value by more than a certain amount.
+In what follows, we give a sufficient condition (but not necessary)
+required by PoW for preserving an (Y, 𝛿)-fairness.
+Theorem 4.2. PoW preserves an (Y, 𝛿)-fairness for miner 𝐴 with
+the computation power of 𝑎 if the total number 𝑛 of blocks for com-
+peting satisfies 𝑛 ≥ ln( 2
+𝛿
+)
+2𝑎2Y2
+.
+By Theorem 4.2, we know that if miner 𝐴 competes for more
+blocks and/or possesses more hash power, she will feel fairer. More-
+over, it is easy to get that for PoW, _𝐴 converges to 𝑎 almost surely
+when 𝑛 → ∞, i.e., Pr[lim𝑛→∞ _𝐴 = 𝑎] = 1. Thus, when 𝑛 → ∞,
+PoW is absolutely fair by achieving the (0, 0)-fairness.
+4.3 Robust Fairness for ML-PoS
+The mining process of ML-PoS can be modeled by a classical Pólya
+Urn such that the fraction _𝐴 of blocks proposed by 𝐴 will finally
+converge to a beta distribution Beta( 𝑎𝑤 ,
+𝑏
+𝑤 ) almost surely [45, The-
+orem 3.2]. In particular, it is sufficient to achieve an (Y, 𝛿)-fairness
+if 𝐼 (1+Y)𝑎 ( 𝑎𝑤 ,
+𝑏
+𝑤 ) − 𝐼 (1−Y)𝑎 ( 𝑎𝑤 ,
+𝑏
+𝑤 ) ≥ 1 − 𝛿 , where 𝐼 is the regular-
+ized incomplete beta function. However, the relation is again not
+explicitly revealed. In the following, we derive a simple sufficient
+requirement by ML-PoS for achieving an (Y, 𝛿)-fairness. Unlike
+PoW where the mining outcomes are independent and identically
+distributed random variables, the mining competition for ML-PoS
+is a Markov chain process. To tackle this issue, we leverage Azuma
+inequality [6] for martingales [17], which supports certain weakly
+dependent random variables.
+2
+To reveal 𝑛 explicitly, we may use _𝐴,𝑛 to indicate the mining outcome of 𝑛 blocks.
+For brevity, _𝐴 refers to _𝐴,𝑛 in this paper unless specified otherwise.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+794
+Theorem 4.3. ML-PoS preserves an (Y, 𝛿)-fairness for miner 𝐴
+with staking power of 𝑎 if the total number 𝑛 of blocks for competing
+and the block reward𝑤 satisfy 1/𝑛 +𝑤 ≤ 2𝑎2Y2
+ln
+2
+𝛿
+.
+If miner 𝐴 competes more blocks and/or possesses more staking
+power, it is easier for ML-PoS to achieve an (Y, 𝛿)-fairness. However,
+unlike PoW,ML-PoS is sensitive to the reward𝑤 , e.g., a small reward
+for each block is more likely to be fair.
+4.4 Robust Fairness for SL-PoS
+According to Section 2.3, for SL-PoS, the probability that miners win
+a block is not proportional to their staking powers. Specifically, the
+return on investment of a miner increases along with her staking
+power, which shows a clear unfairness of rich-get-richer. In the
+following, we study the robust fairness for SL-PoS by exploring the
+reward distribution.
+Our analysis utilizes the techniques of Stochastic Approximation
+(SA) [60, 61]. We first introduce some useful definitions and lemmas
+of SA in the following.
+Definition 4.4 (Stochastic Approximation [60]). A stochastic ap-
+proximation algorithm {𝑍𝑛} is a stochastic process taking value in
+[0, 1], adapted to the filtration F𝑛 , that satisfies,
+𝑍𝑛+1 − 𝑍𝑛 = 𝛾𝑛+1
+(
+𝑓 (𝑍𝑛) +𝑈𝑛+1
+)
+,
+where 𝛾𝑛 , 𝑈𝑛 ∈ F𝑛 , 𝑓 : [0, 1] ↦→ R and the following conditions
+hold almost surely
+(i) 𝑐𝑙/𝑛 ≤ 𝛾𝑛 ≤ 𝑐𝑢/𝑛,
+(ii) |𝑈𝑛 | ≤ 𝐾𝑢 ,
+(iii) |𝑓 (𝑍𝑛) | ≤ 𝐾𝑓 , and
+(iv) |E[𝛾𝑛+1𝑈𝑛+1 | F𝑛] | ≤ 𝐾𝑒𝛾
+2
+𝑛 ,
+where 𝑐𝑙 , 𝑐𝑢 , 𝐾𝑢 , 𝐾𝑓 , 𝐾𝑒 are finite positive real numbers.
+The stochastic approximation algorithm is originally used for
+root-finding problems. Specifically, {𝑍𝑛} is a stochastic process
+with an initial value of 𝑍0, 𝛾𝑛 denotes a moving step size gradually
+decreasing along with 𝑛 and 𝛾𝑛𝑈𝑛 is a random noise with expecta-
+tion tending to zero quickly. In a nutshell, 𝑍𝑛 moves towards one of
+the zero points of 𝑓 (·) and finally converges as long as the update
+process iterates a sufficiently large number of steps.
+Lemma 4.5 (Zero Point of SA [60]). If 𝑓 is continuous then
+lim𝑛→∞ 𝑍𝑛 exists almost surely and is in 𝑄 𝑓 = {𝑥 : 𝑓 (𝑥) = 0}.
+Note that 𝑍𝑛 may not converge to every zero point in 𝑄 𝑓 . That
+is, if a zero point 𝑞 is stable, 𝑍𝑛 converges to 𝑞 when 𝑛 → ∞
+with a positive probability. Otherwise, if 𝑞 is an unstable point,
+𝑍𝑛 converges to 𝑞 with zero probability. The following lemmas
+characterize the properties of stable and unstable points of SA.
+Definition 4.6 (Attainability [60]). A subset 𝐼 is attainable if for
+every fixed 𝑁 ≥ 0, there exists an 𝑛 ≥ 𝑁 such that Pr[𝑍𝑛 ∈ 𝐼 ] > 0.
+Lemma 4.7 (Stable Zero Point of SA [60]). Suppose 𝑞 ∈ 𝑄 𝑓
+is stable, i.e., 𝑓 (𝑥) (𝑥 − 𝑞) < 0 whenever 𝑥 ≠ 𝑞 is close to 𝑞. If every
+neighborhood of 𝑞 is attainable then Pr[𝑍𝑛 → 𝑝] > 0.
+Lemma 4.8 (Unstable Zero Point of SA [60]). Assume that there
+exists an unstable point 𝑞 in𝑄 𝑓 , i.e., such that 𝑓 (𝑥) (𝑥−𝑞) ≥ 0 locally,
+and that E[𝑈 2
+𝑛+1 | F𝑛] ≥ 𝐾𝐿 holds, for some 𝐾𝐿 > 0, whenever 𝑍𝑛 is
+close to 𝑞. Then, Pr[𝑍𝑛 → 𝑞] = 0.
+Figure 1: Probability of winning the next block for SL-PoS.
+Now, we are ready to analyze the robust fairness for SL-PoS.
+Specifically, we denote𝑍𝑛 as the fraction of staking power possessed
+by miner 𝐴 after 𝑛 blocks are competed, e.g., 𝑍0 = 𝑎. We show that
+{𝑍𝑛} is a stochastic approximation algorithm. In particular, the
+update of 𝑍𝑛 is directed by the probability that the miner wins the
+next block characterized by 𝑓 (·). Moreover, the update step size of
+𝑍𝑛 also decreases along with 𝑛 because the more stakes are issued
+during the mining game, the less one block outcome can affect 𝑍𝑛 .
+Then, we apply the stochastic approximation algorithm to study
+the asymptotic behavior of 𝑍𝑛 . Interestingly, we find that 𝑍𝑛 will
+finally converge to 0 or 1 almost surely, which indicates that SL-PoS
+cannot achieve robust fairness.
+Theorem 4.9. For SL-PoS, the proportion reward _𝐴 of miner 𝐴
+converges to either 0 or 1 almost surely when 𝑛 → ∞. This indicates
+that SL-PoS cannot achieve robust fairness.
+Theorem 4.9 states that _𝐴 will finally converge to either _𝐴 = 0
+or _𝐴 = 1, no matter how much staking power is initially controlled
+by miner𝐴. In other words, the mining game ends with the fact that
+one monopoly miner acquires almost 100% staking power. Figure 1
+illustrates how the fraction of staking power evolves during the
+mining game. When 𝑍𝑛 = 0.3, the probability miner 𝐴 can win
+another block is less than 30% thus her expected fraction of stakes
+decreases as the mining game proceeds. Finally, 𝑍𝑛 tends to 0. Vice
+versa, when 𝑍𝑛 = 0.7, the miner will win a block with a probability
+higher than 70%. As a consequence, her fraction of stakes tends to
+1. Specially, when 𝑍𝑛 initiates on 0.5, the fraction of staking power
+possessed by the miner gradually leaves 𝑍𝑛 = 1/2 towards either
+the left side or the right side and then converges to 0 or 1 with a
+fifty-fifty chance.
+4.5 Robust Fairness for C-PoS
+C-PoS provides both inflation and proposer rewards. The income
+uncertainty comes from the proposer reward, which is reduced by
+the inflation reward that is distributed proportionally to miners’
+shares of stakes. Therefore, compared with ML-PoS, C-PoS is more
+likely to achieve robust fairness.
+Theorem 4.10. C-PoS preserves an (Y, 𝛿)-fairness for miner𝐴 with
+the staking power of 𝑎 if the total number 𝑛 of epochs for competing,
+the shard size 𝑃 of each epoch, the proposer reward𝑤 and inflation
+reward 𝑣 for each mining epoch satisfy 𝑤2 (1/𝑛+𝑤+𝑣)
+(𝑤+𝑣)2𝑃 ≤ 2𝑎2Y2
+ln
+2
+𝛿
+.
+Theorem 4.10 states that C-PoS is more likely to achieve an (Y, 𝛿)-
+fairness than ML-PoS because
+𝑤2 (1/𝑛+𝑤+𝑣)
+(𝑤+𝑣)2𝑃 is notably smaller than
+1/𝑛 +𝑤 due to the inflation reward 𝑣 and 𝑃 shards in each epoch.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+795
+Number of Blocks
+(a) PoW
+Number of Blocks
+(b) ML-PoS
+Number of Blocks
+(c) SL-PoS
+1000 2000 3000 4000 5000
+Number of Blocks
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+(d) C-PoS
+Figure 2: Evolution of _𝐴 along with the number 𝑛 of blocks under 𝑎 = 0.2,𝑤 = 0.01 and 𝑣 = 0.1.
+In particular, to achieve robust fairness for C-PoS, we can increase
+inflation reward 𝑣 and shard size 𝑃 , and meanwhile reduce proposer
+reward𝑤 . Note also that Theorem 4.10 degenerates to Theorem 4.3
+if no inflation reward is provided and there is one shard in each
+epoch, i.e., 𝑣 = 0 and 𝑃 = 1.
+5 EXPERIMENTAL EVALUATION
+In this section, we evaluate the fairness for PoW and three PoS
+protocols (i.e., ML-PoS, SL-PoS and C-PoS) with both real system
+experiments and numerical simulations.
+5.1 Experimental Setup
+In the real system deployment, we select Geth client (v1.9.11) [19],
+Qtum core (v0.19.0.1) [58] and NXT client (v1.12.2) [36] as represen-
+tatives of PoW, ML-PoS and SL-PoS mechanisms, respectively. Note
+that C-PoS is proposed by Ethereum 2.0 [25] which is still under
+development, due to which we cannot evaluate with real system
+experiments. All experiments are conducted on Amazon AWS EC2
+Services. Specifically, PoW experiments are deployed on M5.4xlarge
+instances each with a 16-core Intel Xeon Platinum 8175M CPU and
+32GB RAM. Since PoS protocols are computational insensitive, ML-
+PoS and SL-PoS experiments are conducted on M5.large instances
+each with a 2-core Intel Xeon Platinum 8175M CPU and 4GB RAM.
+In each test case, we implement a two-miner network and each
+miner is deployed on an individual EC2 instance. We repeat the
+experiments 10 times for PoW and 500 times for PoS, and report
+the statistical results.
+Numerical simulations are also carried out to supplement the
+experiments especially when real system evaluations are limited in
+computational resource or mining time. In particular, we validate
+the fairness for C-PoS completely based on numerical simulations
+due to the lack of the real system. We repeat the simulations 10,000
+times and report the statistical results.
+For the evaluations of robust fairness, we set Y = 0.1 and 𝛿 = 10%
+by default. That is, with a probability of at least 90%, the return
+on investment of a miner in a random outcome is in the range
+of [0.9, 1.1] of the average over all miners. For convenience, we
+refer to the range [(1 − Y)𝑎, (1 + Y)𝑎] as fair area and the range
+[0, (1−Y)𝑎) ∪ ((1+Y)𝑎, 1] as unfair area. We measure the likelihood
+of _𝐴 locating in the fair area to reveal the robust fairness, i.e., (Y, 𝛿)-
+fairness is achieved if such a likelihood is no less than 1 − 𝛿 .
+5.2 Fairness Results
+Figure 2 illustrates the evolution of _𝐴 with the number of blocks 𝑛
+that miners compete, which can capture both expectational fairness
+and robust fairness. Initially, miner 𝐴 controls 𝑎 = 20% of the total
+mining power for all the tested cases. For ML-PoS and SL-PoS,
+the reward of each block is set as 𝑤 = 0.01 (which is normalized
+against the total initial stakes). For C-PoS, the proposer and inflation
+rewards of each mining epoch are set as𝑤 = 0.01 and 𝑣 = 0.1where
+the inflation reward is 10 times of the proposer reward like the
+settings in Etherum 2.0. In Figure 2, the area between two black
+dash lines is the fair area, i.e., [(1 − Y)𝑎, (1 + Y)𝑎]. Meanwhile, the
+orange line represents the sample average of all the simulation
+results, and the bottom and top edges of the blue area indicate
+the 5th and 95th percentiles, respectively. That is, expectational
+fairness is achieved if the orange line matches the horizontal line
+with a value of 0.2, while robust fairness is achieved if the blue
+area locates within the fair area. Similarly, the green bar shows
+the result of the real system experiments, where the central mark
+indicates the mean, and the bottom and top edges indicate the 5th
+and 95th percentiles.
+Figure 2(a) reports the evolution of _𝐴 for PoW. As can be seen,
+the average of both the experiment and the simulation is very close
+to 0.2, which confirms that PoW achieves expectational fairness
+as stated in Theorem 3.2. The result also shows that _𝐴 of both
+the system and the simulation gradually converges to the fair area
+as 𝑛 increases. Specifically, when 𝑛 < 100, there are a noticeable
+fraction of cases locating in the unfair area. On the other hand, when
+𝑛 > 1,000, almost all cases locate in the fair area, which confirms
+Theorem 4.2. In the Ethereum mining protocol, the average time
+interval between two blocks is around 15 seconds and thus the total
+reward obtained by a miner will concentrate to the expectation
+with a high probability after around 4.1 hours.
+Figure 2(b) shows the result for ML-PoS. Again, the average
+of _𝐴 of both the experiment and the simulation is close to 0.2,
+which demonstrates the expectational fairness ofML-PoS (i.e., Theo-
+rem 3.3). However, unlike PoW,we find that there are a large number
+of cases locating in the unfair area even though miners have com-
+peted for a great number of blocks, e.g., 𝑛 = 5,000 or equivalently
+8.6 days in our experiment. That is, for certain settings of block
+reward𝑤 , e.g.,𝑤 = 0.01, miner 𝐴 is likely to feel unfair no matter
+how long𝐴 participates the mining game, which is not robustly fair.
+Recall that Theorem 4.3 shows that if 1/𝑛+𝑤 ≤ 2𝑎2Y2
+ln(2/𝛿) , ML-PoS can
+achieve an (Y, 𝛿)-fairness, which is consistent with our observation.
+However, in our evaluation,
+2𝑎2Y2
+ln(2/𝛿) ≈ 0.00027 ≪ 𝑤 = 0.01, which
+does not satisfy the requirement of robust fairness for ML-PoS.
+Figure 2(c) plots the evolution of _𝐴 for SL-PoS. We observe that
+different from the three other protocols, _𝐴 continuously decreases
+as the mining game proceeds. Specifically, the average of _𝐴 for the
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+796
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(a) PoW
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(b) ML-PoS
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(c) SL-PoS
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(d) C-PoS
+Figure 3: Unfair probabilities for PoW, ML-PoS, SL-PoS and C-PoS under𝑤 = 0.01, 𝑣 = 0.1 and different settings of 𝑎.
+Number of Blocks
+(a) Different stake allocation 𝑎
+Number of Blocks
+(b) Different block reward 𝑤
+Figure 4: Average of reward proportion _𝐴 for SL-PoS.
+first block is 0.2/(2 × 0.8) = 12.5% (Section 2.3), and it decreases
+to 2% quickly after 10
+4
+new blocks are proposed (around 9.2 days
+on NXT). Furthermore, _𝐴 even approaches 0 when 𝑛 reaches 10
+5
+(around 92 days on NXT). This indicates that when 𝑎 = 0.2 and
+𝑤 = 0.01, after the mining game operates for a period of time, the
+poor miner (i.e., miner 𝐴) will completely lose her stake share and
+the rich miner (i.e., miner 𝐵) will monopolize the future generation
+of new blocks. This phenomenon exhibits a clear unfairness. These
+observations confirm our analysis in Theorem 3.4 and Theorem 4.9.
+Figure 2(d) gives the result for C-PoS where there are 𝑃 = 32
+shards. We observe that the average of _𝐴 , as expected by The-
+orem 3.5, is almost 0.2. Compared with ML-PoS, the distribution
+of _𝐴 for C-PoS has a significantly narrower range. In fact, C-PoS
+is superior to ML-PoS, leveraging the advantages of sharding and
+inflation reward to reduce the uncertainty of reward allocation, as
+analyzed in Theorem 4.10. Therefore, we conclude that C-PoS is
+the best PoS protocol among the three tested in terms of fairness.
+5.3 Study on Expectational Fairness for SL-PoS
+In Figure 2, we show that among the four examined protocols,
+only SL-PoS does not ensure expectational fairness. In this section,
+we further study some factors, including initial stake allocation 𝑎
+and block reward𝑤 , that may affect the expectational fairness for
+SL-PoS. The result is given in Figure 4, where markers and lines
+represent the experimental and simulation results, respectively.
+5.3.1 Impact of Initial Stake Allocation. Figure 4(a) reports the
+average of the reward proportion _𝐴 under𝑤 = 0.01 and different
+staking power 𝑎 of miner 𝐴 with values in {0.1, 0.2, 0.3, 0.4, 0.5}.
+Interestingly, the average reward proportion of 𝐴 reduces to 0 for
+all settings except the one at 𝑎 = 0.5. This indicates that no matter
+how much staking power (once 𝑎 < 0.5) miner 𝐴 controls initially,
+the miner will own zero staking power finally. We also observe
+that the average of _𝐴 increases along with 𝑎, which implies that it
+takes longer time to completely lose competitiveness for the miner
+with a larger initial staking power.
+5.3.2 Impact of Block Reward. Figure 4(b) shows the average of the
+reward proportion _𝐴 under 𝑎 = 0.2 and different block reward𝑤
+with values in {10−4, 10−3, 10−2, 10−1}. We observe that the average
+of _𝐴 decreases along with both (i) the number 𝑛 of blocks and (ii)
+block reward𝑤 . The reason is that if the block reward𝑤 is smaller,
+the fraction of staking power controlled by 𝐴 reduces slower, so as
+to the average of _𝐴 .
+5.4 Study on Robust Fairness
+We further explore the effects of initial resource allocation 𝑎, block
+proposer reward𝑤 and inflation reward 𝑣 on robust fairness. We
+measure the likelihood of _𝐴 locating in the unfair area, referred to
+as unfair probability, i.e., Pr[_𝐴 < (1 − Y)𝑎 ∨ _𝐴 > (1 + Y)𝑎]. This
+metric reveals that (Y, 𝛿)-fairness is achieved only if the unfair prob-
+ability is no more than 𝛿 . Figure 3 and Figure 5 show the results,
+where the experimental and simulation results are indicated by
+markers and lines, respectively. Note that we only show experimen-
+tal results for ML-PoS and SL-PoS, as repeating PoW experiments
+10 times is insufficient to calculate unfair probability and C-PoS is
+under the development of Ethereum 2.0.
+5.4.1 Impact of Initial Resource Allocation. Figure 3(a) shows the
+unfair probability for PoW under various 𝑎, where the black dash
+line represents the probability threshold 𝛿 = 0.1 for achieving the
+(Y, 𝛿)-fairness. We observe that the unfair probability under all
+settings reduces along with the number 𝑛 in general, which again
+implies that an (Y, 𝛿)-fairness is always achievable by PoW when
+𝑛 is sufficiently large. We also find that PoW achieves an (Y, 𝛿)-
+fairness faster for larger value of 𝑎. As an example, the number 𝑛 of
+blocks required for preserving robust fairness for a medium miner
+with 𝑎 = 0.3 is less than 800 while that for a tiny miner with 𝑎 = 0.1
+is more than 2,000. This indicates that if the majority of miners in a
+PoW-based blockchain system control a small fraction of the total
+hash power (which is the usual case), it requires a relatively long
+time period to preserve an (Y, 𝛿)-fairness for every miner.
+Figure 3(b) plots the unfair probability for ML-PoS. We observe
+that at the beginning, the unfair probability decreases along with
+the number 𝑛 of blocks. However, when 𝑛 reaches some thresholds,
+e.g., 𝑛 = 1,000, the unfair probability converges to certain constants
+that are likely to be larger than the threshold of 𝛿 . This indicates that
+a long period of competing time does not suffice the requirement of
+(Y, 𝛿)-fairness. Meanwhile, we observe that the unfair probability
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+797
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(a) ML-PoS
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(b) SL-PoS
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(c) C-PoS with 𝑣 = 0.1 and different 𝑤
+Number of Blocks
+U
+n
+fa
+ir
+ P
+ro
+b
+ab
+il
+it
+y
+(d) C-PoS with 𝑤 = 0.01 and different 𝑣
+Figure 5: Unfair probabilities for PoW, ML-PoS, SL-PoS and C-PoS under 𝑎 = 0.2 and different settings of𝑤 and 𝑣 .
+is smaller for a miner controlling more stakes 𝑎. This implies that
+rich miners are more likely to feel fair than poor miners.
+Figure 3(c) compares the unfair probability for SL-PoS. We ob-
+serve that the unfair probability of miner 𝐴 initiates over a wide
+range, i.e., a tiny miner with 𝑎 = 0.1 starts with an unfair probability
+of 98% and the unfair probability for a large miner with 𝑎 = 0.4
+is 82%. However, in all settings, the unfair probability gradually
+increases with a larger block number and eventually converges to
+100%. Moreover, the result shows that the unfair probability of rich
+miners deteriorates slower than that of poor miners. As an example,
+the unfair probability of a tiny miner with 𝑎 = 0.1 converges to
+100% when 𝑛 reaches 200 but a large miner with 𝑎 = 0.4 turns to
+100% unfair when 𝑛 exceeds 800.
+Figure 3(d) reports the simulation result for C-PoS. In general,
+C-PoS has similar trends with ML-PoS but the unfair probability of
+the former is much lower and converges more rapidly. Specifically,
+for a medium miner with 𝑎 = 0.3, the unfair probability of ML-PoS
+is as high as ∼50% but that of C-PoS is less than 10% such that the
+(Y, 𝛿)-fairness is achieved for C-PoS but not for ML-PoS.
+5.4.2 Impact of Block Reward. We further study how a block re-
+ward affects the robust fairness for ML-PoS, SL-PoS and C-PoS.
+(Note that PoW is insensitive to block reward𝑤 .) Figure 5(a) shows
+the unfair probability for ML-PoS under 𝑎 = 0.2 and different block
+reward settings. The setting of a large block with𝑤 = 0.1, where
+the block reward is close to the initial stake circulation, suffers
+from a severe fairness issue. In particular, the unfair probability
+of miner 𝐴 is at least 85%. The reason is that the mining outcome
+of the first few blocks will significantly change the distribution
+of staking power among miners, which in turn heavily affects the
+mining game subsequently. As a contrary, in the setting of tiny
+block with 𝑤 = 10
+−4
+, achieving an (Y, 𝛿)-fairness for miner 𝐴 is
+easy. The reason is that if block reward is much smaller compared
+with the initial stakes, the earned stakes from the mining game
+have a negligible contribution to the staking power. In other words,
+the probability for a miner to propose a new block remains roughly
+unchanged when time evolves. Therefore, to improve the fairness
+for ML-PoS, we may set a small reward for each block or release
+more stakes at the very beginning of the mining game.
+Figure 5(b) illustrates the unfair probability for SL-PoS, which is
+relatively insensitive to the block reward𝑤 . In particular, the unfair
+probabilities for SL-PoS initiate around 95% and then increase to
+100% after 200 blocks for all the settings of𝑤 tested. Figure 5(c) re-
+ports the result for C-PoS when𝑤 varies. Again, C-PoS outperforms
+ML-PoS significantly, though they have similar trends under differ-
+ent settings of𝑤 . Moreover, we also compare the unfair probability
+under different settings of the inflation reward 𝑣 in Figure 5(d). As
+can be seen, the unfair probability decreases along with inflation
+reward 𝑣 . Specifically, the unfair probability under 𝑣 = 0 is ∼70%
+whereas this value sharply reduces to ∼50% under 𝑣 = 0.01 and
+even to ∼10% under 𝑣 = 0.1. In intuition, the inflation reward dis-
+tributed to every miner is completely proportional to their staking
+power and hence the income uncertainty from the proposer reward
+is significantly diluted.
+6 DISCUSSION
+The previous analysis is based on a two-miner scenario, and this
+section first discusses how to extend our analysis to a general setting
+with multiple miners. In addition, the previous analysis reveals that
+SL-PoS can accomplish neither expectational fairness nor robust
+fairness while ML-PoS cannot easily achieve robust fairness. This
+section also discusses some remedies and improvements for these
+two protocols. Finally, we will discuss more incentives and some
+practicalities that can benefit from our fairness analysis.
+6.1 Extension to Multiple Miners
+Our analysis above is based on a simple two-miner scenario. In the
+following, we discuss the fairness in a general setting with multiple
+miners for the four aforementioned blockchain incentives.
+In PoW, ML-PoS and C-PoS, using similar arguments in Section 2,
+it is trivial to get that the probability of a miner proposing a block
+is proportional to her computation/staking power regardless of the
+resource distribution of the other miners. Consequently, according
+to our analysis in Section 3 and Section 4, one can easily verify that
+the results of both expectational fairness and robust fairness still
+hold for the three incentives, by considering 𝐵 as a set of miners.
+On the other hand, such an extension for SL-PoS is non-trivial.
+In fact, we show that the probability of proposing a block is not
+proportional to the miner’s staking power in general (unless all
+miners possess an identical amount of staking power).
+Lemma 6.1. In SL-PoS with multiple miners, there exists a miner
+such that the probability of the miner proposing a block is not pro-
+portional to her staking power unless all miners possess an identical
+amount of staking power.
+By Lemma 6.1, analogous to our analysis in Section 3.4 and
+Section 4.4, we can get that neither expectational fairness nor robust
+fairness is accomplished by SL-PoS when there are multiple miners.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+798
+Table 1: Results for Multi-Miner Game.
+No. of Miners PoW ML-PoS SL-PoS C-PoS
+A
+v
+g
+.
+o
+f
+_
+𝐴
+2 Miners 0.20 0.20 0.00 0.20
+3 Miners 0.20 0.20 0.00 0.20
+4 Miners 0.20 0.20 0.00 0.20
+5 Miners 0.20 0.20 0.20 0.20
+10 Miners 0.20 0.20 0.98 0.20
+U
+n
+f
+a
+i
+r
+P
+r
+o
+b
+.
+2 Miners 0 0.14 1 0.08
+3 Miners 0 0.13 1 0.09
+4 Miners 0 0.14 1 0.08
+5 Miners 0 0.15 0.98 0.08
+10 Miners 0 0.13 1 0.08
+C
+v
+g
+.
+T
+i
+m
+e
+2 Miners 1055 Never Never 110
+3 Miners 1016 Never Never 104
+4 Miners 1087 Never Never 115
+5 Miners 1010 Never Never 122
+10 Miners 1030 Never Never 137
+Table 1 shows the empirical results via simulations. We compare
+the average value of _𝐴 and the corresponding unfair probability.
+We also record the number of blocks when the (Y, 𝛿)-fairness is
+achieved. In our simulation, miner 𝐴 controls 20% of the initial
+mining resource and the other miners equally share the 80% re-
+maining mining resource. By default,𝑤 = 0.01 and 𝑣 = 0.1. We can
+see that for PoW, ML-PoS and C-PoS, the results of multi-miner
+are similar to those of two-miner. This indicates that our analysis
+on these three protocols also holds when more than two players
+are included in the mining game. However, for SL-PoS, we observe
+that the average of _𝐴 remains 0 when 2–4 miners are considered
+in the mining game, and it suddenly increases to 0.2 and 0.98 un-
+der 5 and 10 miners, respectively. The result implies that miner
+𝐴’s reward depends not only on her staking power but also on
+the staking distribution of 𝐴’s competitors. Specifically, only the
+biggest miner will monopolize the network with a high probability
+and the rest miners will finally lose their wealth, which extends
+the conclusion on two-miner to multi-miner. For example, when 5
+miners compete in the network, all miners including miner 𝐴 have
+identical 20% stakes initially. Thus, as discussed above, the average
+income of miner 𝐴 should be 20% of the total reward. However,
+when more than 5 miners are included, miner 𝐴 controls more
+stakes than the others and thus the average income of miner 𝐴
+improves dramatically.
+6.2 Treatment for SL-PoS
+SL-PoS will finally turn to monopolization due to the unfair win-
+ning probability for each block. One potential treatment is to adjust
+the time function so that the winning probability becomes asymp-
+totically proportional to the staking power.
+Specifically, assume that 𝑋 and 𝑌 denote the hash values of can-
+didate blocks issued by 𝐴 and 𝐵, which are uniformly distributed
+in the range of [0, 2256 − 1] such that
+𝑋
+2
+256
+and
+𝑌
+2
+256
+follow uniform
+distribution 𝑈 (0, 1) asymptotically. To ensure both expectational
+and robust fairness, the time function 𝑇 (·) is required to satisfy
+Pr[𝑇 (𝑋 ; 𝑆𝐴) < 𝑇 (𝑌 ; 𝑆𝐵)] = 𝑆𝐴/(𝑆𝐴 + 𝑆𝐵), where 𝑆𝐴 and 𝑆𝐵 are
+Number of Blocks
+(a) FSL-PoS
+Number of Blocks
+(b) FSL-PoS Reward Withholding
+Figure 6: Evolution of _𝐴 along with the number 𝑛 of blocks
+under 𝑎 = 0.2,𝑤 = 0.01.
+the staking power of 𝐴 and 𝐵. Motivated by the PoW incentive
+model in Section 2.1, if 𝑇𝐴 = 𝑇 (𝑋 ; 𝑆𝐴) and 𝑇𝐵 = 𝑇 (𝑋 ; 𝑆𝐵) follow
+negative exponential distributions with rate parameters 𝑆𝐴 and 𝑆𝐵 ,
+i.e., the probability density function of 𝑇𝐴 is 𝑓 (𝑡𝐴; 𝑆𝐴) = 𝑆𝐴e−𝑆𝐴𝑡𝐴
+for 𝑡𝐴 ≥ 0. To achieve this goal, we make use of inverse trans-
+form sampling. In particular, consider the cumulative distribution
+function of 𝑇𝐴 as 𝐹 (𝑡𝐴; 𝑆𝐴) = 1 − e
+−𝑆𝐴𝑡𝐴
+. Now, let 𝐹 (𝑇𝐴; 𝑆𝐴) = 𝑋
+such that 𝑇𝐴 =
+− ln(1−𝑋 )
+𝑆𝐴
+. We know that if 𝑋 is uniformly dis-
+tributed in the range of [0, 1], 𝑇𝐴 is a random variable follow-
+ing the negative exponential distribution with a rate parame-
+ter 𝑆𝐴 . Applying the same approach for 𝑇𝐵 , we can obtain that
+Pr[𝑇𝐴 < 𝑇𝐵] =
+𝑆𝐴
+𝑆𝐴+𝑆𝐵 . To conclude, our treatment for SL-PoS is
+to set time = basetime · − ln(1−Hash(pk,...)/2256)
+stake . We conduct both
+experiments and simulations on NXT to evaluate our treatment, re-
+ferred to as FSL-PoS (i.e., fair-single-lottery PoS). Figure 6(a) shows
+the evolution of _𝐴 along with the number 𝑛 of blocks that miners
+compete. In contrast to the original SL-PoS in Figure 2(c), the aver-
+age income of miner 𝐴 in FSL-PoS is 20% of the total reward, which
+confirms the expectational fairness of our treatment. However, we
+observe that quite a few cases of _𝐴 locate outside the fair area,
+which indicates that robust fairness is not achieved yet. In what
+follows, we further discuss how to improve robust fairness.
+6.3 Improvement for Robust Fairness
+Reward Withholding. One potential solution that may improve
+robust fairness is to withhold block rewards that will take effect
+periodically. As an example, the block reward will be issued to the
+proposer immediately but only take effect at the next 1,000-th block,
+e.g., the reward is issued at the 1,024-th block but takes effect at the
+2,000-th block. The incentives obtained by a miner during two suc-
+cessive effective time points should concentrate to the expectation
+due to the law of large numbers. As a consequence, fairness will
+be improved. We perform experiments and simulations that apply
+reward withholding to FSL-PoS, where the reward takes effect at
+the block of the next thousand. Figure 6(b) reports the evolution
+of _𝐴 when time evolves. Clearly, almost all cases locate in the fair
+area, which demonstrates the effectiveness of our improvement.
+Less Block Reward. As analyzed theoretically and empirically, a
+small block reward𝑤 is in favor of fairness for ML-PoS. However,
+this action should be carefully performed since less subsidy will
+reduce miners’ motivation. In addition, increasing the initial circu-
+lation of stakes can indirectly reduce the relative block reward𝑤 ,
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+799
+which will eventually benefit the fairness of ML-PoS. Initial Coin
+Offering (ICO) and airdrop are two common ways to allocate initial
+stake circulation. ICO allows a project team to sell a fraction of
+stakes to investors before the mining competition. Airdrop allo-
+cates cryptocurrencies towards community users for free during
+the early stage of mining.
+6.4 Fairness of More Incentive Protocols
+The metrics and insights of fairness that we learned from PoW and
+three PoS protocols can be applied to more incentive protocols. In
+the following, we discuss six more incentives.
+NEO and NEO Gas. NEO [73] is a PoS based blockchain that
+adopts a decentralized Byzantine fault tolerance consensus algo-
+rithm among authenticated stakers. The stakers compete for re-
+wards depending on the share of base asset (e.g., NEO token) that
+they possess. Different from other PoS protocols, the rewards and
+transaction fees are paid for by a separate reward asset (e.g., NEO
+gas) that does not affect the future mining power. Therefore, such
+a PoS incentive works as same as the conventional PoW protocol,
+which preserves both types of fairness in a long-term mining game.
+Algorand. Algorand [29] is a scalable blockchain adopting verifi-
+able random functions and the Byzantine agreement. It just provides
+inflation rewards to the stakers who possess Algorand in wallet
+while no proposer reward is released in the mining process. As a
+result, the stakers will always obtain fair rewards without uncer-
+tainty. Despite its fairness, the incentive model has been questioned
+by criticisms, since consensus participants may lose motivation to
+maintain the ledger.
+EOS. EOS [70] is a delegated PoS protocol based on the practical
+Byzantine fault tolerance. It achieves consensus among a commit-
+tee with 21 elected delegates who propose blocks by turns. Every
+delegate proposes the same amount of blocks in a consensus round
+if she is active and honest. As for the incentive, each delegate re-
+ceives an inflation reward proportional to her stakes (or votes) and
+a proposer reward which is a constant for everyone regardless of
+her stake share. Therefore, in general, neither expectational fairness
+nor robust fairness is achieved in EOS.
+Wave and Vixify. Begicheva and Kofman [7] proposed a variant of
+PoS, calledWave, on the basis of NXT (i.e., SL-PoS), which improves
+the time function in NXT in a way similar to our treatment FSL-PoS.
+Orlicki [54] proposed Vixify by imitating the Nakamoto consensus
+in PoS leveraging verifiable random functions and verifiable delay
+functions. These two protocols ensure that a miner proposes a
+new block with a probability proportional to her stakes and only
+provide a proposer reward that will constitute future mining power.
+Therefore, analogous to FSL-PoS or ML-PoS, both Wave and Vixify
+can achieve expectational fairness but do not ensure robust fairness.
+Filecoin. Filecoin [71] aims to build a storage networkwhere clients
+upload and retrieve data in a decentralized way. The system utilizes
+a Proof-of-Storage-and-Time protocol to ensure the retrievability
+of stored data. The incentive is based on the miners’ contributions
+on both storage space and pledge stakes, which constitute mining
+power. Hence, our analysis of PoW and PoS protocols is useful for
+understanding the fairness of the Filecoin incentive.
+6.5 Practicality of Fairness Analysis
+Protecting Data Reliability and Integrity. Transaction process-
+ing and data provenance in permission-less blockchains rely on de-
+centralized governance. A fair incentive is an essential component
+of public ledgers, since if a system is unfair by design, attackers or
+whale miners may easily accumulate their wealth during a mining
+game so that the network becomes centralized gradually. Monopoly
+miners can maliciously rollback transactions and tamper with data
+by concentrating mining power on launching a 51% attack. Recently,
+transactions in Ethereum Classic were rollbacked due to the 51%
+attack, resulting in 1.68 million dollars of loss [51]. Therefore, as
+one of the FAT principles of responsible data science [28], fairness
+protects data reliability and integrity in practice.
+PreventingMining Pools. To reduce the uncertainty of reward, an
+effective strategy for miners is to join mining pools, which however
+encourages a centralized network and hence betrays the foundation
+of blockchain. Arguably, large mining pools are bad since they may
+concentrate power on launching severe attacks, e.g., 51% attack.
+This issue can be well addressed by leveraging the concept of robust
+fairness. In particular, an incentive preserving robust fairness en-
+sures that miners receive stable rewards, i.e., the random outcome
+of a miner’s reward is concentrated to its initial investment with
+high probability. With such an incentive mechanism, miners will
+lose motivation to join mining pools.
+Enhancing Security. As discussed above, improving (expecta-
+tional and robust) fairness can prevent miners from monopolizing
+the network or joining mining pools, which decreases the risk of
+adversarial control of a blockchain. In addition, there are several
+malicious attacks directly targeting on incentives so as to obtain
+an unfair profit, such as selfish mining [21, 40, 53], block with-
+holding [20, 44] and bribery [26, 47]. Our analysis provides insight
+into further study of the incentive-based attacks, especially in PoS
+protocols which are rarely explored due to technical challenges.
+This will eventually be useful for developing secure blockchains
+resistant to these attacks.
+7 RELATEDWORK
+Incentive and Fairness. To ensure data immutability and secu-
+rity of permission-less blockchains, a fair incentive mechanism is
+often required. To our knowledge, rare research work studied the
+fairness of blockchain incentives, though there have been some
+concerns raised by cryptocurrency communities. Fanti et al. [22]
+introduced the concept of equitability defined as the ratio of the
+incentive variance to the initial resource variance, which unfortu-
+nately cannot answer the fairness concern directly. Rosu and Saleh
+[64] analyzed the rich-get-richer phenomenon for ML-PoS using
+martingale and Dirichlet distribution, and claimed that ML-PoS
+will not face fairness issue as the fraction of rewards obtained by a
+miner in expectation is equal to her initial resource share, i.e., ex-
+pectational fairness in our context. However, we introduce a new
+concept of robust fairness that can better capture the uncertainty
+of a mining game, and show that ML-PoS may not achieve robust
+fairness. Moreover, these studies [22, 64] focused on the classical
+ML-PoS protocol deployed on earlier PoS implementations such as
+Qtum [75] and Blackcoin [69], whereas our analysis, in addition to
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+800
+ML-PoS, covers more state-of-the-art implementations including
+SL-PoS by NXT [72] and C-PoS by Ethereum 2.0 [25]. Pass and Shi
+[55] designed a fair protocol in similar spirit of Nakamoto’s PoW
+protocol. Different from their work that targeted at protocol design,
+we analyze the fairness of blockchain incentives for several popular
+protocols, including PoW, ML-PoS, SL-PoS and C-PoS.
+The incentives of permission-less blockchains have attracted
+broader interests from researchers. The attacks on blockchain in-
+centives may result in resource accumulation and further increase
+the risk of transaction tampering. Kwon et al. [41] discussed the
+movement of miners when mining rigs are applicable on two PoW
+networks. Tsabary and Eyal [76] and Carlsten et al. [11] found that
+miners may periodically suspend their mining rigs if no block re-
+ward is provided by the Bitcoin protocol. Some work studied the
+attacks on incentives, including selfish mining [21, 23, 40, 53, 67],
+block withholding [20, 44] and bribery [26, 47]. Our work is from
+the perspective of fairness that complements these existing studies
+on blockchain incentives.
+Transaction Processing. Designing a transaction processing
+pipeline with high performance under large scale while ensuring
+security has been a major research topic [12]. Zakhary et al. [80]
+proposed an atomic cross-chain commitment for permission-less
+ledgers which ensures an all-or-nothing atomicity property. Herlihy
+et al. [31] extended such an atomicity to the cross-chain deal which
+can be applied to more types of adversarial commerce. Maiyya et al.
+[46] integrated fault tolerant replication into atomic commitment
+for cloud data management. Tao et al. [68] adopted a dynamic shard-
+ing algorithm on smart contracts to avoid empty blocks andwaste of
+energy. Amiri et al. [3] adopted a directed acyclic graph on permis-
+sioned blockchain which supports both confidential transactions
+and cross-application transactions. In addition, some benchmark
+evaluations studied the transaction throughput and network la-
+tency of various blockchain systems [15, 16], the performance of
+blockchain index structures [79], and the performance of memory
+intensive PoW hash functions [24]. The security of transaction
+processing relies on the decentralization of the resource, which is
+heavily affected by the fairness of incentives, e.g., a 51% attack is
+likely to occur if the rich get richer. Our work evaluates the fairness
+of various commonly used incentives and provides insights into
+blockchain designs to ensure reliable data.
+Blockchain-as-a-Database. Blockchain, as a distributed database,
+becomes popular for various applications. vChain [77, 78] and
+GEM
+2
+[82] applied an authenticated data structure to blockchain to
+ensure query integrity. Merkle
+𝑖𝑛𝑣
+and Chameleon
+𝑖𝑛𝑣
+[81] further
+reduced the maintenance cost of data authentication on hybridstor-
+age blockchains by leveraging cryptographic proof and chameleon
+commitment. ResilientDB [30] utilized a network-topology-aware
+consensus algorithm to achieve both lower communication latency
+and network decentralization. FalconDB [56] adopted database
+servers with verification interfaces accessible to clients and stored
+the digests for query/update authentications on a blockchain to
+enable efficient and secure collaboration. Buchnik and Friedman
+[9] proposed FireLedger, a new communication frugal optimistic
+permissioned blockchain protocol, to improve throughput. Abadi
+et al. [1] introduced AnyLog, a decentralized data sharing and pub-
+lishing platform for IoT data. Ruan et al. [65] developed simple
+interfaces that support smart contracts based provenance infor-
+mation. Qi et al. [57] improved storage scalability for blockchain
+systems by integrating erasure coding. Ruan et al. [66] enhanced
+the execute-order-validate architecture inspired by the optimistic
+concurrency control in modern databases. Nawab and Sadoghi [52]
+designed a middleware and communication infrastructure to ensure
+byzantine fault-tolerance in datacenter. Amiri et al. [4] leveraged a
+hybrid state machine replication protocol that avoids crash and ma-
+licious failures in cloud environment. Blockchain database usually
+requires incentives to attract participants, though it is not the main
+focus of the aforementioned studies. Our work provides insights
+into incentive designs to further expand the applicability of these
+blockchain databases.
+Polya Urn Process. Our analysis utilizes some useful tools, in-
+cluding Azuma inequality [6] for martingales [17] and stochastic
+approximation [60, 61]. In particular, we use Doob’s martingale and
+Azuma’s inequality to derive the tail probability on concentration.
+Moreover, the mining process of PoS is related to the (nonlinear)
+generalized Pólya urn [5, 13, 43, 60]. For example, the mining pro-
+cess of ML-PoS can be modeled by a classical Pólya urn [45], where
+the fraction _𝐴 of blocks proposed by miner 𝐴 will converge to a
+beta distribution almost surely. In addition, to solve the asymptotic
+convergence for the generalized Pólya urn, various methods are pro-
+posed, including stochastic approximation [37], brownian motion
+embedding [13] and exponential embedding [18, 48]. In this paper,
+we apply stochastic approximation to SL-PoS, which shows that _𝐴
+will converge to either 1 or 0 no matter how much initial staking
+power miner𝐴 possesses. Using these approaches, our analysis may
+be extended to more complicated scenarios, e.g., with malicious
+attacks and games.
+8 CONCLUSION
+We study the fairness of incentives for several blockchain protocols,
+including PoW, ML-PoS, SL-PoS and C-PoS. We define two types
+of fairness, including expectational fairness and robust fairness.
+Our results show that all the protocols except SL-PoS can preserve
+expectational fairness. We also find that robust fairness is always
+achievable for PoW as long as the mining process runs for a suffi-
+ciently long time. Meanwhile, ML-PoS is difficult to achieve robust
+fairness while C-PoS can more easily achieve robust fairness thanks
+to inflation reward and sharding. Unfortunately, SL-PoS will finally
+turn to monopolization no matter how the initial stakes distribute,
+which never achieves robust fairness. Both real system experiments
+and numerical simulations are carried out to demonstrate our anal-
+ysis. We provide some insights, e.g., increasing inflation reward
+and reducing proposer reward, to shed light on future study of
+blockchain incentives. For future work, we aim to take into account
+malicious attacks on incentives that can change reward distribution
+so that more fairness issues will be raised.
+ACKNOWLEDGMENTS
+We are grateful to Michel van Kessel from Blackcoin,Wenbin Zhong
+from Qtum, Prysmatic Labs and NXT community for their tech-
+nical supports. This research is supported by Singapore National
+Research Foundation under grant R-252-000-A27-490, and by HK-
+RGC GRF projects 12201520 and 12200819.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+801
+REFERENCES
+[1] Daniel Abadi, Owen Arden, Faisal Nawab, and Moshe Shadmon. 2020. AnyLog:
+A Grand Unification of the Internet of Things. In Proc. CIDR.
+[2] Central Intelligence Agency. 2019. List of countries by electricity consump-
+tion. https://www.cia.gov/library/publications/the-world-factbook/rankorder/
+2233rank.html
+[3] Mohammad Javad Amiri, Divyakant Agrawal, and Amr El Abbadi. 2019. Caper:
+A Cross-Application Permissioned Blockchain. Proc. VLDB Endowment 12, 11
+(2019), 1385–1398.
+[4] Mohammad Javad Amiri, Sujaya Maiyya, Divyakant Agrawal, and Amr El Abbadi.
+2020. Seemore: A Fault-Tolerant Protocol for Hybrid Cloud Environments. In
+Proc. IEEE ICDE. 1345–1356.
+[5] W Brian Arthur, Yu M Ermoliev, and Yu M Kaniovski. 1987. Non-linear Urn
+Processes: Asymptotic Behavior and Applications.
+[6] Kazuoki Azuma. 1967. Weighted Sums of Certain Dependent Random Variables.
+Tohoku Mathematical Journal, Second Series 19, 3 (1967), 357–367.
+[7] A Begicheva and A Kofman. 2018. Fair Proof of Stake.
+[8] Joseph Bonneau, Andrew Miller, Jeremy Clark, Arvind Narayanan, Joshua A
+Kroll, and Edward W Felten. 2015. Sok: Research Perspectives and Challenges
+for Bitcoin and Cryptocurrencies. In Proc. IEEE S&P. 104–121.
+[9] Yehonatan Buchnik and Roy Friedman. 2020. FireLedger: A High Throughput
+Blockchain Consensus Protocol. Proc. VLDB Endowment 13, 9 (2020), 1525–1539.
+[10] Buckkets. 2019. The Rich Get Richer Concept in PoS. https://medium.com/peercoin/
+the-rich-get-richer-concept-in-proof-of-stake-systems-82c5ceeff326
+[11] Miles Carlsten, Harry Kalodner, S Matthew Weinberg, and Arvind Narayanan.
+2016. On the Instability of Bitcoin Without the Block Reward. In Proc. ACM CCS.
+154–167.
+[12] Sara Cohen, Adam Rosenthal, and Aviv Zohar. 2020. Reasoning about the Future
+in Blockchain Databases. In Proc. IEEE ICDE. 1930–1933.
+[13] Andrea Collevecchio, Codina Cotar, and Marco LiCalzi. 2013. On a Preferential
+Attachment and Generalized Pólya’s UrnModel. The Annals of Applied Probability
+23, 3 (2013), 1219–1253.
+[14] Digiconomist. 2019. Bitcoin Energy Consumption Index. https://digiconomist.net/
+bitcoin-energy-consumption
+[15] Tien Tuan Anh Dinh, Rui Liu, Meihui Zhang, Gang Chen, Beng Chin Ooi, and
+Ji Wang. 2018. Untangling Blockchain: A Data Processing View of Blockchain
+Systems. IEEE Transactions on Knowledge and Data Engineering 30, 7 (2018),
+1366–1385.
+[16] Tien Tuan Anh Dinh, Ji Wang, Gang Chen, Rui Liu, Beng Chin Ooi, and Kian-Lee
+Tan. 2017. Blockbench: A Framework for Analyzing Private Blockchains. In Proc.
+ACM SIGMOD. 1085–1100.
+[17] Joseph Leo Doob. 1953. Stochastic Processes. Vol. 101. New York Wiley.
+[18] Eleni Drinea, Alan Frieze, and Michael Mitzenmacher. 2002. Balls and Bins
+Models with Feedback. In Proc. SODA. 308–315.
+[19] Ethereum. 2020. Geth v1.9.11. https://github.com/ethereum/go-ethereum
+[20] Ittay Eyal. 2015. The Miner’s Dilemma. In Proc. IEEE S&P. 89–103.
+[21] Ittay Eyal and Emin Gün Sirer. 2018. Majority Is Not Enough: Bitcoin Mining Is
+Vulnerable. Commun. ACM 61, 7 (2018), 95–102.
+[22] Giulia Fanti, Leonid Kogan, Sewoong Oh, Kathleen Ruan, Pramod Viswanath, and
+Gerui Wang. 2019. Compounding of Wealth in Proof-of-Stake Cryptocurrencies.
+In Proc. FC. 42–61.
+[23] Chen Feng and Jianyu Niu. 2019. Selfish Mining in Ethereum. In Proc. IEEE ICDCS.
+1306–1316.
+[24] Zonghao Feng and Qiong Luo. 2020. Evaluating Memory-Hard Proof-of-Work
+Algorithms on Three Processors. Proc. VLDB Endowment 13, 6 (2020), 898–911.
+[25] Ethereum Foundation. 2020. Github: Ethereum 2.0 Specifications. https://github.
+com/ethereum/eth2.0-specs
+[26] Shang Gao, Zecheng Li, Zhe Peng, and Bin Xiao. 2019. Power Adjusting and
+Bribery Racing: Novel Mining Attacks in the Bitcoin System. In Proc. ACM CCS.
+833–850.
+[27] Juan Garay, Aggelos Kiayias, and Nikos Leonardos. 2015. The Bitcoin Backbone
+Protocol: Analysis and Applications. In Proc. EUROCRYPT. 281–310.
+[28] Lise Getoor. 2019. Responsible Data Science. SIGMOD Keynote.
+[29] Yossi Gilad, RotemHemo, Silvio Micali, Georgios Vlachos, and Nickolai Zeldovich.
+2017. Algorand: Scaling Byzantine Agreements for Cryptocurrencies. In Proc.
+ACM SOSP. 51–68.
+[30] Suyash Gupta, Sajjad Rahnama, Jelle Hellings, and Mohammad Sadoghi. 2020.
+ResilientDB: Global Scale Resilient Blockchain Fabric. Proc. VLDB Endowment 13,
+6 (2020), 868–883.
+[31] Maurice Herlihy, Barbara Liskov, and Liuba Shrira. 2019. Cross-chain Deals and
+Adversarial Commerce. Proc. VLDB Endowment 13, 2 (2019), 100–113.
+[32] Wassily Hoeffding. 1994. Probability Inequalities for Sums of Bounded Random
+Variables. In The Collected Works of Wassily Hoeffding. Springer, 409–426.
+[33] Yuming Huang, Jing Tang, Qianhao Cong, Andrew Lim, and Jianliang Xu. 2021.
+Do the Rich Get Richer? Fairness Analysis for Blockchain Incentives. arXiv
+preprint, https://arxiv.org/abs/2103.14713.
+[34] Ciamac Gur Huberman, Jacob D Leshno, and C Moallemi. 2017. Monopoly
+without a Monopolist: An Economic Analysis of the Bitcoin Payment System.
+[35] Markus Jakobsson and Ari Juels. 1999. Proofs of Work and Bread Pudding
+Protocols. In Secure Information Networks. 258–272.
+[36] Jelurida. 2020. NXT Evaluation Toolkit v1.12.2. https://bitbucket.org/Jelurida/nxt-
+clone-starter/src/master/
+[37] Yu Kaniovski and Georg Pflug. 1995. Non-standard Limit Theorems for Urn
+Models and Stochastic Approximation Procedures. Comm. in Statistics 11, 1
+(1995), 79–102.
+[38] Lucianna Kiffer and Rajmohan Rajaraman. 2018. A Better Method to Analyze
+Blockchain Consistency. In Proc. ACM CCS. 729–744.
+[39] Joshua A Kroll, Ian C Davey, and Edward W Felten. 2013. The Economics of
+Bitcoin Mining, or Bitcoin in the Presence of Adversaries. In Proc. WEIS.
+[40] Yujin Kwon, Dohyun Kim, Yunmok Son, Eugene Vasserman, and Yongdae Kim.
+2017. Be Selfish and Avoid Dilemmas: Fork After Withholding (FAW) Attacks on
+Bitcoin. In Proc. ACM CCS. 195–209.
+[41] Yujin Kwon, Hyoungshick Kim, Jinwoo Shin, and Yongdae Kim. 2019. Bitcoin vs.
+Bitcoin Cash: Coexistence or Downfall of Bitcoin Cash? Proc. IEEE S&P (2019),
+935–951.
+[42] Yujin Kwon, Jian Liu, Minjeong Kim, Dawn Song, and Yongdae Kim. 2019. Im-
+possibility of Full Decentralization in Permissionless Blockchains. In Proc. ACM
+AFT. 110–123.
+[43] Sophie Laruelle and Gilles Pagès. 2019. Nonlinear Randomized Urn Models: A
+Stochastic Approximation Viewpoint. Electronic Journal of Probability 24, 98
+(2019), 1–47.
+[44] Loi Luu, Ratul Saha, Inian Parameshwaran, Prateek Saxena, and Aquinas Hobor.
+2015. On Power Splitting Games in Distributed Computation: The Case of Bitcoin
+Pooled Mining. In Proc. IEEE CSF. 397–411.
+[45] Hosam Mahmoud. 2008. Pólya Urn Models. CRC press.
+[46] Sujaya Maiyya, Faisal Nawab, Divyakant Agrawal, and Amr El Abbadi. 2019. Uni-
+fying Consensus and Atomic Commitment for Effective Cloud Data Management.
+Proc. VLDB Endowment 12, 5 (2019), 611–623.
+[47] Patrick McCorry, Alexander Hicks, and Sarah Meiklejohn. 2018. Smart Contracts
+for Bribing Miners. In Proc. FC. 3–18.
+[48] Michael Mitzenmacher, Roberto Oliveira, and Joel Spencer. 2004. A Scaling Result
+for Explosive Processes. Electronic Journal of Combinatorics 11, 1 (2004), 1–14.
+[49] Malte Möser and Rainer Böhme. 2015. Trends, Tips, Tolls: A Longitudinal Study
+of Bitcoin Transaction Fees. In Proc. FC. 19–33.
+[50] Satoshi Nakamoto. 2008. Bitcoin: A Peer-to-Peer Electronic Cash System.
+[51] Nasdaq. 2020. Ethereum Classic Attacker Successfully Double-Spends 1.68𝑀
+Dollars in Second Attack: Report. https://www.nasdaq.com/articles/ethereum-
+classic-attacker-successfully-double-spends-%241.68m-in-second-attack%3A-
+report-2020
+[52] Faisal Nawab and Mohammad Sadoghi. 2019. Blockplane: A Global-Scale Byzan-
+tizing Middleware. In Proc. IEEE ICDE. 124–135.
+[53] Kartik Nayak, Srijan Kumar, Andrew Miller, and Elaine Shi. 2016. Stubborn
+Mining: Generalizing Selfish Mining and Combining with an Eclipse Attack. In
+Proc. IEEE EuroS&P. 305–320.
+[54] José I Orlicki. 2020. Sequential Proof-of-Work for Fair Staking and Distributed
+Randomness Beacons. arXiv preprint, https://arxiv.org/abs/2008.10189.
+[55] Rafael Pass and Elaine Shi. 2017. Fruitchains: A Fair Blockchain. In Proc. ACM
+PODC. 315–324.
+[56] Yanqing Peng, Min Du, Feifei Li, Raymond Cheng, and Dawn Song. 2020. Fal-
+conDB: Blockchain-based Collaborative Database. In Proc. ACM SIGMOD. 637–
+652.
+[57] Xiaodong Qi, Zhao Zhang, Cheqing Jin, and Aoying Zhou. 2020. BFT-Store:
+Storage Partition for Permissioned Blockchain via Erasure Coding. In Proc. IEEE
+ICDE. 1926–1929.
+[58] Qtum. 2020. Qtum Core v0.19.0.1. https://github.com/qtumproject/qtum
+[59] Gert Rammeloo. 2019. The Economics of the Proof of Stake Consensus.
+[60] Henrik Renlund. 2010. Generalized Pólya Urns via Stochastic Approximation.
+arXiv preprint, https://arxiv.org/abs/1002.3716.
+[61] Herbert Robbins and Sutton Monro. 1951. A Stochastic Approximation Method.
+The Annals of Mathematical Statistics 22, 3 (1951), 400–407.
+[62] Meni Rosenfeld. 2014. Analysis of Hashrate-Based Double Spending. arXiv
+preprint, https://arxiv.org/abs/1402.2009.
+[63] Sheldon M Ross, John J Kelly, Roger J Sullivan, William James Perry, Donald
+Mercer, Ruth M Davis, Thomas Dell Washburn, Earl V Sager, Joseph B Boyce,
+and Vincent L Bristow. 1996. Stochastic Processes. Vol. 2. Wiley New York.
+[64] Ioanid Rosu and Fahad Saleh. 2019. Evolution of Shares in a Proof-of-Stake
+Cryptocurrency. SSRN 3377136.
+[65] Pingcheng Ruan, Gang Chen, Tien Tuan Anh Dinh, Qian Lin, Beng Chin Ooi,
+and Meihui Zhang. 2019. Fine-Grained, Secure and Efficient Data Provenance on
+Blockchain Systems. Proc. VLDB Endowment 12, 9 (2019), 975–988.
+[66] Pingcheng Ruan, Dumitrel Loghin, Quang-Trung Ta, Meihui Zhang, Gang Chen,
+and Beng Chin Ooi. 2020. A Transactional Perspective on Execute-order-validate
+Blockchains. In Proc. ACM SIGMOD. 543–557.
+[67] Ayelet Sapirshtein, Yonatan Sompolinsky, and Aviv Zohar. 2016. Optimal Selfish
+Mining Strategies in Bitcoin. In Proc. FC. 515–532.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+802
+https://www.cia.gov/library/publications/the-world-factbook/rankorder/2233rank.html
+https://www.cia.gov/library/publications/the-world-factbook/rankorder/2233rank.html
+https://medium.com/peercoin/the-rich-get-richer-concept-in-proof-of-stake-systems-82c5ceeff326
+https://medium.com/peercoin/the-rich-get-richer-concept-in-proof-of-stake-systems-82c5ceeff326
+https://digiconomist.net/bitcoin-energy-consumption
+https://digiconomist.net/bitcoin-energy-consumption
+https://github.com/ethereum/go-ethereum
+https://github.com/ethereum/eth2.0-specs
+https://github.com/ethereum/eth2.0-specs
+https://arxiv.org/abs/2103.14713
+https://bitbucket.org/Jelurida/nxt-clone-starter/src/master/
+https://bitbucket.org/Jelurida/nxt-clone-starter/src/master/
+https://www.nasdaq.com/articles/ethereum-classic-attacker-successfully-double-spends-%241.68m-in-second-attack%3A-report-2020
+https://www.nasdaq.com/articles/ethereum-classic-attacker-successfully-double-spends-%241.68m-in-second-attack%3A-report-2020
+https://www.nasdaq.com/articles/ethereum-classic-attacker-successfully-double-spends-%241.68m-in-second-attack%3A-report-2020
+https://arxiv.org/abs/2008.10189
+https://github.com/qtumproject/qtum
+https://arxiv.org/abs/1002.3716
+https://arxiv.org/abs/1402.2009
+[68] Yuechen Tao, Bo Li, Jingjie Jiang, Hok Chu Ng, Cong Wang, and Baochun Li.
+2020. On Sharding Open Blockchains with Smart Contracts. In Proc. IEEE ICDE.
+1357–1368.
+[69] Blackcoin Team. 2020. Blackcoin Cryptocurrency. https://blackcoin.org/
+[70] EOS Team. 2020. EOS Cryptocurrency whitepaper. https://github.com/EOSIO/
+Documentation/blob/master/TechnicalWhitePaper.md
+[71] Filecoin Team. 2020. Filecoin Cryptocurrency whitepaper. https://filecoin.io/
+filecoin.pdf
+[72] Jelurida Team. 2020. NXT Cryptocurrency. https://www.jelurida.com/nxt
+[73] Neo Team. 2020. Neo Cryptocurrency whitepaper. https://docs.neo.org/docs/en-
+us/basic/whitepaper.html
+[74] Peercoin Team. 2020. Peercoin Cryptocurrency. https://www.peercoin.net/
+[75] Qtum Team. 2020. Qtum Cryptocurrency. https://qtum.org
+[76] Itay Tsabary and Ittay Eyal. 2018. The Gap Game. In Proc. ACM CCS. 713–728.
+[77] HaixinWang, Cheng Xu, Ce Zhang, and Jianliang Xu. 2020. vChain: A Blockchain
+System Ensuring Query Integrity. In Proc. ACM SIGMOD. 2693–2696.
+[78] Cheng Xu, Ce Zhang, and Jianliang Xu. 2019. vChain: Enabling Verifiable Boolean
+Range Queries over Blockchain Databases. In Proc. ACM SIGMOD. 141–158.
+[79] Cong Yue, Zhongle Xie, Meihui Zhang, Gang Chen, Beng Chin Ooi, Sheng Wang,
+and Xiaokui Xiao. 2020. Analysis of Indexing Structures for Immutable Data. In
+Proc. ACM SIGMOD. 925–935.
+[80] Victor Zakhary, Divyakant Agrawal, and Amr El Abbadi. 2019. Atomic Commit-
+ment Across Blockchains. Proc. VLDB Endowment 13, 9 (2019), 1319–1331.
+[81] Ce Zhang, Cheng Xu, Haixin Wang, Jianliang Xu, and Byron Choi. 2021. Authen-
+ticated Keyword Search in Scalable Hybrid-Storage Blockchains. In Proc. IEEE
+ICDE.
+[82] Ce Zhang, Cheng Xu, Jianliang Xu, Yuzhe Tang, and Byron Choi. 2019. GEM
+2
+-
+Tree: A Gas-Efficient Structure for Authenticated Range Queries in Blockchain.
+In Proc. IEEE ICDE. 842–853.
+Research Data Management Track Paper  SIGMOD ’21, June 20–25, 2021, Virtual Event, China
+803
+https://blackcoin.org/
+https://github.com/EOSIO/Documentation/blob/master/TechnicalWhitePaper.md
+https://github.com/EOSIO/Documentation/blob/master/TechnicalWhitePaper.md
+https://filecoin.io/filecoin.pdf
+https://filecoin.io/filecoin.pdf
+https://www.jelurida.com/nxt
+https://docs.neo.org/docs/en-us/basic/whitepaper.html
+https://docs.neo.org/docs/en-us/basic/whitepaper.html
+https://www.peercoin.net/
+https://qtum.org
+	Abstract
+	1 Introduction
+	1.1 Background
+	1.2 Contributions
+	1.3 Organizations
+	2 Incentive Models of Blockchains
+	2.1 PoW Incentive Model
+	2.2 Multi-Lottery PoS Incentive Model
+	2.3 Single-Lottery PoS Incentive Model
+	2.4 Compound PoS Incentive Model
+	3 Expectational Fairness
+	3.1 Assumption and Definition
+	3.2 Expectational Fairness for PoW
+	3.3 Expectational Fairness for ML-PoS
+	3.4 Expectational Fairness for SL-PoS
+	3.5 Expectational Fairness for C-PoS
+	4 Robust Fairness
+	4.1 Definition of Robust Fairness
+	4.2 Robust Fairness for PoW
+	4.3 Robust Fairness for ML-PoS
+	4.4 Robust Fairness for SL-PoS
+	4.5 Robust Fairness for C-PoS
+	5 Experimental Evaluation
+	5.1 Experimental Setup
+	5.2 Fairness Results
+	5.3 Study on Expectational Fairness for SL-PoS
+	5.4 Study on Robust Fairness
+	6 Discussion
+	6.1 Extension to Multiple Miners
+	6.2 Treatment for SL-PoS
+	6.3 Improvement for Robust Fairness
+	6.4 Fairness of More Incentive Protocols
+	6.5 Practicality of Fairness Analysis
+	7 Related work
+	8 Conclusion
+	Acknowledgments
+	References

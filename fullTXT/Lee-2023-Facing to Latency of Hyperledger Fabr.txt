@@ -1,0 +1,1296 @@
+Facing to Latency of Hyperledger Fabric for Blockchain-enabled IoT: Modeling and Analysis
+1
+Facing to Latency of Hyperledger Fabric for
+Blockchain-enabled IoT: Modeling and Analysis
+Sungho Lee, Minsu Kim, Jemin Lee, Member, IEEE, Ruei-Hau Hsu, Member, IEEE,
+Min-Soo Kim, and Tony Q. S. Quek, Fellow, IEEE
+Abstract—Hyperledger Fabric (HLF), one of the most popular
+permissioned blockchains, has recently received attention for
+blockchain-enabled Internet of Things (IoT). However, for IoT
+applications to handle time-sensitive data, the processing latency
+in HLF has emerged as a new challenge. In this article, therefore,
+we establish a practical HLF latency model for HLF-enabled
+IoT. We first discuss the structure and the transaction flow of
+HLF-enabled IoT. After implementing real HLF, we capture the
+latencies that each transaction experiences and show that the
+total latency of HLF can be modeled as a Gamma distribution,
+which is validated by conducting a goodness-of-fit test (i.e., the
+Kolmogorov-Smirnov (KS) test). We also provide the parameter
+values of the modeled latency distribution for various HLF
+environments. Furthermore, we explore the impacts of three
+important HLF parameters including the average transaction
+generation rate, block size, and block-generation timeout on the
+HLF latency. As a result, this article provides design insights on
+minimizing the average latency for HLF-enabled IoT.
+I. INTRODUCTION
+Since blockchain technology was developed as a novel
+solution to ensure data integrity in distributed systems, various
+blockchain-enabled Internet of Things (IoT) applications have
+recently emerged to address privacy and security vulnerabili-
+ties [1]. In the blockchain-enabled IoT applications, delivered
+IoT data is appended to the assigned remote blockchain stor-
+age. Blockchains can be classified into public (permissionless)
+blockchain and permissioned blockchain. In the permissioned
+blockchain, according to granting permission for read and
+write, there are also two types (i.e., consortium and private
+blockchains). The permissioned blockchain has recently re-
+ceived much attention in terms of fast transaction process-
+ing, privacy preservation, and lower power consumption [2].
+Corresponding author is J. Lee.
+S. Lee is with the Department of Electrical Engineering and Computer
+Science, Daegu Gyeongbuk Institute of Science and Technology (DGIST),
+Daegu 42988, Republic of Korea (e-mail: seuho2003@dgist.ac.kr).
+M. Kim is with the Wireless@VT Group, Bradley Department of Electrical
+and Computer Engineering, Virginia Tech, Blacksburg, VA 24061, USA (e-
+mail: msukim@vt.edu)
+J. Lee is with the Department of Electrical and Computer Engineering,
+Sungkyunkwan University (SKKU), Suwon 16419, Republic of Korea (e-mail:
+jemin.lee@skku.edu).
+R. -H. Hsu is with the Department of Computer Science and Engineer-
+ing, National Sun Yat-sen University, Kaohsiung 80424, Taiwan. (e-mail:
+rhhsu@mail.cse.nsysu.edu.tw).
+M. -S. Kim is with the School of Computing, Korea Advanced Institute of
+Science and Technology (KAIST), Daejeon 34141, Republic of Korea (e-mail:
+minsoo.k@kaist.ac.kr).
+T. Q. S. Quek is with Information Systems Technology and Design Pillar,
+Singapore University of Technology and Design, Singapore 487372 (e-mail:
+tonyquek@sutd.edu.sg).
+Particularly, Hyperledger Fabric (HLF)1, which is hosted by
+Linux Foundation and contributed by IBM since 2015, is
+gaining popularity [1] as one of the promising permissioned
+blockchains. Generally, the permissioned blockchain is less
+scalable than the public blockchain [3]. However, HLF can
+also have high scalable [4], so due to the scalability and the
+benefits of HLF, it has been used for many IoT applications.
+As discovered in literature [5]–[8], HLF-enabled IoT ap-
+plications include industrial IoT (IIoT), healthcare, wireless
+monitoring, and unmanned aerial vehicles (UAVs). For exam-
+ple, HLF is used for 5G IIoT-enabled cloud manufacturing
+using fog computing in [5]. In [6], decentralized IIoT data
+marketplace is proposed using HLF. For smart healthcare, HLF
+is exploited for IoT to share monitored patient vital signs [7]
+and to ensure security and privacy for medical data in the
+Healthcare 4.0 industry using UAVs [8]. Thus, it is expected
+that HLF will be more widely used to securely manage a high
+volume of IoT data.
+However, in blockchain platforms including HLF, high
+latency is still recognized as a major issue [1]. Specifically,
+certain IoT applications, which are handling time-critical data,
+may have strict latency requirements for making correct and
+useful decision [9], and require fast transaction commitment.
+For example, vital signs of patients need to be promptly
+processed and transferred to smart hospital blockchain net-
+works for effective medical care [7]. Therefore, for those
+applications, it is important to predict and understand the HLF
+latency, prior to their practical implementations. Nonetheless,
+in most works on HLF-enabled applications, the HLF latency
+is generally not considered or simply ignored, and the latency
+characteristics including its distribution have not been fully
+explored.
+Recently, there have been some works that analyze the
+HLF latency [10]–[13].2 Specifically, the latency is defined
+and measured based on several theoretical models including
+stochastic reward net (SRN) [10], generalized stochastic petri
+nets (GSPNs) [11], a hierarchical model based on transaction
+execution and validation [12], and a queueing-based model
+[13].
+However, in all the previous works above, only the average
+latency is presented without showing the latency distribution,
+and in most works, the theoretical models are not verified in
+real HLF. When the latency is measured in real HLF, it is
+1https://www.hyperledger.org/use/fabric.
+2Those works are based on HLF v1.0 or higher, which exploits Apache
+Kafka/ZooKeeper for consensus.
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+2
+Fig. 1: Flowchart of HLF transaction processing (left) and structure of HLF-enabled IoT (right).
+quite random. This randomness makes challenges in provid-
+ing reliable HLF-based IoT systems, such as [7], especially
+when the latency-sensitive services are required. When the
+IoT service requires to complete the transaction processing
+within certain target latency for most of the time, the latency
+distribution can be more importantly and usefully used than
+the average latency-based results. Furthermore, HLF has a
+sophisticated structure, where many network parameters affect
+the latency simultaneously, so their impacts on the latency
+should be carefully investigated to lower the HLF latency.
+In this article, therefore, we establish a latency model of
+HLF especially for HLF-enabled IoT, where time-sensitive
+data is generally managed. After characterizing the latency
+distribution, we also analyze the impacts of three important
+HLF parameters (i.e., the block size, block-generation timeout,
+and average transaction generation rate) on the HLF latency.
+We then discuss how the average HLF latency can be reduced
+by setting those parameters properly. The contributions of this
+article can be summarized as follows:
+• We newly provide the probability distribution of the
+HLF latency by performing the probability distribution
+fitting on transaction latency samples, which are captured
+in real HLF. We also provide the parameter values of
+corresponding probability distributions for various HLF
+parameter setups. To the best of our knowledge, this is
+the first work that provides the distribution of the HLF
+latency.
+• We develop the latency model of HLF with a new
+structure, which is adopted in the latest HLF releases.
+Hence, our work is more compatible with current HLF-
+enabled IoT, compared to other HLF latency models for
+the previous HLF structure.
+• We explore the impacts of three main HLF parameters
+(i.e., the block size, block-generation timeout, and av-
+erage transaction generation rate) on the HLF latency.
+Especially, we figure out the existence of the best values
+of those HLF parameters that minimize the HLF latency.
+This provides some design insights on HLF parameters
+to lower the HLF latency for more reliable HLF-enabled
+IoT.
+II. HLF-ENABLED IOT
+In this section, we first describe HLF and HLF-enabled
+IoT. We then demonstrate the transaction flow consisting of
+three phases, and provide the definitions of some important
+parameters in HLF.
+HLF is a permissioned blockchain platform for a modular
+architecture, which is one of the sub-projects in the Hyper-
+ledger Project. In the recent version of HLF, Apache Kafka
+and Apache ZooKeeper are adopted for transaction collection
+and block generation. Apache Kafka is to generate new blocks
+after collecting transactions with the resistance to crash faults,
+and Apache ZooKeeper is to manage Apache Kafka nodes
+in terms of task coordination, cluster membership, and access
+control.
+Figure 1 shows a flowchart of HLF transaction processing
+(left) and a structure of HLF-enabled IoT (right), where IoT
+data are managed in HLF. As shown in the right side of Fig. 1,
+generated data are delivered from IoT devices to a base station
+(BS) connected to HLF. The receiving BS transmits the data to
+HLF as new transactions, and the transactions are processed in
+the three phases as shown in the left side of Fig. 1. Specifically,
+the transactions are executed by the endorsing peer(s) (i.e.,
+a.peer.3) and conveyed to the ordering service. The ordering
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+3
+service generates a new block using the transactions, and the
+block is appended to the ledger after validation at each peer.
+The transaction processing inside HLF is described in detail
+as below.
+A. Transaction Flow
+As shown in the left side of Fig. 1, HLF appends trans-
+actions to the ledger through three phases: endorsing phase,
+ordering phase, and validation phase. The processing phases
+enable HLF networks not only to support general-purpose
+programming languages, but also to remain tamper-proof. In
+this subsection, we describe the transaction flow in HLF for
+data updates.
+1) Endorsing Phase: The endorsing phase is to check
+whether a transaction has been well-formed, authorized, and
+not been submitted in the past. When a transaction is gener-
+ated, the endorsing peers independently execute the conveyed
+transaction based on the data in their copied ledgers, and
+returns the result to the client. If all of the results are identical,
+this means all copied ledgers have the same data for the
+targeted one of the transaction (i.e., synchronized). Then, the
+transaction is delivered to the ordering service, otherwise,
+the transaction is discarded. By doing this, the endorsing
+phase can prevent ledger divergence, which results from data
+inconsistency among the copied ledgers of the endorsing peers.
+2) Ordering Phase: The ordering phase is to generate new
+blocks by ordering all transactions chronologically. Note that,
+as explained earlier, the ordering service is a node cluster,
+where a pre-defined consensus protocol is conducted for block
+generation. The consensus protocol is a method to achieve
+consensus on block generation among ordering nodes, such
+as Kafka/ZooKeeper in HLF. A newly generated block is
+transmitted to peers for the validation phase. Here, we focus on
+the Kafka/ZooKeeper-based ordering service, which has been
+currently the most widely used [9].
+3) Validation Phase: The validation phase is the last phase
+in which the new block is validated by each peer individually.
+In this phase, each peer that receives the block conducts mainly
+1) validation system chaincode (VSCC) to check whether the
+transactions in the block have been properly endorsed and 2)
+multi-version concurrency control (MVCC) to check whether
+the target data in the copied ledgers still have the same versions
+as those in the endorsing phase. The block is appended to the
+ledger after the validation at each peer. From the successfully
+validated transactions, their data are updated in the ledger.
+If any verification is failed, the transaction is marked as an
+invalid one and prohibited from updating the ledger.
+B. Important HLF Parameters
+In this subsection, we define three important HLF parame-
+ters, which mainly affect the HLF latency.
+1) Block Size (Sb): The block size Sb is one of the con-
+figurable parameters of the ordering service. This parameter
+defines the maximum number of transactions in one block. In
+other words, the block size determines how many transactions
+the ordering service can collect the most in one block. The
+waiting transactions are promptly exported from the ordering
+service as a new block, when the number of transactions in
+the waiting queue reaches a pre-defined block size value.
+2) Block-generation Timeout (Tb): The block-generation
+timeout Tb is another configurable parameter of the ordering
+service. This parameter defines the maximum time to wait for
+other transactions to be exported as a new block since the
+first transaction arrived at the waiting queue. Once the timer
+expires, the waiting transactions are included into a new block,
+regardless of their number in the waiting queue.
+3) Average Transaction Generation Rate (λt): The aver-
+age transaction generation rate λt refers to the number of
+transactions arrived in HLF per second. Being different from
+the two configurable parameters above, this parameter can be
+determined by many factors. For example, when an IoT device
+conveys data to HLF as transactions, the communication
+channel and data generation frequency of the device can affect
+this parameter.
+III. HLF LATENCY MODELING
+In this section, we conduct HLF latency modeling based
+on the probability distribution fitting method. We first define
+latency types in HLF, and provide the experimental setup
+of our HLF networks. For the probability distribution fitting
+method, we first capture transaction latency samples from the
+HLF networks. We then find the best-fit distribution for each
+latency type, and finally provide our HLF latency model. For
+evaluating goodness-of-fit of our modeling, we also conduct
+the Kolmogorov-Smirnov (KS) test. The feasibility conditions
+for our latency modeling are discussed with providing the
+cases, for which the probability distribution fitting method
+does not work well.
+A. Latency Types in HLF
+Before modeling the HLF latency, we first divide the total
+elapsed time of the data in the HLF network according to the
+transaction-processing stages, such as the endorsing latency,
+the ordering latency, the validation latency, and the ledger-
+commitment latency (i.e., the total latency). Note that we
+exclude the communication latency spent from an IoT device
+to reach the HLF network, as it is more depending on the
+communication standard that IoT devices use, and it has
+already been explored in many literature.
+1) Endorsing Latency: The endorsing latency refers to the
+time taken to receive the transaction execution results from
+the endorsing peers since a transaction was generated. To be
+specific, it is defined as the sum of the latencies for step 1 ,
+2 , 3 , and 4 in Fig. 1.
+2) Ordering Latency: The ordering latency refers to the
+time taken to await until the transaction is exported as a new
+block from the ordering service. It is defined as the sum of
+the latencies for step 5 , 6 , 7 , and 8 in Fig. 1. Note that
+the latency for step 6 consists of the consensus time and the
+waiting time for other transactions to be released as part of
+the new block.
+In contrast, the latency for step 8 is the sum of the
+transmission time and the waiting time of the released block
+for the validation phase. Thus, it may be considered as part
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+4
+0 0.1 0.2 0.3 0.4 0.5 0.6 0.7 0.8
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(a) Endorsing latency:
+Exponential dist. PDF
+[λ=94.5]
+0 1 2 3 4 5 6 7 8
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(b) Ordering latency:
+Gamma dist. PDF
+[αo =2.652, βo =3.458]
+0.4 0.6 0.8 1 1.2 1.4 1.6
+0
+0.5
+1
+1.5
+2
+2.5
+3
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(c) Validation latency:
+Fréchet dist. PDF
+[α=0.21, s=0.479, m=0.144]
+1 2 3 4 5 6 7 8 9
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(d) Ledger-commitment latency:
+Gamma dist. PDF
+[αt =7.362, βt =5.445]
+Fig. 2: Histograms (blue bars) and their best-fit distributions (red lines) of the endorsing latency, ordering latency, validation
+latency, and ledger-commitment latency, where the block size Sb is 10, the block-generation timeout Tb is 1 [sec], and the
+average transaction generation rate λt is 10 [transactions/sec]. Note that Δt is the width of a bin.
+of the validation latency. In this article, however, we include
+this latency into the ordering latency, when we depict the
+histograms in Figs. 2 and 4. Note that the latency for step 8
+can be high if there are many blocks, waiting for the validation.
+Hence, in this article, the ordering latency is generally higher
+than the endorsing and validation latencies, forming the same
+distribution as that of the ledger-commitment latency.
+3) Validation Latency: The validation latency refers to the
+time taken to validate and commit the block with ledger
+update. This latency is defined as the latency for step 9 in Fig.
+1. All transactions in the same block are sequentially validated,
+but committed to the ledger all together as a batch. Therefore,
+they have the identical validation latency to each other. Note
+that the validation latency may vary according to peer’s type.
+In this article, this latency is measured at the endorsing peer.
+4) Ledger-commitment Latency (Total Latency): The
+ledger-commitment latency refers to the time taken to com-
+pletely process the transaction from the beginning. Thus, it is
+the sum of the endorsing, ordering, and validation latencies.
+B. Experiment Setup
+For the implementation of our HLF network, we exploit
+HLF v1.3 on one physical machine using Docker, which is a
+software platform to implement a distributed system based on
+isolated Docker containers. The machine is with Intel® Xeon
+W-2155 @ 3.30 GHz processor and 16 GB RAM. When HLF
+is deployed on one physical machine, nodes communicate with
+each other through the Google remote procedure call (gRPC)
+[4]. In contrast, when HLF is deployed on multiple physical
+machines, transactions and blocks can experience the network-
+ing latency (i.e., wired communication latency) among the
+machines. However, generally, the networking latency is small,
+compared to the processing latency in HLF, so our latency
+modeling can still be effective even on multiple machines,
+which were also validated by our additional experiments with
+four machines.3
+We bring up a Kafka/ZooKeeper-based ordering service
+consisting of four Kafka nodes, three ZooKeeper nodes, and
+3When Kafka nodes, ZooKeeper nodes, frontends, and peers are deployed
+on four different machines using Docker Swarm for Sb = 10, Tb = 2 [sec],
+and λt = 10 [transactions/sec], the measured latency is well-matched with
+the Gamma distribution with αt = 1.283 and βt = 2.267.
+three frontends that are connected to the Kafka cluster in the
+network (i.e., the minimum Kafka and ZooKeeper nodes for
+crash fault tolerance). Note that the frontend is not only to
+inject transactions from clients into the Kafka node cluster,
+but also to receive new blocks, which will be disseminated
+to peers. The HLF network has one endorsing peer and two
+committing peers.4
+We perform 10 test runs for one experiment setup, and each
+test run includes 1,000 transaction proposals transmitted. All
+proposals attempt to update a key-value set, using appropriate
+parameters for the changeCarOwner function defined in the
+Fabcar chaincode5. Each of the equipped frontends has an
+equal probability of being selected to relay a transaction from
+our client to the Kafka node cluster, and to make a new block
+propagated. Note that all proposals in one test run do not
+access the same key-value set. Hence, we do not consider
+MVCC violation during the validation phase in this article.
+Transactions are generated at the average rate of λt [transac-
+tions/sec], whose arrival model is a Poisson process.6 At each
+iteration of test runs, we not only vary the average transaction
+generation rate λt, but also measure the endorsing, ordering,
+validation, and ledger-commitment latency in order to analyze
+the impact of increasing λt. Note that Sb and Tb refer to the
+block size and block-generation timeout, respectively.
+C. Latency Modeling
+For the latency modeling, we first obtain the histogram for
+each latency type defined earlier, and then figure out its best-
+fit probability distribution. As an example, Fig. 2 shows the
+latency histograms, obtained from the experiments and the
+discovered best-fit distributions (red lines) for the endorsing,
+ordering, validation, and ledger-commitment latencies. Here,
+we use the histogram fitting function (i.e, histfit) in Matlab
+4From numerous experiments, we found that our HLF latency model can be
+valid with different numbers of nodes (e.g., endorsing, Kafka, and committing
+nodes), except for the modeling infeasible cases, discussed later.
+5https://github.com/hyperledger/fabric-samples/blob/release-1.3/chaincode/
+fabcar/go/fabcar.go.
+6The Poisson process is the most widely used model for the random
+data/packet generation as also used in 3GPP [14]. The periodic data generation
+is also widely used, especially in the sensor networks. However, it makes the
+ledger-commitment latency less random and more predictable, so it is not
+considered in this article.
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+5
+for available 21 distributions, and then determine the best-fit
+distribution for each latency type as follows.
+1) Endorsing Latency: The best-fit distribution of the en-
+dorsing latency Te is the exponential distribution Te ∼ Exp(ζ)
+(also see Fig. 2a), whose probability density function (PDF)
+and cumulative distribution function (CDF) are defined as
+fTe(t) = ζe−ζt, FTe(t) = 1− e−ζt,
+where ζ = 1
+E[Te]
+is the rate parameter.
+2) Ordering and Ledger-commitment Latencies: The best-
+fit distributions of the ordering latency To and ledger-
+commitment latency Tt are the Gamma distribution, To ∼
+Gamma(αo, βo) and Tt ∼ Gamma(αt, βt), respectively (also
+see Figs. 2b and 2d), whose PDF and CDF are defined as
+fTi
+(t) =
+βi
+αi
+Γ(αi)
+tαi−1e−βit, FTi
+(t) =
+1
+Γ(αi)
+γ(αi, βit),
+where i is to indicate the ordering latency (i = o) and ledger-
+commitment latency (i = t), Γ(αi) =
+∫
+∞
+0 xαi−1 e−x dx is the
+Gamma function, and γ(αi, βit) =
+∫ βit
+0 xαi−1 e−x dx is the
+lower incomplete Gamma function. Note that αi = βiE[Ti],
+where αi and βi are the shape and rate parameters, respec-
+tively.
+3) Validation Latency: The best-fit distribution of the val-
+idation latency Tv is the three-parameter Fréchet distribution
+Tv ∼ Frechet(α, s,m) (also see Fig. 2c), whose PDF and CDF
+are defined as
+fTv(t) =
+α
+s
+(
+t−m
+s
+)
+−1−α
+e−(
+t−m
+s )−α
+, FTv(t) = e−(
+t−m
+s )−α
+,
+where α, s, and m are the shape, scale, and location parame-
+ters, respectively.
+Once the best-fit distributions are determined, we estimate
+the distribution parameters, such as ζ for the endorsing,
+(α, s,m) for the validation, and (αo, βo) and (αt, βt) for the
+ordering and ledger-commitment latencies. Specifically, we
+use the curve fitting tool (i.e., cftool) in Matlab to obtain the
+best-fit parameters of a given best-fit distribution. From Fig.
+2, we can see that the discovered best-fit distributions match
+well with the histograms, especially with that of the ledger-
+commitment latency.
+For the ledge-commitment latency, we obtain the best-fit
+Gamma distribution parameter pairs of the ledger-commitment
+latency for various HLF environments. Detailed parameter
+pairs are provided as a supplement on the archival version.7
+Note that the parameter ranges, used in this article, are in the
+ranges that other works used including [15]. The CDFs of
+some empirically measured values and their best-fit Gamma
+distributions are then demonstrated in Fig. 3. From Fig. 3,
+we can see that the CDFs of the best-fit Gamma distribution
+matches well with the empirically obtained ones.
+D. Latency Modeling Validation
+In order to validate and improve the reliability of our latency
+model, we conduct the KS test, which is a general test that
+evaluates how empirical and best-fit distributions match well
+7https://arxiv.org/abs/2102.09166.
+0 0.5 1 1.5 2 2.5 3 3.5 4
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1
+t [sec]
+C
+um
+ul
+at
+iv
+e
+di
+st
+rib
+ut
+io
+n
+fu
+nc
+tio
+n,
+F
+T
+t(
+t)
+Empirical results, λt = 8
+Best-fit distribution, λt = 8
+Empirical results, λt = 9
+Best-fit distribution, λt = 9
+Empirical results, λt = 10
+Best-fit distribution, λt = 10
+Empirical results, λt = 11
+Best-fit distribution, λt = 11
+Fig. 3: Empirical CDFs and the best-fit Gamma distribu-
+tion CDFs of the ledger-commitment latency Tt for different
+values of the average transaction generation rates λt [trans-
+actions/sec], where the block size Sb is 10 and the block-
+generation timeout Tb is 2 [sec].
+with each other. If the KS statistics value, generated by the KS
+test, is smaller than a critical value, the empirical distribution
+can be considered as a well-matched one. Fig. 3 shows the
+ledger-commitment latency, when Sb = 10 and Tb = 2 [sec]
+for λt = 8, 9, 10 and 11, and the critical value is computed
+as 0.0513. Each of their KS statistics values is averaged
+over 10 test runs at 0.01 significance level and respectively
+computed as 0.0388, 0.0437, 0.0457, and 0.0444. We can see
+that they are all smaller than the critical value. Hence, the
+test is passed for all the cases, and we can conclude that the
+models are reliable. Note that our archival version includes
+more numerical data obtained from various HLF environments
+and their KS test results as explained earlier.
+E. Feasibility Conditions for Latency Modeling
+During the modeling process, it is found that there exist
+some cases in which histograms of Tt do not fit well into a
+known probability distribution. In other words, the probabil-
+ity distribution fitting method is not always applicable. We
+have discovered two environments that make the probability
+distribution fitting method infeasible as follows.
+1) Timeout-dominant Block Generation Environment:
+When the average transaction generation rate λt is small,
+transactions arrive in the ordering phase slowly. In this case,
+most blocks are generated when the timer set to Tb expires as
+each block is seldom fully filled with transactions (i.e., up to
+the amount of block size before timeout). In this case, a large
+portion of transactions can have the ordering latency equal
+to Tb, resulting in a peak on the ordering latency histogram
+around Tb (i.e., 1.2 [sec]), as shown in Fig. 4a. Due to this
+peak, the histogram of Tt in Fig. 4b cannot match with any
+known probability distributions.
+2) Block Size-dominant Block Generation Environment:
+When transactions are relatively generated fast (i.e., high λt),
+most blocks are filled with transactions up to Sb fast, so blocks
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+6
+0 0.2 0.4 0.6 0.8 1 1.2 1.4 1.6 1.8
+0
+0.5
+1
+1.5
+2
+2.5
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(a) Ordering latency
+[Sb = 10, Tb = 1 [sec], λt = 3]
+0.5 1 1.5 2 2.5 3
+0
+0.2
+0.4
+0.6
+0.8
+1
+1.2
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(b) Ledger-commitment latency
+[Sb = 10, Tb = 1 [sec], λt = 3]
+0 2 4 6 8 10 12 14 16
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+t [sec]
+Pr
+ob
+ab
+ili
+ty
+/Δ
+t
+(c) Ledger-commitment latency
+[Sb = 15, Tb = 0.75 [sec], λt = 10]
+Fig. 4: Histograms of the ordering latency and the ledger-commitment latency Tt for infeasible latency modeling cases, where
+Figs. 4a and 4b are timeout-dominant and Fig. 4c is block size-dominant block generation environments, respectively.
+are also generated fast with the full block size at the ordering
+phase. In this case, the ordering latency can be small, but there
+can be a large load at the validation phase due to the fast block
+generation, which makes blocks wait for validation. Hence,
+there can be many transactions with long waiting time for the
+validation, resulting in long-tail outliers longer than 4 [sec] on
+the histogram of Tt in Fig. 4c. This makes it difficult to fit the
+latency distribution into any known probability distributions.
+Note that the two environments, discussed above, are the
+cases where Sb or Tb is too small or large, so a large portion
+of transactions experience long latency in the ordering or
+validation phase. For delay-sensitive HLF-enabled IoT, such
+HLF parameter setups will be generally avoided.
+IV. FACING TO BLOCKCHAIN LATENCY: INFLUENTIAL
+PARAMETER ANALYSIS ON LATENCY
+For HLF-enabled IoT handling time-sensitive data and re-
+quiring faster transaction commitment, it is important to design
+HLF in the way to minimize the average ledger-commitment
+latency. We can see in Fig. 5, the average ledger-commitment
+latency varies with different Sb, Tb, and λt. In this section,
+therefore, we explore their impacts on the average ledger-
+commitment latency. Moreover, we discuss how to optimally
+determine the three parameters to minimize the average ledger-
+commitment latency.
+A. Average Transaction Generation Rate Control
+Figure 5 (solid lines) demonstrates the impact of the average
+transaction generation rate λt for different Sb and Tb on T t.
+Note that our ledger-commitment latency model can also be
+applied to high λt cases unless the modeling infeasible cases
+happen. From Fig. 5, we can observe two conflicting effects
+of λt on T t. First, increasing λt makes transactions exported
+from the ordering service faster, so lower T t can be achieved.
+For instance, when Sb is 20 and Tb is 1 [sec] (blue line),
+T t decreases from 1.6 to 1.49 [sec] as λt increases from 10
+to 12. However, T t starts to increase beyond some values
+of λt (e.g., for λt > 12 in blue line) because of the fast
+block generation, which results in long waiting time for the
+validation to each block. In Fig. 5, we can also see that the
+optimal λt that minimizes T t increases for larger Sb or Tb (e.g.,
+the optimal λt = 10 with Sb = 10, but the optimal λt = 17
+with Sb = 20). Increasing the optimal λt with larger Sb or Tb
+is mainly to maintain or slowly change the block generation
+rate. Hence, the average transaction generation rate should be
+well-determined to minimize T t.
+Furthermore, in Fig. 5, we can also see the probability that
+the ledger-commitment latency is less than 3 [sec], i.e., P[Tt <
+3], (dotted line). This probability becomes the lowest when
+λt = 9, different from λt = 10 that minimizes T t. Hence, for
+reliable IoT services, the latency distribution of HLF should
+be importantly considered to determine the HLF parameters,
+besides the average ledger-commitment latency.
+B. Block Size and Block-generation Timeout Optimization
+Figure 6 illustrates the impacts of the block size Sb (red
+lines) and block-generation timeout Tb (blue lines) on T t
+for empirical results and best-fit distributions. In Fig. 6,
+we can see that the average ledger-commitment latency of
+the best-fit distributions are well-matched with that of the
+empirical results. We can see that the shape of T t has three
+trends. Specifically, T t first decreases (i.e., decreasing area)
+and increases (i.e., increasing area), and finally saturates (i.e.,
+saturating area). We explain the trend of those three areas as
+below.
+1) Decreasing Area: First, T t decreases with the block size
+or block-generation timeout when the block size or the block-
+generation timeout are small or short (e.g., Sb < 8 or Tb <
+1.5 [sec]). With small block size and short block-generation
+timeout, T t is generally high due to the fast block generation
+that gives large burden to the validation phase (i.e., step 8
+in Fig. 1). Therefore, new blocks gradually stack up in each
+peer’s queue for the validation, which leads to long validation
+delay. Hence, in this area, having larger block size or longer
+block-generation timeout helps to decrease T t.
+2) Increasing Area: When the block size or the block-
+generation timeout is relatively large (e.g., 10 < Sb < 15
+or 2 < Tb < 2.75 [sec]), T t increases with the block size
+or the block-generation timeout. In this area, the validation
+latency is no longer large. However, transactions need to wait
+longer in the ordering phase to be in the form of a block as
+the block size or the block-generation timeout increases.
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+7
+���
+���
+���
+���
+���
+��	
+��
+����
+����
+����
+����
+���	
+���
+����
+�
+8
+8
+9
+9
+10
+11
+11
+15
+16
+17
+18
+10
+11
+12
+13
+10
+Average transaction generation rate, λt [transactions/sec]
+Av
+er
+ag
+e
+le
+dg
+er
+-c
+om
+m
+itm
+en
+tl
+at
+en
+cy
+,
+T
+t
+[s
+ec
+]
+P
+[T
+t
+<
+3
+]
+Sb = 10, Tb = 2, λt = [8, 9, 10, 11]
+Sb = 10, Tb = 2, λt = [8, 9, 10, 11]
+Sb = 20, Tb = 2, λt = [15, 16, 17, 18]
+Sb = 20, Tb = 1, λt = [10, 11, 12, 13]
+Fig. 5: Effects of the average transaction generation rate λt
+on the average ledger-commitment latency T t (solid lines and
+left y-axis) for different values of the block size Sb and the
+block-generation timeout Tb, and on the probability that the
+ledger-commitment latency is less than 3 [sec], P[Tt < 3]
+(dotted line and right y-axis).
+3) Saturating Area: As the block size or the block-
+generation timeout keeps increasing (e.g., Sb > 15 or Tb > 3
+[sec]), T t eventually saturates. When the block size is large,
+most of new blocks are generated by timeout expiration before
+they are fully filled with Sb numbers of transactions. When the
+block-generation timeout is long, blocks are also generated
+with full size, and increasing the block-generation timeout no
+longer affects the latency. Therefore, T t does not change in
+this area, even though the block size or the block-generation
+timeout increases.
+Due to the trend on the impacts on the block size and the
+block-generation timeout on T t, it is important to properly
+determine Sb and Tb values to lower T t.
+V. CONCLUSIONS
+This article provides the latency model for HLF-enabled
+IoT, where time-sensitive data is generally managed. From
+the histograms of the ledger-commitment latency obtained
+from our real implementation of HLF, we figure out that the
+ledger-commitment latency can be modeled as the Gamma
+distribution in various HLF setups. We also conduct the
+KS test and verify that our modeling is reliable. Moreover,
+we explore the impacts of three important HLF parameters
+(i.e., the average transaction generation rate, block size, and
+block-generation timeout) on the average ledger-commitment
+latency. Specifically, when they are set to be small, the average
+ledger-commitment latency is fairly high due to the fast block
+generation that causes long validation latency. Hence, the
+average ledger-commitment latency decreases as those values
+increase, but eventually it increases again since the ordering
+latency increases. From those observations, it is shown that
+a proper setup of HLF parameters are important to lower
+the average ledger-commitment latency. This article can serve
+as a useful framework not only to predict the average and
+� 
+ �� �� �� �� �
+ �� �� ��
+�
+���
+�
+���
+�
+���
+�
+� ��� � ��� � ���
+Block size, Sb [number]
+Block-generation timeout, Tb [sec]
+Av
+er
+ag
+e
+le
+dg
+er
+-c
+om
+m
+itm
+en
+tl
+at
+en
+cy
+,
+T
+t
+[s
+ec
+]
+Empirical results (Sb varies, Tb = 2)
+Best-fit distribution (Sb varies, Tb = 2)
+Empirical results (Sb = 10, Tb varies)
+Best-fit distribution (Sb = 10, Tb varies)
+Fig. 6: Effects of the block size Sb and block-generation
+timeout Tb on the average ledger-commitment latency T t for
+λt = 10 [transactions/sec], where the block size Sb varies
+and the block-generation timeout Tb is 2 [sec], and where the
+block size Sb is 10 and the block-generation timeout Tb varies,
+respectively.
+distribution of the ledger-commitment latency, but also to
+optimally design HLF-enabled IoT with low latency.
+ACKNOWLEDGMENT
+We appreciate Jia-Yin Guo (National Sun Yat-sen Uni-
+versity) helping on the experiments with multiple physical
+machines for HLF latency modeling.
+This work was supported in part by the National Research
+Foundation of Korea (NRF) grant funded by the Korea gov-
+ernment (MSIT) (No.2020R1A2C2008878), in part by the
+National Research Foundation of Korea (NRF) grant funded by
+the Korea government (MSIT) (NRF-2018R1A5A1060031),
+and in part by the MSIT (Ministry of Science and ICT), Korea,
+under the ITRC (Information Technology Research Center)
+support program (IITP-2023-2020-0-01795) supervised by the
+IITP (Institute of Information & Communications Technology
+Planning & Evaluation). This work was also partially sup-
+ported by the National Science and Technology Council of
+Taiwan under Grant 109-2221-E-110-041-MY3, Grant 111-
+2628-E-110-006-MY3, and Grant 111-2218-E-110-001-MBK,
+and in part by the Information Security Research Center,
+National Sun Yat-sen University, Taiwan.
+REFERENCES
+[1] H.-N. Dai, Z. Zheng, and Y. Zhang, “Blockchain for Internet of Things:
+A survey,” IEEE Internet Things J., vol. 6, no. 5, pp. 8076–8094, Oct.
+2019.
+[2] M. Jo et al., “Private blockchain in industrial IoT,” IEEE Netw., vol. 34,
+no. 5, pp. 76–77, Sep./Oct. 2020.
+[3] J. Huang et al., “Towards secure industrial IoT: Blockchain system
+with credit-based consensus mechanism,” IEEE Trans. Industr. Inform.,
+vol. 15, no. 6, pp. 3680–3689, Jun. 2019.
+[4] M. Du, Q. Chen, J. Chen, and X. Ma, “An optimized consortium
+blockchain for medical information sharing,” IEEE Trans. Eng. Manag.,
+vol. 68, no. 6, pp. 1677–1689, Dec. 2021.
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+8
+[5] T. Hewa, A. Braeken, M. Liyanage, and M. Ylianttila, “Fog computing
+and blockchain-based security service architecture for 5G industrial IoT-
+enabled cloud manufacturing,” IEEE Trans. Industr. Inform., vol. 18,
+no. 10, pp. 7174–7185, Oct. 2022.
+[6] A. Dixit, A. Singh, Y. Rahulamathavan, and M. Rajarajan, “FAST
+DATA: A fair, secure and trusted decentralized IIoT data marketplace
+enabled by blockchain,” IEEE Internet Things J., Early Access, DOI:
+10.1109/JIOT.2021.3120640.
+[7] F. Jamil, S. Ahmad, N. Iqbal, and D.-H. Kim, “Towards a remote
+monitoring of patient vital signs based on IoT-based blockchain integrity
+management platforms in smart hospitals,” Sensors, vol. 20, no. 8, p.
+2195, Apr. 2020.
+[8] S. Aggarwal, N. Kumar, M. Alhussein, and G. Muhammad,
+“Blockchain-based UAV path planning for Healthcare 4.0: Current
+challenges and the way ahead,” IEEE Netw., vol. 35, no. 1, pp. 20–29,
+Jan./Feb. 2021.
+[9] S. Lee, M. Kim, J. Lee, R.-H. Hsu, and T. Q. S. Quek, “Is blockchain
+suitable for data freshness? An age-of-information perspective,” IEEE
+Netw., vol. 35, no. 2, pp. 96–103, Mar./Apr. 2021.
+[10] H. Sukhwani, N. Wang, K. S. Trivedi, and A. Rindos, “Performance
+modeling of Hyperledger Fabric (permissioned blockchain network),”
+in Proc. IEEE Int. Symp. Netw. Comput. Appl. (NCA), Cambridge, MA,
+USA, Nov. 2018, pp. 1–10.
+[11] P. Yuan, K. Zheng, X. Xiong, K. Zhang, and L. Lei, “Performance
+modeling and analysis of a Hyperledger-based system using GSPN,”
+Comput. Commun., vol. 153, no. 1, pp. 117–124, Mar. 2020.
+[12] L. Jiang, X. Chang, Y. Liu, J. Mišić, and V. B. Mišić, “Performance anal-
+ysis of Hyperledger Fabric platform: A hierarchical model approach,”
+Peer Peer Netw. Appl., vol. 13, no. 3, pp. 1014–1025, May 2020.
+[13] X. Xu et al., “Latency performance modeling and analysis for Hyper-
+ledger Fabric blockchain network,” Inf. Process. Manag., vol. 58, no. 1,
+p. 102436, Jan. 2021.
+[14] 3rd Generation Partnership Project, “GERAN improvements for
+machine-type communications (MTC),” 3GPP TR 43.868 V12.1.0, Tech.
+Rep., Dec. 2014.
+[15] S. Shalaby et al., “Performance evaluation of Hyperledger Fabric,” in
+Proc. IEEE Int. Conf. Inform., IoT, Enabling Technol. (ICIoT), Doha,
+Qatar, Feb. 2020, pp. 1–6.
+BIOGRAPHIES
+Sungho Lee [S’20] received his B.S. degree in computer
+education from Sungkyunkwan University (SKKU), Korea,
+in 2017. He is currently pursuing his Ph.D. degree with
+the Department of Electrical Engineering and Computer Sci-
+ence, Daegu Gyeongbuk Institute of Science and Technology
+(DGIST), Korea. His research interests include blockchain,
+wireless communications, and Internet of Things.
+Minsu Kim [S’20] received his B.E. degree with honors
+in School of Undergraduate Studies and his M.S. degree
+in Information and Communication Engineering from Daegu
+Gyeongbuk Institute of Science and Technology (DGIST),
+Korea, in 2019 and 2021, respectively. He is currently a
+Ph.D. student at the Electrical and Computer Engineering
+Department at Virginia Tech, USA. He is awarded the best
+paper award at IEEE ICC 2022 and IEEE TAOS Techni-
+cal Committee 2022. He is also the recipient of the Pratt
+Scholarship. His research interests include distributed machine
+learning, Internet of Things, and 6G networks.
+Jemin Lee [S’06-M’11] received the B.S., M.S., and Ph.D.
+degrees in Electrical and Electronic Engineering from Yonsei
+University, Korea, in 2004, 2007, and 2010, respectively. She
+worked at the Information and Communication Engineering,
+Daegu Gyeongbuk Institute of Science and Technology (DG-
+IST), Korea from 2016-2021. Currently, she is an Associate
+Professor at the Department of Electrical and Computer En-
+gineering, Sungkyunkwan University (SKKU), Korea.
+Ruei-Hau Hsu [M’15] received the Ph.D. degree in the
+Department of Computer Science and Engineering, National
+Sun Yat-sen University, Taiwan, in 2012. From 2017 to 2018,
+he was a Scientist at Agency for Science, Technology and
+Research, Singapore. Since August 2018, he is the Assistant
+Professor in the Department of Computer Science and Engi-
+neering, National Sun Yat-sen University, Taiwan.
+Min-Soo Kim received his Ph.D. degree in Computer Sci-
+ence from KAIST, Korea, in 2006. He worked in Information
+and Communication Engineering at DGIST in Korea from
+2011 to 2020. He is a full professor of School of Computing
+at KAIST, and his research interests include databases and
+machine learning.
+Tony Q. S. Quek [S’98, M’08, SM’12, F’18] received the
+B.E. and M.E. degrees in electrical and electronics engineering
+from the Tokyo Institute of Technology in 1998 and 2000,
+respectively, and the Ph.D. degree in electrical engineering
+and computer science from the Massachusetts Institute of
+Technology in 2008. Currently, he is the Cheng Tsang Man
+Chair Professor, ST Engineering Distinguished Professor, and
+Head of ISTD Pillar with Singapore University of Technology
+and Design as well as the Director of Future Communications
+R&D Programme. He was honored with the 2008 Philip
+Yeo Prize for Outstanding Achievement in Research, the
+2012 IEEE William R. Bennett Prize, the 2017 CTTC Early
+Achievement Award, the 2017 IEEE ComSoc AP Outstanding
+Paper Award, the 2020 IEEE Communications Society Young
+Author Best Paper Award, the 2020 IEEE Stephen O. Rice
+Prize, the 2020 Nokia Visiting Professor, and the 2022 IEEE
+Signal Processing Society Best Paper Award. He is a Fellow of
+IEEE and a Fellow of the Academy of Engineering Singapore.
+This article has been accepted for inclusion in a future issue of this magazine.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 09:21:14 UTC from IEEE Xplore.  Restrictions apply. 
+<<
+  /ASCII85EncodePages false
+  /AllowTransparency false
+  /AutoPositionEPSFiles true
+  /AutoRotatePages /None
+  /Binding /Left
+  /CalGrayProfile (Dot Gain 20%)
+  /CalRGBProfile (sRGB IEC61966-2.1)
+  /CalCMYKProfile (U.S. Web Coated \050SWOP\051 v2)
+  /sRGBProfile (sRGB IEC61966-2.1)
+  /CannotEmbedFontPolicy /Error
+  /CompatibilityLevel 1.4
+  /CompressObjects /Tags
+  /CompressPages true
+  /ConvertImagesToIndexed true
+  /PassThroughJPEGImages true
+  /CreateJobTicket false
+  /DefaultRenderingIntent /Default
+  /DetectBlends true
+  /DetectCurves 0.0000
+  /ColorConversionStrategy /CMYK
+  /DoThumbnails false
+  /EmbedAllFonts true
+  /EmbedOpenType false
+  /ParseICCProfilesInComments true
+  /EmbedJobOptions true
+  /DSCReportingLevel 0
+  /EmitDSCWarnings false
+  /EndPage -1
+  /ImageMemory 1048576
+  /LockDistillerParams false
+  /MaxSubsetPct 100
+  /Optimize true
+  /OPM 1
+  /ParseDSCComments true
+  /ParseDSCCommentsForDocInfo true
+  /PreserveCopyPage true
+  /PreserveDICMYKValues true
+  /PreserveEPSInfo true
+  /PreserveFlatness true
+  /PreserveHalftoneInfo false
+  /PreserveOPIComments true
+  /PreserveOverprintSettings true
+  /StartPage 1
+  /SubsetFonts true
+  /TransferFunctionInfo /Apply
+  /UCRandBGInfo /Preserve
+  /UsePrologue false
+  /ColorSettingsFile ()
+  /AlwaysEmbed [ true
+  ]
+  /NeverEmbed [ true
+  ]
+  /AntiAliasColorImages false
+  /CropColorImages true
+  /ColorImageMinResolution 300
+  /ColorImageMinResolutionPolicy /OK
+  /DownsampleColorImages true
+  /ColorImageDownsampleType /Bicubic
+  /ColorImageResolution 300
+  /ColorImageDepth -1
+  /ColorImageMinDownsampleDepth 1
+  /ColorImageDownsampleThreshold 1.50000
+  /EncodeColorImages true
+  /ColorImageFilter /DCTEncode
+  /AutoFilterColorImages true
+  /ColorImageAutoFilterStrategy /JPEG
+  /ColorACSImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /ColorImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000ColorACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 30
+  >>
+  /JPEG2000ColorImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 30
+  >>
+  /AntiAliasGrayImages false
+  /CropGrayImages true
+  /GrayImageMinResolution 300
+  /GrayImageMinResolutionPolicy /OK
+  /DownsampleGrayImages true
+  /GrayImageDownsampleType /Bicubic
+  /GrayImageResolution 300
+  /GrayImageDepth -1
+  /GrayImageMinDownsampleDepth 2
+  /GrayImageDownsampleThreshold 1.50000
+  /EncodeGrayImages true
+  /GrayImageFilter /DCTEncode
+  /AutoFilterGrayImages true
+  /GrayImageAutoFilterStrategy /JPEG
+  /GrayACSImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /GrayImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000GrayACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 30
+  >>
+  /JPEG2000GrayImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 30
+  >>
+  /AntiAliasMonoImages false
+  /CropMonoImages true
+  /MonoImageMinResolution 1200
+  /MonoImageMinResolutionPolicy /OK
+  /DownsampleMonoImages true
+  /MonoImageDownsampleType /Bicubic
+  /MonoImageResolution 1200
+  /MonoImageDepth -1
+  /MonoImageDownsampleThreshold 1.50000
+  /EncodeMonoImages true
+  /MonoImageFilter /CCITTFaxEncode
+  /MonoImageDict <<
+    /K -1
+  >>
+  /AllowPSXObjects false
+  /CheckCompliance [
+    /None
+  ]
+  /PDFX1aCheck false
+  /PDFX3Check false
+  /PDFXCompliantPDFOnly false
+  /PDFXNoTrimBoxError true
+  /PDFXTrimBoxToMediaBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXSetBleedBoxToMediaBox true
+  /PDFXBleedBoxToTrimBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXOutputIntentProfile ()
+  /PDFXOutputConditionIdentifier ()
+  /PDFXOutputCondition ()
+  /PDFXRegistryName ()
+  /PDFXTrapped /False
+  /CreateJDFFile false
+  /Description <<
+    /ARA <FEFF06270633062A062E062F0645002006470630064700200627064406250639062F0627062F0627062A002006440625064606340627062100200648062B062706260642002000410064006F00620065002000500044004600200645062A064806270641064206290020064406440637062806270639062900200641064A00200627064406450637062706280639002006300627062A0020062F0631062C0627062A002006270644062C0648062F0629002006270644063906270644064A0629061B0020064A06450643064600200641062A062D00200648062B0627062606420020005000440046002006270644064506460634062306290020062806270633062A062E062F062706450020004100630072006F0062006100740020064800410064006F006200650020005200650061006400650072002006250635062F0627063100200035002E0030002006480627064406250635062F062706310627062A0020062706440623062D062F062B002E0635062F0627063100200035002E0030002006480627064406250635062F062706310627062A0020062706440623062D062F062B002E>
+    /BGR <FEFF04180437043f043e043b043704320430043904420435002004420435043704380020043d0430044104420440043e0439043a0438002c00200437043000200434043000200441044a0437043404300432043004420435002000410064006f00620065002000500044004600200434043e043a0443043c0435043d04420438002c0020043c0430043a04410438043c0430043b043d043e0020043f044004380433043e04340435043d04380020043704300020043204380441043e043a043e043a0430044704350441044204320435043d0020043f04350447043004420020043704300020043f044004350434043f0435044704300442043d04300020043f043e04340433043e0442043e0432043a0430002e002000200421044a04370434043004340435043d043804420435002000500044004600200434043e043a0443043c0435043d044204380020043c043e0433043004420020043404300020044104350020043e0442043204300440044f0442002004410020004100630072006f00620061007400200438002000410064006f00620065002000520065006100640065007200200035002e00300020043800200441043b0435043404320430044904380020043204350440044104380438002e>
+    /CHS <FEFF4f7f75288fd94e9b8bbe5b9a521b5efa7684002000410064006f006200650020005000440046002065876863900275284e8e9ad88d2891cf76845370524d53705237300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c676562535f00521b5efa768400200050004400460020658768633002>
+    /CHT <FEFF4f7f752890194e9b8a2d7f6e5efa7acb7684002000410064006f006200650020005000440046002065874ef69069752865bc9ad854c18cea76845370524d5370523786557406300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c4f86958b555f5df25efa7acb76840020005000440046002065874ef63002>
+    /CZE <FEFF005400610074006f0020006e006100730074006100760065006e00ed00200070006f0075017e0069006a007400650020006b0020007600790074007600e101590065006e00ed00200064006f006b0075006d0065006e0074016f002000410064006f006200650020005000440046002c0020006b00740065007200e90020007300650020006e0065006a006c00e90070006500200068006f006400ed002000700072006f0020006b00760061006c00690074006e00ed0020007400690073006b00200061002000700072006500700072006500730073002e002000200056007900740076006f01590065006e00e900200064006f006b0075006d0065006e007400790020005000440046002000620075006400650020006d006f017e006e00e90020006f007400650076015900ed007400200076002000700072006f006700720061006d0065006300680020004100630072006f00620061007400200061002000410064006f00620065002000520065006100640065007200200035002e0030002000610020006e006f0076011b006a016100ed00630068002e>
+    /DAN <FEFF004200720075006700200069006e0064007300740069006c006c0069006e006700650072006e0065002000740069006c0020006100740020006f007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400650072002c0020006400650072002000620065006400730074002000650067006e006500720020007300690067002000740069006c002000700072006500700072006500730073002d007500640073006b007200690076006e0069006e00670020006100660020006800f8006a0020006b00760061006c0069007400650074002e0020004400650020006f007000720065007400740065006400650020005000440046002d0064006f006b0075006d0065006e0074006500720020006b0061006e002000e50062006e00650073002000690020004100630072006f00620061007400200065006c006c006500720020004100630072006f006200610074002000520065006100640065007200200035002e00300020006f00670020006e0079006500720065002e>
+    /DEU <FEFF00560065007200770065006e00640065006e0020005300690065002000640069006500730065002000450069006e007300740065006c006c0075006e00670065006e0020007a0075006d002000450072007300740065006c006c0065006e00200076006f006e002000410064006f006200650020005000440046002d0044006f006b0075006d0065006e00740065006e002c00200076006f006e002000640065006e0065006e002000530069006500200068006f006300680077006500720074006900670065002000500072006500700072006500730073002d0044007200750063006b0065002000650072007a0065007500670065006e0020006d00f60063006800740065006e002e002000450072007300740065006c006c007400650020005000440046002d0044006f006b0075006d0065006e007400650020006b00f6006e006e0065006e0020006d006900740020004100630072006f00620061007400200075006e0064002000410064006f00620065002000520065006100640065007200200035002e00300020006f0064006500720020006800f600680065007200200067006500f600660066006e00650074002000770065007200640065006e002e>
+    /ESP <FEFF005500740069006c0069006300650020006500730074006100200063006f006e0066006900670075007200610063006900f3006e0020007000610072006100200063007200650061007200200064006f00630075006d0065006e0074006f00730020005000440046002000640065002000410064006f0062006500200061006400650063007500610064006f00730020007000610072006100200069006d0070007200650073006900f3006e0020007000720065002d0065006400690074006f007200690061006c00200064006500200061006c00740061002000630061006c0069006400610064002e002000530065002000700075006500640065006e00200061006200720069007200200064006f00630075006d0065006e0074006f00730020005000440046002000630072006500610064006f007300200063006f006e0020004100630072006f006200610074002c002000410064006f00620065002000520065006100640065007200200035002e003000200079002000760065007200730069006f006e0065007300200070006f00730074006500720069006f007200650073002e>
+    /ETI <FEFF004b00610073007500740061006700650020006e0065006900640020007300e4007400740065006900640020006b00760061006c006900740065006500740073006500200074007200fc006b006900650065006c007300650020007000720069006e00740069006d0069007300650020006a0061006f006b007300200073006f00620069006c0069006b0065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e00740069006400650020006c006f006f006d006900730065006b0073002e00200020004c006f006f0064007500640020005000440046002d0064006f006b0075006d0065006e00740065002000730061006100740065002000610076006100640061002000700072006f006700720061006d006d006900640065006700610020004100630072006f0062006100740020006e0069006e0067002000410064006f00620065002000520065006100640065007200200035002e00300020006a00610020007500750065006d006100740065002000760065007200730069006f006f006e00690064006500670061002e000d000a>
+    /FRA <FEFF005500740069006c006900730065007a00200063006500730020006f007000740069006f006e00730020006100660069006e00200064006500200063007200e900650072002000640065007300200064006f00630075006d0065006e00740073002000410064006f00620065002000500044004600200070006f0075007200200075006e00650020007100750061006c0069007400e90020006400270069006d007000720065007300730069006f006e00200070007200e9007000720065007300730065002e0020004c0065007300200064006f00630075006d0065006e00740073002000500044004600200063007200e900e90073002000700065007500760065006e0074002000ea0074007200650020006f007500760065007200740073002000640061006e00730020004100630072006f006200610074002c002000610069006e00730069002000710075002700410064006f00620065002000520065006100640065007200200035002e0030002000650074002000760065007200730069006f006e007300200075006c007400e90072006900650075007200650073002e>
+    /GRE <FEFF03a703c103b703c303b903bc03bf03c003bf03b903ae03c303c403b5002003b103c503c403ad03c2002003c403b903c2002003c103c503b803bc03af03c303b503b903c2002003b303b903b1002003bd03b1002003b403b703bc03b903bf03c503c103b303ae03c303b503c403b5002003ad03b303b303c103b103c603b1002000410064006f006200650020005000440046002003c003bf03c5002003b503af03bd03b103b9002003ba03b103c42019002003b503be03bf03c703ae03bd002003ba03b103c403ac03bb03bb03b703bb03b1002003b303b903b1002003c003c103bf002d03b503ba03c403c503c003c903c403b903ba03ad03c2002003b503c103b303b103c303af03b503c2002003c503c803b703bb03ae03c2002003c003bf03b903cc03c403b703c403b103c2002e0020002003a403b10020005000440046002003ad03b303b303c103b103c603b1002003c003bf03c5002003ad03c703b503c403b5002003b403b703bc03b903bf03c503c103b303ae03c303b503b9002003bc03c003bf03c103bf03cd03bd002003bd03b1002003b103bd03bf03b903c703c403bf03cd03bd002003bc03b5002003c403bf0020004100630072006f006200610074002c002003c403bf002000410064006f00620065002000520065006100640065007200200035002e0030002003ba03b103b9002003bc03b503c403b103b303b503bd03ad03c303c403b503c103b503c2002003b503ba03b403cc03c303b503b903c2002e>
+    /HEB <FEFF05D405E905EA05DE05E905D5002005D105D405D205D305E805D505EA002005D005DC05D4002005DB05D305D9002005DC05D905E605D505E8002005DE05E105DE05DB05D9002000410064006F006200650020005000440046002005D405DE05D505EA05D005DE05D905DD002005DC05D405D305E405E105EA002005E705D305DD002D05D305E405D505E1002005D005D905DB05D505EA05D905EA002E002005DE05E105DE05DB05D90020005000440046002005E905E005D505E605E805D5002005E005D905EA05E005D905DD002005DC05E405EA05D905D705D4002005D105D005DE05E605E205D505EA0020004100630072006F006200610074002005D5002D00410064006F00620065002000520065006100640065007200200035002E0030002005D505D205E805E105D005D505EA002005DE05EA05E705D305DE05D505EA002005D905D505EA05E8002E05D005DE05D905DD002005DC002D005000440046002F0058002D0033002C002005E205D905D905E005D5002005D105DE05D305E805D905DA002005DC05DE05E905EA05DE05E9002005E905DC0020004100630072006F006200610074002E002005DE05E105DE05DB05D90020005000440046002005E905E005D505E605E805D5002005E005D905EA05E005D905DD002005DC05E405EA05D905D705D4002005D105D005DE05E605E205D505EA0020004100630072006F006200610074002005D5002D00410064006F00620065002000520065006100640065007200200035002E0030002005D505D205E805E105D005D505EA002005DE05EA05E705D305DE05D505EA002005D905D505EA05E8002E>
+    /HRV (Za stvaranje Adobe PDF dokumenata najpogodnijih za visokokvalitetni ispis prije tiskanja koristite ove postavke.  Stvoreni PDF dokumenti mogu se otvoriti Acrobat i Adobe Reader 5.0 i kasnijim verzijama.)
+    /HUN <FEFF004b0069007600e1006c00f30020006d0069006e0151007300e9006701710020006e0079006f006d00640061006900200065006c0151006b00e90073007a00ed007401510020006e0079006f006d00740061007400e100730068006f007a0020006c006500670069006e006b00e1006200620020006d0065006700660065006c0065006c0151002000410064006f00620065002000500044004600200064006f006b0075006d0065006e00740075006d006f006b0061007400200065007a0065006b006b0065006c0020006100200062006500e1006c006c00ed007400e10073006f006b006b0061006c0020006b00e90073007a00ed0074006800650074002e0020002000410020006c00e90074007200650068006f007a006f00740074002000500044004600200064006f006b0075006d0065006e00740075006d006f006b00200061007a0020004100630072006f006200610074002000e9007300200061007a002000410064006f00620065002000520065006100640065007200200035002e0030002c0020007600610067007900200061007a002000610074007400f3006c0020006b00e9007301510062006200690020007600650072007a006900f3006b006b0061006c0020006e00790069007400680061007400f3006b0020006d00650067002e>
+    /ITA <FEFF005500740069006c0069007a007a006100720065002000710075006500730074006500200069006d0070006f007300740061007a0069006f006e00690020007000650072002000630072006500610072006500200064006f00630075006d0065006e00740069002000410064006f00620065002000500044004600200070006900f900200061006400610074007400690020006100200075006e00610020007000720065007300740061006d0070006100200064006900200061006c007400610020007100750061006c0069007400e0002e0020004900200064006f00630075006d0065006e007400690020005000440046002000630072006500610074006900200070006f00730073006f006e006f0020006500730073006500720065002000610070006500720074006900200063006f006e0020004100630072006f00620061007400200065002000410064006f00620065002000520065006100640065007200200035002e003000200065002000760065007200730069006f006e006900200073007500630063006500730073006900760065002e>
+    /JPN <FEFF9ad854c18cea306a30d730ea30d730ec30b951fa529b7528002000410064006f0062006500200050004400460020658766f8306e4f5c6210306b4f7f75283057307e305930023053306e8a2d5b9a30674f5c62103055308c305f0020005000440046002030d530a130a430eb306f3001004100630072006f0062006100740020304a30883073002000410064006f00620065002000520065006100640065007200200035002e003000204ee5964d3067958b304f30533068304c3067304d307e305930023053306e8a2d5b9a306b306f30d530a930f330c8306e57cb30818fbc307f304c5fc59808306730593002>
+    /KOR <FEFFc7740020c124c815c7440020c0acc6a9d558c5ec0020ace0d488c9c80020c2dcd5d80020c778c1c4c5d00020ac00c7a50020c801d569d55c002000410064006f0062006500200050004400460020bb38c11cb97c0020c791c131d569b2c8b2e4002e0020c774b807ac8c0020c791c131b41c00200050004400460020bb38c11cb2940020004100630072006f0062006100740020bc0f002000410064006f00620065002000520065006100640065007200200035002e00300020c774c0c1c5d0c11c0020c5f40020c2180020c788c2b5b2c8b2e4002e>
+    /LTH <FEFF004e006100750064006f006b0069007400650020016100690075006f007300200070006100720061006d006500740072007500730020006e006f0072011700640061006d00690020006b0075007200740069002000410064006f00620065002000500044004600200064006f006b0075006d0065006e007400750073002c0020006b00750072006900650020006c0061006200690061007500730069006100690020007000720069007400610069006b007900740069002000610075006b01610074006f00730020006b006f006b007900620117007300200070006100720065006e006700740069006e00690061006d00200073007000610075007300640069006e0069006d00750069002e0020002000530075006b0075007200740069002000500044004600200064006f006b0075006d0065006e007400610069002000670061006c006900200062016b007400690020006100740069006400610072006f006d00690020004100630072006f006200610074002000690072002000410064006f00620065002000520065006100640065007200200035002e0030002000610072002000760117006c00650073006e0117006d00690073002000760065007200730069006a006f006d00690073002e>
+    /LVI <FEFF0049007a006d0061006e0074006f006a00690065007400200161006f00730020006900650073007400610074012b006a0075006d00750073002c0020006c0061006900200076006500690064006f00740075002000410064006f00620065002000500044004600200064006f006b0075006d0065006e007400750073002c0020006b006100730020006900720020012b00700061016100690020007000690065006d01130072006f00740069002000610075006700730074006100730020006b00760061006c0069007401010074006500730020007000690072006d007300690065007300700069006501610061006e006100730020006400720075006b00610069002e00200049007a0076006500690064006f006a006900650074002000500044004600200064006f006b0075006d0065006e007400750073002c0020006b006f002000760061007200200061007400760113007200740020006100720020004100630072006f00620061007400200075006e002000410064006f00620065002000520065006100640065007200200035002e0030002c0020006b0101002000610072012b00200074006f0020006a00610075006e0101006b0101006d002000760065007200730069006a0101006d002e>
+    /NLD (Gebruik deze instellingen om Adobe PDF-documenten te maken die zijn geoptimaliseerd voor prepress-afdrukken van hoge kwaliteit. De gemaakte PDF-documenten kunnen worden geopend met Acrobat en Adobe Reader 5.0 en hoger.)
+    /NOR <FEFF004200720075006b00200064006900730073006500200069006e006e007300740069006c006c0069006e00670065006e0065002000740069006c002000e50020006f0070007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e00740065007200200073006f006d00200065007200200062006500730074002000650067006e0065007400200066006f00720020006600f80072007400720079006b006b0073007500740073006b00720069006600740020006100760020006800f800790020006b00760061006c0069007400650074002e0020005000440046002d0064006f006b0075006d0065006e00740065006e00650020006b0061006e002000e50070006e00650073002000690020004100630072006f00620061007400200065006c006c00650072002000410064006f00620065002000520065006100640065007200200035002e003000200065006c006c00650072002000730065006e006500720065002e>
+    /POL <FEFF0055007300740061007700690065006e0069006100200064006f002000740077006f0072007a0065006e0069006100200064006f006b0075006d0065006e007400f300770020005000440046002000700072007a0065007a006e00610063007a006f006e00790063006800200064006f002000770079006400720075006b00f30077002000770020007700790073006f006b00690065006a0020006a0061006b006f015b00630069002e002000200044006f006b0075006d0065006e0074007900200050004400460020006d006f017c006e00610020006f007400770069006500720061010700200077002000700072006f006700720061006d006900650020004100630072006f00620061007400200069002000410064006f00620065002000520065006100640065007200200035002e0030002000690020006e006f00770073007a0079006d002e>
+    /PTB <FEFF005500740069006c0069007a006500200065007300730061007300200063006f006e00660069006700750072006100e700f50065007300200064006500200066006f0072006d00610020006100200063007200690061007200200064006f00630075006d0065006e0074006f0073002000410064006f0062006500200050004400460020006d00610069007300200061006400650071007500610064006f00730020007000610072006100200070007200e9002d0069006d0070007200650073007300f50065007300200064006500200061006c007400610020007100750061006c00690064006100640065002e0020004f007300200064006f00630075006d0065006e0074006f00730020005000440046002000630072006900610064006f007300200070006f00640065006d0020007300650072002000610062006500720074006f007300200063006f006d0020006f0020004100630072006f006200610074002000650020006f002000410064006f00620065002000520065006100640065007200200035002e0030002000650020007600650072007300f50065007300200070006f00730074006500720069006f007200650073002e>
+    /RUM <FEFF005500740069006c0069007a00610163006900200061006300650073007400650020007300650074010300720069002000700065006e007400720075002000610020006300720065006100200064006f00630075006d0065006e00740065002000410064006f006200650020005000440046002000610064006500630076006100740065002000700065006e0074007200750020007400690070010300720069007200650061002000700072006500700072006500730073002000640065002000630061006c006900740061007400650020007300750070006500720069006f006100720103002e002000200044006f00630075006d0065006e00740065006c00650020005000440046002000630072006500610074006500200070006f00740020006600690020006400650073006300680069007300650020006300750020004100630072006f006200610074002c002000410064006f00620065002000520065006100640065007200200035002e00300020015f00690020007600650072007300690075006e0069006c006500200075006c0074006500720069006f006100720065002e>
+    /RUS <FEFF04180441043f043e043b044c04370443043904420435002004340430043d043d044b04350020043d0430044104420440043e0439043a043800200434043b044f00200441043e043704340430043d0438044f00200434043e043a0443043c0435043d0442043e0432002000410064006f006200650020005000440046002c0020043c0430043a04410438043c0430043b044c043d043e0020043f043e04340445043e0434044f04490438044500200434043b044f00200432044b0441043e043a043e043a0430044704350441044204320435043d043d043e0433043e00200434043e043f0435044704300442043d043e0433043e00200432044b0432043e04340430002e002000200421043e043704340430043d043d044b04350020005000440046002d0434043e043a0443043c0435043d0442044b0020043c043e0436043d043e0020043e0442043a0440044b043204300442044c002004410020043f043e043c043e0449044c044e0020004100630072006f00620061007400200438002000410064006f00620065002000520065006100640065007200200035002e00300020043800200431043e043b043504350020043f043e04370434043d043804450020043204350440044104380439002e>
+    /SKY <FEFF0054006900650074006f0020006e006100730074006100760065006e0069006100200070006f0075017e0069007400650020006e00610020007600790074007600e100720061006e0069006500200064006f006b0075006d0065006e0074006f0076002000410064006f006200650020005000440046002c0020006b0074006f007200e90020007300610020006e0061006a006c0065007001610069006500200068006f0064006900610020006e00610020006b00760061006c00690074006e00fa00200074006c0061010d00200061002000700072006500700072006500730073002e00200056007900740076006f00720065006e00e900200064006f006b0075006d0065006e007400790020005000440046002000620075006400650020006d006f017e006e00e90020006f00740076006f00720069016500200076002000700072006f006700720061006d006f006300680020004100630072006f00620061007400200061002000410064006f00620065002000520065006100640065007200200035002e0030002000610020006e006f0076016100ed00630068002e>
+    /SLV <FEFF005400650020006e006100730074006100760069007400760065002000750070006f0072006100620069007400650020007a00610020007500730074007600610072006a0061006e006a006500200064006f006b0075006d0065006e0074006f0076002000410064006f006200650020005000440046002c0020006b006900200073006f0020006e0061006a007000720069006d00650072006e0065006a016100690020007a00610020006b0061006b006f0076006f00730074006e006f0020007400690073006b0061006e006a00650020007300200070007200690070007200610076006f0020006e00610020007400690073006b002e00200020005500730074007600610072006a0065006e006500200064006f006b0075006d0065006e0074006500200050004400460020006a00650020006d006f0067006f010d00650020006f0064007000720065007400690020007a0020004100630072006f00620061007400200069006e002000410064006f00620065002000520065006100640065007200200035002e003000200069006e0020006e006f00760065006a01610069006d002e>
+    /SUO <FEFF004b00e40079007400e40020006e00e40069007400e4002000610073006500740075006b007300690061002c0020006b0075006e0020006c0075006f00740020006c00e400680069006e006e00e4002000760061006100740069007600610061006e0020007000610069006e006100740075006b00730065006e002000760061006c006d0069007300740065006c00750074007900f6006800f6006e00200073006f00700069007600690061002000410064006f0062006500200050004400460020002d0064006f006b0075006d0065006e007400740065006a0061002e0020004c0075006f0064007500740020005000440046002d0064006f006b0075006d0065006e00740069007400200076006f0069006400610061006e0020006100760061007400610020004100630072006f0062006100740069006c006c00610020006a0061002000410064006f00620065002000520065006100640065007200200035002e0030003a006c006c00610020006a006100200075007500640065006d006d0069006c006c0061002e>
+    /SVE <FEFF0041006e007600e4006e00640020006400650020006800e4007200200069006e0073007400e4006c006c006e0069006e006700610072006e00610020006f006d002000640075002000760069006c006c00200073006b006100700061002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400200073006f006d002000e400720020006c00e4006d0070006c0069006700610020006600f60072002000700072006500700072006500730073002d007500740073006b00720069006600740020006d006500640020006800f600670020006b00760061006c0069007400650074002e002000200053006b006100700061006400650020005000440046002d0064006f006b0075006d0065006e00740020006b0061006e002000f600700070006e00610073002000690020004100630072006f0062006100740020006f00630068002000410064006f00620065002000520065006100640065007200200035002e00300020006f00630068002000730065006e006100720065002e>
+    /TUR <FEFF005900fc006b00730065006b0020006b0061006c006900740065006c0069002000f6006e002000790061007a006401310072006d00610020006200610073006b013100730131006e006100200065006e0020006900790069002000750079006100620069006c006500630065006b002000410064006f006200650020005000440046002000620065006c00670065006c0065007200690020006f006c0075015f007400750072006d0061006b0020006900e70069006e00200062007500200061007900610072006c0061007201310020006b0075006c006c0061006e0131006e002e00200020004f006c0075015f0074007500720075006c0061006e0020005000440046002000620065006c00670065006c0065007200690020004100630072006f006200610074002000760065002000410064006f00620065002000520065006100640065007200200035002e003000200076006500200073006f006e0072006100730131006e00640061006b00690020007300fc007200fc006d006c00650072006c00650020006100e70131006c006100620069006c00690072002e>
+    /UKR <FEFF04120438043a043e0440043804410442043e043204430439044204350020044604560020043f043004400430043c043504420440043800200434043b044f0020044104420432043e04400435043d043d044f00200434043e043a0443043c0435043d044204560432002000410064006f006200650020005000440046002c0020044f043a04560020043d04300439043a04400430044904350020043f045604340445043e0434044f0442044c00200434043b044f0020043204380441043e043a043e044f043a04560441043d043e0433043e0020043f0435044004350434043404400443043a043e0432043e0433043e0020043404400443043a0443002e00200020042104420432043e04400435043d045600200434043e043a0443043c0435043d0442043800200050004400460020043c043e0436043d04300020043204560434043a0440043804420438002004430020004100630072006f006200610074002004420430002000410064006f00620065002000520065006100640065007200200035002e0030002004300431043e0020043f04560437043d04560448043e04570020043204350440044104560457002e>
+    /ENU (Use these settings to create Adobe PDF documents best suited for high-quality prepress printing.  Created PDF documents can be opened with Acrobat and Adobe Reader 5.0 and later.)
+  >>
+  /Namespace [
+    (Adobe)
+    (Common)
+    (1.0)
+  ]
+  /OtherNamespaces [
+    <<
+      /AsReaderSpreads false
+      /CropImagesToFrames true
+      /ErrorControl /WarnAndContinue
+      /FlattenerIgnoreSpreadOverrides false
+      /IncludeGuidesGrids false
+      /IncludeNonPrinting false
+      /IncludeSlug false
+      /Namespace [
+        (Adobe)
+        (InDesign)
+        (4.0)
+      ]
+      /OmitPlacedBitmaps false
+      /OmitPlacedEPS false
+      /OmitPlacedPDF false
+      /SimulateOverprint /Legacy
+    >>
+    <<
+      /AddBleedMarks false
+      /AddColorBars false
+      /AddCropMarks false
+      /AddPageInfo false
+      /AddRegMarks false
+      /ConvertColors /ConvertToCMYK
+      /DestinationProfileName ()
+      /DestinationProfileSelector /DocumentCMYK
+      /Downsample16BitImages true
+      /FlattenerPreset <<
+        /PresetSelector /MediumResolution
+      >>
+      /FormElements false
+      /GenerateStructure false
+      /IncludeBookmarks false
+      /IncludeHyperlinks false
+      /IncludeInteractive false
+      /IncludeLayers false
+      /IncludeProfiles false
+      /MultimediaHandling /UseObjectSettings
+      /Namespace [
+        (Adobe)
+        (CreativeSuite)
+        (2.0)
+      ]
+      /PDFXOutputIntentProfileSelector /DocumentCMYK
+      /PreserveEditing true
+      /UntaggedCMYKHandling /LeaveUntagged
+      /UntaggedRGBHandling /UseDocumentProfile
+      /UseDocumentBleed false
+    >>
+  ]
+>> setdistillerparams
+<<
+  /HWResolution [2400 2400]
+  /PageSize [612.000 792.000]
+>> setpagedevice

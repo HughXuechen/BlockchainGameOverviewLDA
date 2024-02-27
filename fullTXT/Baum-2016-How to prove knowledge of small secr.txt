@@ -1,0 +1,1029 @@
+How to Prove Knowledge of Small Secrets
+Carsten Baum(B), Ivan Damg̊ard, Kasper Green Larsen, and Michael Nielsen
+Department of Computer Science, Aarhus University, Aarhus, Denmark
+{cbaum,ivan,larsen,mik}@cs.au.dk
+Abstract. We propose a new zero-knowledge protocol applicable to
+additively homomorphic functions that map integer vectors to an Abelian
+group. The protocol demonstrates knowledge of a short preimage and
+achieves amortised efficiency comparable to the approach of Cramer and
+Damg̊ard from Crypto 2010, but gives a much tighter bound on what
+we can extract from a dishonest prover. Towards achieving this result,
+we develop an analysis for bins-and-balls games that might be of inde-
+pendent interest. We also provide a general analysis of rewinding of a
+cut-and-choose protocol as well as a method to use Lyubachevsky’s rejec-
+tion sampling technique efficiently in an interactive protocol when many
+proofs are given simultaneously.
+Our new protocol yields improved proofs of plaintext knowledge for
+(Ring-)LWE-based cryptosystems, where such general techniques were
+not known before. Moreover, they can be extended to prove preimages
+of homomorphic hash functions as well.
+Keywords: Proofs of plaintext knowledge · Lattice-based encryption ·
+Homomorphic hashing · Integer commitments
+1 Introduction
+Proofs of Knowledge. In a zero-knowledge protocol, a prover convinces a
+sceptical verifier that some claim is true (and in some cases that he knows a
+proof) while conveying no other knowledge than the fact that the claim is true.
+Zero-knowledge protocols are one of the most fundamental tools in cryptographic
+protocol design. In particular, one needs zero-knowledge proofs of knowledge in
+multiparty computation to have a player demonstrate that he knows the input
+he is providing. This is necessary to be able to show (UC-)security of a protocol.
+C. Baum, I. Damg̊ard and M. Nielsen—Supported by The Danish National Research
+Foundation and The National Science Foundation of China (under the grant
+61061130540) for the Sino-Danish Center for the Theory of Interactive Computa-
+tion, within which part of this work was performed; by the CFEM research center
+(supported by the Danish Strategic Research Council) within which part of this work
+was performed; and by the Advanced ERC grant MPCPRO.
+K.G. Larsen—Supported by the Center for Massive Data Algorithmics, a Center of
+the Danish National Research Foundation, grant DNRF84, a Villum Young Investi-
+gator Grant and an AUFF Starting Grant.
+c© International Association for Cryptologic Research 2016
+M. Robshaw and J. Katz (Eds.): CRYPTO 2016, Part III, LNCS 9816, pp. 478–498, 2016.
+DOI: 10.1007/978-3-662-53015-3 17
+How to Prove Knowledge of Small Secrets 479
+In this work, we will consider one-way functions f : Z
+r �→ G where G is
+an Abelian group (written additively in the following), and where furthermore
+the function is additively homormorphic, i.e., f(a) + f(b) = f(a + b). We will
+call such functions ivOWF ’s (for homomorphic One-Way Functions over Integer
+Vectors). This turns out to be a very general notion: the encryption function of
+several (Ring-)LWE-based cryptosystems can be seen an ivOWF (such as the
+one introduced in [BGV12] and used in the so-called SPDZ protocol [DPSZ12]).
+Even more generally, the encryption function of any semi-homomorphic cryp-
+tosystem as defined in [BDOZ11] is an ivOWF. Also, in commitment schemes
+for committing to integer values, the function one evaluates to commit is typ-
+ically an ivOWF (see, e.g., [DF02]). Finally, hash functions based on lattice
+problems such as [GGH96,LMPR08], where it is hard to find a short preimage,
+are ivOWFs.
+We will look at the scenario where a prover P and a verifier V are given
+y ∈ G and P holds a short preimage x of y, i.e., such that ||x || ≤ β for some
+β. P wants to prove in zero-knowledge that he knows such an x . When f is an
+encryption function and y is a ciphertext, this can be used to demonstrate that
+the ciphertext decrypts and P knows the plaintext. When f is a commitment
+function this can be used to show that one has committed to a number in a
+certain interval.
+An obvious but inefficient solution is the following 3-message protocol π:
+(1) P chooses r at random such that ||r || ≤ τ · β for some sufficiently large τ ,
+the choice of which we return to below.
+(2) P then sends a = f(r) to V.
+(3) V sends a random challenge bit b.
+(4) P responds with z = r + b · x .
+(5) V checks that f(z ) = a + b · y and that ||z || ≤ τ · β.
+If τ is sufficiently large, the distribution of z will be statistically independent of
+x , and the protocol will be honest verifier statistical zero-knowledge1. On the
+other hand, we can extract a preimage of y from a cheating prover who can
+produce correct answers z 0, z 1 to b = 0, b = 1, namely f(z 1 − z 0) = y. Clearly,
+we have ||z 1−z 0|| ≤ 2 ·τ ·β. We will refer to the factor 2τ as the soundness slack
+of the protocol, because it measures the discrepancy between the interval used
+by the honest prover and what we can force a dishonest prover to do. The value
+of the soundness slack is important: if f is, e.g., an encryption function, then a
+large soundness slack will force us to use larger parameters for the underlying
+cryptosystem to ensure that the ciphertext decrypts even if the input is in the
+larger interval, and this will cost us in efficiency.
+The naive protocol above requires an exponentially large slack to get zero-
+knowledge, but using Lyubachevsky’s rejection sampling technique, the sound-
+ness slack can made polynomial or even constant (at least in the random oracle
+model).
+1 We will only be interested in honest verifier zero-knowledge here. In applications one
+would get security for malicious verifiers by generating the challenge in a trusted way,
+e.g., using a maliciously sure coin-flip protocol.
+480 C. Baum et al.
+The obvious problem with the naive solution is that one needs to repeat the
+protocol k times where k is the statistical security parameter, to get soundness
+error probability 2−k. This means that one needs to generate Ω(k) auxiliary
+f -values. We will refer to this as the overhead of the protocol and use it as a
+measure of efficiency.
+One wants, of course as small overhead and soundness slack as possible, but
+as long as we only want to give a proof for a single f -value, we do not know
+how to reduce the overhead dramatically in general. But if instead we want to
+give a proof for k or more f -values, then we know how to reduce the amortised
+overhead: Cramer and Damg̊ard [CD09] show how to get amortised overhead
+O(1), but unfortunately the soundness slack is 2Ω(k), even if rejection sampling
+is used. In [DKL+13] two protocols were suggested, where one is only covertly
+secure, and we will not consider it here as our goal is full malicious security. The
+other one can achieve polynomial soundness slack with overhead Ω(log(k)2) and
+works only in the random oracle model2.
+1.1 Contributions and Techniques
+In this work, we introduce a new paradigm for zero-knowledge proof of knowledge
+of preimage under an ivOWF, abbreviated ZKPoKP. For the first time, we are
+able to optimize both parameters, namely we obtain quasi-polynomial soundness
+slack (proportional to (2k + 1)log(k)/2) and o(1) ciphertext overhead, all results
+hold in the standard model (no random oracles are needed).
+For our zero-knowledge proof, we use the following high-level strategy:
+(1) Use a cut-and-choose style protocol for the inputs y1, . . . , yn.
+(2) Repeat the following experiment several times:
+(2.1) Let the verifier randomly assign each yi to one of several buckets.
+(2.2) For each bucket, add all elements that landed in the bucket and have
+the prover demonstrate that he knows a preimage of the sum.
+The intuition behind the proof then goes as follows: the first step will ensure that
+we can extract almost all of the required n preimages, in fact all but k where
+k is the security parameter. In the second step, since we only have k elements
+left that were “bad” in the sense that we could not yet extract a preimage,
+then if we have more than k buckets, say ck for a constant c > 1, there is a
+significant probability that many of the bad elements will be alone in a bucket.
+If this happens, we can extract a preimage by linearity of f . Furthermore, the
+cost of doing such a step is at most n additions, plus work that only depends
+on the security parameter k and is insignificant if n � k. We can now repeat
+the experiment some number of times to extract the remaining bad elements,
+2 The protocol in [DKL+13] is actually stated as a proof of plaintext knowledge for
+random ciphertexts, but generalizes to a protocol for ivOWFs. It actually offers a
+tradeoff between soundness slack and overhead in the sense that the overhead is
+M · log(k), where M has to be chosen such that (1/s)M is negligible. Thus one can
+choose s to be poly(k) and M = log(k), or s to be constant and M = k.
+How to Prove Knowledge of Small Secrets 481
+while adjusting the number of buckets carefully. We are then able to prove that
+we can extract all preimages quickly, namely after log(k) repetitions, and this is
+what give us the small soundness slack. In comparison, in [CD09], the extraction
+takes place in Ω(k) stages, which leads to an exponential soundness slack.
+Along the way to our main result, we make two technical contributions: first,
+we show a general result on what you can extract by rewinding from a prover
+that successfully passes a cut-and-choose test. Second, we show a method for
+using rejection sampling efficiently in an interactive protocol. In comparison, the
+protocol from [DKL+13] also used rejection sampling to reduce the soundness
+slack, but in a more simplistic way that leads to a larger overhead. See Sect. 3.1
+for more information on this.
+Our protocol is honest verifier zero-knowledge and is sound in the sense of a
+standard proof of knowledge, i.e., we extract the prover’s witness by rewinding.
+Nevertheless, the protocol can be readily used as a tool in a bigger protocol that
+is intended to be UC secure against malicious adversaries. Such a construction is
+already known from [DPSZ12]. See more details in Sect. 4. Here we also explain
+more concretely how to use our protocol when f is an encryption function.
+1.2 Related Work
+On a high level, our approach is related to Luby Transform (LT) codes [Lub02]:
+here, a sender encodes a codeword by splitting it into blocks of equal size and
+then sending random sums of these, until the receiver is able to reconstruct
+all such blocks (because all sums are formed independently, this yields a so-
+called erasure code). We could actually use the LT code approach to construct a
+protocol like ours, but it would not be a good solution: LT codes do not have to
+consider any noise expansion because they handle vectors over Z2, rather than
+integer vectors. This is a problem since in the worst case a block is reconstructed
+after n operations, where n is the number of blocks in total, which yields a noise
+bound that is exponential.
+The same bound can be achieved using the technique due to Cramer and
+Damg̊ard [CD09]. The main technique is to prove linear combinations of cipher-
+texts using regular 1 out of 2 zero-knowledge proofs. If enough equations are
+proven correctly, then one can use gaussian elimination to recompute the plain-
+texts. Unfortunately (as with LT codes) this leads to a blowup in the preimage
+size that can be exponential, which is not desireable for practical applications.
+A different amortization technique was introduced in [DKL+13] and further
+improved in the full version of [BDTZ16]. The basic idea here is to produce
+a large number of auxiliary ciphertexts, open a part of them and open sums
+of the plaintexts to be proven and the plaintexts of the auxiliary ciphertexts.
+This experiment is repeated multiple times, and a combinatorial argument as in
+[NO09] can then be used to estimate the error probability. As already mentioned
+above, this proof technique needs Ω(log(k))2 auxiliary ciphertexts per proven
+plaintext, which can be quite substantial for practical applications.
+There has been other work conducted for specialized instances of ivOWFs,
+such as e.g. the proof of plaintext knowledge from [BCK+14] which only applies
+482 C. Baum et al.
+to Ring-LWE schemes3. Moreover the protocol of [LNSW13] can be applied to
+ivOWFs with a lattice structure, but the protocol comes with a large soundness
+gap per instance.
+Notation. Throughout this work we will format vectors such as b in lower-case
+bold face letters, whereas matrices such as B will be in upper case. We refer to
+the ith position of vector b as b[i], let [r] := {1, ..., r} and define for b ∈ Z
+r that
+||b|| = maxi∈[r]{|b[i]|}. To sample a variable g uniformly at random from a set
+G we use g
+$←− G. Throughout this work we will let λ be a computational and k
+be a statistical security parameter. Moreover, we use the standard definition for
+polynomial and negligible functions and denote those as poly(·), negl(·).
+2 Homomorphic OWFs and Zero-Knowledge Proofs
+In this section we will present an abstraction that covers as a special case proofs
+of plaintext knowledge for lattice-based cryptosystems, and many other cases
+as well, as explained in the introduction. We call the abstraction homomorphic
+one-way functions over integer vectors. It follows the standard definition of a
+OWF which can be found in [KL14].
+Let λ ∈ N be the security parameter, G be an Abelian group, β, r ∈ N,
+f : Zr → G be a function and A be any algorithm. Consider the following game:
+InvertA,f,β(λ):
+(1) Choose x ∈ Z
+r, ||x || ≤ β and compute y = f(x ).
+(2) On input (1λ, y) the algorithm A computes an x ′.
+(3) Output 1 iff f(x ′) = y, ||x ′|| ≤ β, and 0 otherwise.
+Definition 1 (Homomorphic OWF over Integer Vectors (ivOWF)). A
+function f : Zr → G is called a homomorphic one-way function over the integers
+if the following conditions hold:
+(1) There exists a polynomial-time algorithm evalf such that evalf (x) = f(x)
+for all x ∈ Z
+r.
+(2) For all x,x′ ∈ Z
+r it holds that f(x) + f(x′) = f(x + x′).
+(3) For every probabilistic polynomial-time algorithm A there exists a negligible
+function negl(λ) such that
+Pr[InvertA,f,β(λ) = 1] ≤ negl(λ)
+Our definition is rather broad and does capture, among other primitives,
+lattice-based encryption schemes such as [BGV12,GSW13,BV14] where the one-
+way property is implied by IND-CPA and β is as large as the plaintext space.
+Moreover it also captures hash functions such as [GGH96,LMPR08], where it is
+hard to find a preimage for all sufficiently short vectors that have norm smaller
+than β.
+3 Their approach only almost yields a proof a plaintext knowledge, due to technical
+limitations.
+How to Prove Knowledge of Small Secrets 483
+2.1 Proving Knowledge of Preimage
+Consider a setting with two parties P and V. P holds some values x 1, ...,xn ∈ Z
+r,
+V has some y1, ..., yn ∈ R and P wants to prove towards V that yi = f(x i)
+and that x i is short, while not giving any knowledge about the x i away. More
+formally, the relation that we want to give a zero-knowledge proof of knowledge
+for is
+RKSP =
+{
+(v, w)
+∣∣∣∣ v = (y1, ..., yn) ∧ w = (x 1, ...,xn)∧
+[
+yi = f(x i) ∧ ||x i|| ≤ β
+]
+i∈[n]
+}
+However, like all other protocols for this type of relation, we will have to
+live with a soundness slack τ as explained in the introduction. What this means
+more precisely is that there must exist a knowledge extractor with properties
+exactly as in the standard definition of knowledge soundness, but the extracted
+values only have to satisfy [yi = f(x i) ∧ ||x i|| ≤ τ · β]i∈[n].
+3 Proofs of Preimage
+We start by constructing an imperfect proof of knowledge. That is, the protocol
+will allow to prove the above relation with a certain soundness slack, but the
+knowledge extractor is only required to extract almost all preimages. Further-
+more, we will use this protocol as a subprotocol in our actual proof of knowledge.
+To show knowledge soundness, Goldreich and Bellare [BG93] have shown that it
+is sufficient to consider deterministic provers, therefore we only need to consider
+deterministic provers when proving the subprotocol.
+On the Use of Rejection Sampling. Conceptually, the idea is to run the naive 3-
+message protocol π from the intro once for each of the n instances to prove. How-
+ever, in order to have a small soundness slack, we want to make use of Lyuba-
+shevsky’s rejection sampling technique [Lyu08,Lyu09]. The idea here is that the
+prover will sometimes abort the protocol after seeing the challenge if he notices
+that the random choices he made in the first message will lead him to reveal infor-
+mation about his witness if he were to send the final message. This is fine when
+used with the Fiat-Shamir heuristic because the prover only has to communicate
+the successful execution(s). But in our interactive situation, one has to allow for
+enough failed attempts so that the honest prover will succeed. The most straight-
+forward idea is to have the prover start up one execution of π in parallel for each
+instance, complete those that are successful and try again for the rest (this was
+essentially the approach taken in [DKL+13]). The expected number of attempts
+needed is constant, so we get a protocol that is expected constant round, but may
+sometimes run for a longer time. Alternatively, the prover could start so many
+attempts in parallel for each instance that he is sure to finish one of them. This
+will be exact constant round but wasteful in terms of work needed.
+484 C. Baum et al.
+Here, we obtain the best of both worlds. The idea is the following: we can
+make a large list L of T candidates for the prover’s first message, and then
+do standard cut-and-choose where we open half of them to show that most of
+the remaining ones are correctly formed. Now, for every instance to prove, the
+prover will take the first unused one from L that leads to success and complete
+the protocol for that one. Again, since the expected number of attempts for one
+instance is very close to 1, and we run over many instances, L only needs to be
+of length O(n), the prover will run out of candidates only with negligible prob-
+ability. Further, since this can all be done in parallel, we get an exact constant
+round protocol.
+On Extraction by Rewinding from Cut-and-Choose. When we need to extract
+knowledge from the prover in the imperfect proof, we need to exploit the fact
+that we do cut-and-choose on the list of candidates L as mentioned above, where
+each candidate is an image under f . If we just wanted to establish that most of
+the candidates are well formed in the sense that they are images of short enough
+inputs, it would be easy: if each candidate is opened with probability 1/2, then
+if more than k candidates are not well formed, the prover clearly survives with
+probability at most 2−k. However, we have to actually extract preimages of
+almost all candidates. Since we want to avoid using random oracles or other
+set-up assumptions, we can only resort to rewinding. Now it is not so clear what
+happens: it may be that all candidates are well formed, but the corrupt prover
+has some (unknown to us) strategy for which challenges he wants to respond to
+correctly. All we know is that he will answer a non-negligible fraction of them.
+We show that nevertheless, there is a rewinding strategy that will do almost as
+well as in the easy case, and we treat this in a separate general lemma, as we
+believe the solution to this is of independent interest.
+To establish this general point of view, consider any polynomial time com-
+putable function g : X �→ Y and a generic protocol between a prover P and a
+verifier V we call PCutnChoose that works as follows:
+(1) P chooses x1, ..., xT ∈ X such that all xi satisfy some predicate pre, we say
+xi is good if it satisfies pre.
+(2) P sets yi = g(xi) for all i and sends y1, ..., yT to V.
+(3) V chooses s ∈ {0, 1}T uniformly at random and sends it P.
+(4) P returns {xi | s[i] = 0} and V accepts if yi = g(xi) whenever s[i] = 0 and
+each such xi is good.
+Lemma 1 (Cut-and-Choose Rewinding Lemma). There exists an extrac-
+tor E such that the following holds: for any (deterministic) prover P̂ that makes
+the verifier in PCutnChoose accept with probability p > 2−k+1, where T is polyno-
+mial in k, E can extract from P̂ at least T −k good xi-values such that g(xi) = yi.
+E runs in expected time proportional to O(poly(s) · k2/p), where s is the size of
+the inputs.
+Proof. Let P̂ be a deterministic prover that makes V accept in PCutnChoose with
+probability p > 2−k+1. Consider the following algorithm E :
+How to Prove Knowledge of Small Secrets 485
+(1) Start P̂, who in turn outputs y1, ..., yT .
+(2) Run T instances of P̂ in parallel, which we denote P̂1, ..., P̂T .
+(3) Let A = ∅ and do the following until |A| ≥ T − k:
+(3.1) For each P̂i sample a random challenge si
+$←− {0, 1}T , subject to si[i] = 0
+and run each P̂i on challenge si.
+(3.2) For each instance P̂i that does not abort, check that the prover’s response
+contains xi such that f(xi) = yi. If so, then A = A ∪ {xi}.
+(4) Output A.
+We will now show that E runs in the required time. Denote the probability that
+P̂i outputs a good xi in step (3) as pi. We will say that pi is bad if pi < p/k,
+and good otherwise.
+Let Xi be the event that P̂i eventually outputs a good xi, where Xi = 1 if
+the event happened or Xi = 0 otherwise. If pi is good then, after α iterations
+Pr[Xi = 0] = (1 − p/k)α ≤ e−p/k·α
+so after at most α = k2/p iterations we can expect that xi was extracted except
+with probability negligible in k. This can then be generalized to the success of
+all P̂i (where pi is good) by a union bound, and the probability of failing is still
+negligible because T is polynomial in k. Since the experiment of running k2/p
+iterations produces success for all good pi with probability essentially 1, the
+expected number of times we would need to repeat it to get success is certainly
+not more than 2, so the claimed expected run time follows, provided there are
+less than k bad pi.
+Hence, for the sake of contradiction, assume that there are k bad pi which,
+for simplicity, are p1, ..., pk. In the protocol, the challenge s is chosen uniformly
+at random. The success probability of P̂ can be conditioned on the value of s[1]
+as
+p = Pr[P̂ succeeds] = 1/2 · p1 + 1/2 · Pr[P̂ succeeds | s[1] = 1]
+since p1 is only of our concern if s[1] = 0. Conditioning additionally on s[2]
+yields
+p ≤ 1/2 · p1 + 1/2 · (1/2 · 2 · p2 + 1/2 · Pr[P̂ succeeds | s[1] = 1 ∧ s[2] = 1])
+= 1/2 · (p1 + p2) + 1/4 · Pr[P̂ succeeds | s[1] = 1 ∧ s[2] = 1]
+The reason the inequality holds is as follows: the probability that a random
+challenge asking to open a2 will yield a preimage of a2 is p2. Now, conditioning
+on s[1] = 1, which occurs with probability 1/2, will increase that probability
+from p2 to at most 2p2.
+Repeating the above argument generalizes to
+p = Pr[P̂ succeeds] ≤ 1/2 · (p1 + ... + pk) +
+2−k · Pr[P̂ succeeds | s[1] = 1 ∧ ... ∧ s[k] = 1]
+< 1/2 · p + 2−k
+which follows since the first k pi were bad. But this last inequality implies p <
+2−k+1, and this contradicts the assumption we started from, that p > 2−k+1. �
+486 C. Baum et al.
+3.1 The Imperfect Proof of Knowledge
+We assume the existence of an auxiliary commitment scheme Caux that is com-
+putationally hiding and perfectly binding, and which allows to commit to values
+from the group G that f maps into. The reason we need it is quite subtle and will
+show up in the proof of security of PImperfectProof. We will denote a commitment
+using Caux to a value x ∈ G as Caux(x) (Fig. 1).
+Fig. 1. Imperfect proof for the relation RKSP
+Theorem 1. Let f be an ivOWF, k be a statistical security parameter, Caux be a
+perfectly binding/computationally hiding commitment scheme over G, τ = 100 ·r
+and T = 3·n, n ≥ max{10, k}. Then PImperfectProof has the following properties:
+Correctness: If P,V are honest and run on an instance of RKSP, then the
+protocol succeeds with probability at least 1 − negl(k).
+Soundness: For every deterministic prover P̂ that succeeds to run the protocol
+with probability p > 2−k+1 one can extract at least n − k values x′
+i such that
+How to Prove Knowledge of Small Secrets 487
+f(x′
+i) = yi and ||x′
+i|| ≤ 2 · τ · β, in expected time O(poly(s) · k2/p) where s is
+the size of the input to the protocol.
+Zero-Knowledge: The protocol is computational honest-verifier zero-
+knowledge.
+Proof.
+Completeness. By the homomorphic property of f , all the checked equations
+hold. The protocol can only abort if P aborts, which can only happen in step
+(7). We first show that |C| ≥ 1.1 · n with all but negligible probability for large
+enough n. Using this, we show that Pr[PImperfectProof aborts | |C| ≥ 1.1 · n] is
+negligible in n.
+Let #1(s) denote the number of ones in s, then #1(s) ∼ BIN 1/2,T where
+BIN is the Binomial distribution. Using the Chernoff bound we obtain
+Pr[#1(s) ≤ 1.1 · n | s $←− {0, 1}T ] ≤ exp
+(
+− 2
+(1/2 · T − 1.1 · n)2
+T
+)
+= exp
+(−32
+300
+· n
+)
+Since n ≥ k this becomes negligible for large enough n and we can assume that
+|C| ≥ 1.1 · n.
+Consider a single coordinate of a z i. The chance that it fails the bound
+is 1/τ . Each vector has length r, so z i exceeds the bound with probability
+r/τ = 1/100. In such a case, P would take the next (independently chosen) g j
+and try again. The ith attempt of P is denoted as Xi, where Xi = 1 if he fails and
+0 otherwise. We allow P to do at most T of these attempts4. Then Xi ∼ B1/100
+and X ∼ BIN 1/100,T ,X =
+∑
+Xi. We set X = 1
+T X where E[X] = 1/100. Using
+Hoeffding’s inequality, one can show that the probability of failure is
+Pr[X − E[X] ≥ 0.09] ≤ exp
+(
+− 2.2 · n · 0.092
+)
+which is negligible in k since we assume n ≥ k.5
+Soundness. Let P̂ be a deterministic prover that makes an honest V accept
+PImperfectProof with probability p > 2−k+1. Consider the following algorithm
+EImperfectProof :
+(1) Start P̂, who in turn outputs d = (d1, ..., dT ).
+(2) Observe that the first part of the protocol is an instance of PCutnChoose with
+g = Caux ◦ f and where a preimage g i is good if ||g i|| ≤ τ · β, We therefore
+run the extractor E guaranteed by Lemma 1 which gives us a set A with
+T − k good g i-values.
+4 The probability that P needs more auxiliary ciphertexts is ≈ 0.63n and therefore
+negligible in n.
+5 In fact, setting n = 40 already makes P abort with probability 2−10.
+488 C. Baum et al.
+(3) Let X = ∅ and do the following until |X| ≥ n − k:
+(3.1) Run a regular instance with P̂.
+(3.2) If the instance was accepting, then for each z i with a corresponding
+g j ∈ A, j ∈ C add the preimage to X, i.e. X = X ∪ {z i − g j}.
+(4) Output X.
+We will now show that EImperfectProof runs in the required time. The run-time
+of E was established in Lemma 1. Using the set A it outputs, we can now argue
+that step (3) also terminates as required: EImperfectProof reaches step (3.2) after
+an expected number of 1/p rounds. At most k of the T preimages of aj are not
+given in A and therefore step (3.2) is only executed once. From the bound on
+the ai, the bound on the extracted x i immediately follows.
+Zero-Knowledge. Consider the following algorithm SImperfectProof
+(1) On input (v = (y1, ..., yn), T, τ, β) sample the string s
+$←− {0, 1}T as in the
+protocol.
+(2) Compute the sets C,O as in PImperfectProof. For each i ∈ O sample g i ∈
+Z
+r, ||g i|| ≤ τ · β and set ai = f(g i) as well as di = Caux(ai).
+(3) For i ∈ C sample z i ∈ Z
+r, ||z i|| ≤ τ · β uniformly at random. Let Z ′ := {i ∈
+C | ||z i|| ≤ (τ − 1) · β}.
+(4) If |Z ′| < n then for i ∈ C set g i = z i, ai = f(z i), di = Caux(ai), output
+(s, d1, ..., dT , (ai, g i)i∈O) and abort.
+(5) If |Z ′| ≥ n then let Z be the first n elements of Z ′. For each i ∈ C \ Z set
+ai = f(z i), di = Caux(ai).
+(6) Denote Z as Z = {i1, ..., in}. For all ij ∈ Z set aij = f(z ij ) − yj , dij =
+Caux(aij ).
+(7) Output (s, d1, ..., dT , (ai, g i)i∈O, Z, (ai, z i)i∈Z).
+In the simulation, we can assume that there exists a witness w for v accord-
+ing to relation RKSP. We first observe that if an ai and its randomness when
+generating a di are ever revealed, then it holds that di = Caux(ai). For those
+commitments that are not opened the computational hiding property implies
+that their distribution in the simulated case is indistinguishable from the real
+protocol.
+What remains to study is the abort probability of the protocol, the sets
+C,O,Z and the ai, zi, g i. The choice of C,O is identical in PImperfectProof,
+SImperfectProof for an honest verifier since they are computed the same way.
+Abort Probability and Z. The probability of abort of SImperfectProof in step (4)
+is the same as in (7) in PImperfectProof. This indeed is true if #1(s) < n and
+also if #1(s) ≥ n, |Z ′| < n. The second is a little more subtle and can be seen
+by arguing what the chance is that a certain z i ends up in Z ′: for the sake
+of simplicity, assume n = r = 1 since all these vectors and their entries are
+chosen i.i.d. In the above simulator, z ∈ [−τ · β, τ · β] was chosen uniformly at
+random. Hence z �∈ Z ′ with probability 1/100. In the case of PImperfectProof we
+have z = x + g where g ∈ [−τ · β, τ · β] was chosen uniformly at random and
+x ∈ [−β, β], i.e. z ∈ [−τ · β + x, τ · β + x] chosen uniformly at random from a
+How to Prove Knowledge of Small Secrets 489
+shifted interval of equal length. But [−(τ −1) ·β, (τ −1) ·β] ⊂ [−τ ·β+x, τ ·β+x]
+always holds due to the upper bound of x, hence the probability of abort is also
+1/100. By the same reasoning, Z has the same distribution in SImperfectProof
+and PImperfectProof.
+Distribution of g j , aj for j ∈ O. Due to the homomorphism of f , the checks from
+step (9) do also hold on the simulated output. For all j ∈ O the distribution of
+the g j , aj is the same in both the protocol and SImperfectProof as the values are
+chosen exactly the same way.
+Distribution of z i, ai for i ∈ Z. Consider the distribution of the z ij , aij for ij ∈ Z
+when SImperfectProof runs successfully. By the above argument, the distribution
+of the z ij is independent of the x j in PImperfectProof. In PImperfectProof exactly
+those z ij will be sent to V where z ij = g ij +x j is in the correct interval. Since by
+our assumption there exists a witness w = (x ′
+1, ...,x
+′
+n) then due to the linearity
+of f there must exist a g ′
+ij
+of the same bound as the g i in the protocol, where
+aij = f(g ′
+ij
+) by linearity.
+Why Using Caux? It may not be directly obvious from the above proof why
+the commitment Caux is necessary. But a problem can occur in step (7) of
+PImperfectProof with the elements with indices from C\Z: although the simulator
+can simulate perfectly the choice of this set, we would have a problem if we had
+to reveal the corresponding f(g i)-values. The issue is that the g i’s should be
+values that cause an abort and we cannot choose such values unless we know
+the corresponding secrets. One solution is to apply f to a random input and
+make a non-standard assumption that this cannot be distinguished from the
+real thing, but this is undesirable. Instead, sending Caux(ai) allows to both hide
+the distribution, while soundness is still guaranteed because Caux ◦ f is hard to
+invert due to the binding property of Caux. �
+3.2 The Full Proof of Knowledge
+We use the above imperfect protocol as a building block of the actual proof.
+After executing it with the (x i, yi) as input, we can assume that a preimage of
+most of the yi’s (in fact, all but k) can be extracted from the prover.
+Our strategy for the last part of the protocol is to repeat the following pro-
+cedure several times: we let the verifier randomly assign each yi to one of several
+buckets. Then, for each bucket, we add all elements that landed in the bucket
+and have the prover demonstrate that he knows a preimage of the sum. The
+observation is that since we only have k elements left that were “bad” in the
+sense that we could not yet extract a preimage, then if we have more than k
+buckets, say ck for a constant c > 1, there is a significant probability that many
+of the bad elements will be alone in a bucket. If this happens, we can extract
+a preimage by linearity of f . Furthermore, the cost of doing such a step is at
+most n additions, plus work that only depends on the security parameter k and
+is insignificant if n � k. Now, by repeating this game some number of times
+with the right number of buckets, we shall see that we can extract all preimages
+quite quickly.
+490 C. Baum et al.
+In the following, the experiment where we throw n values randomly into b
+buckets will be denoted Exp(b, n). As is apparent from the above discussion,
+we will need to analyse the probability that the bad values will be “killed” by
+being alone in a bucket. That is, we need to consider Exp(b, v), where v ≤ k
+can be thought of as the number of bad elements. We will say that an element
+survives if it is not alone in a bucket. We will write t independent repetitions
+of the experiment as Expt(b, v) and we say that an element survives this if it
+survives in every repetition. The following lemma will be helpful:
+Lemma 2. Notation as above. Consider Expt(b, v) and assume b ≥ 4v and
+t ≥ 8. Then the probability p that at least v/4 elements survive satisfies p ≤ 3v
+4 εtv,
+where ε = e5/32
+25/16
+≈ 0.94.
+Proof. Consider the event of exactly s bad elements surviving Expt(b, v) where
+s ≥ v/4. The s surviving elements could be any of the v values, but must cover
+less than s/2 buckets in each repeated experiment, since surviving elements are
+not alone in a bucket. From this we get the bound
+Pr [s survive] ≤
+(
+v
+s
+)((
+b
+s/2
+)(
+s/2
+b
+)s)t
+on which we apply upper bounds on the binomial coefficients:
+≤
+(ve
+s
+)s
+((
+be
+s/2
+)s/2 (
+s/2
+b
+)s
+)t
+=
+(ve
+s
+)s (se
+2b
+)ts/2
+=
+((ve
+s
+)1/t (se
+2b
+)1/2
+)ts
+and finally maximize using b ≥ 4v, t ≥ 8 and s ∈ [v/4, v]:
+≤
+((
+ve
+v/4
+)1/8 ( ve
+2 · 4v
+)1/2
+)tv/4
+=
+(
+(4e)1/8
+(e
+8
+)1/2
+)tv/4
+=
+(
+e5/32
+25/16
+)tv
+Using this we can bound the probability p by union bound:
+p = Pr
+[
+≥ v
+4
+survive
+]
+≤
+v∑
+s=v/4
+Pr [s survive] ≤ 3v
+4
+(
+e5/32
+25/16
+)tv
+�
+How to Prove Knowledge of Small Secrets 491
+Before we continue, let us discuss the implications of the above Lemma. First,
+due to the first equation of the proof we yield that, except with probability p,
+in an instance of Expt(b, v) at least one of the t iterations contains at least 3v/4
+buckets with single elements. A second, somewhat surprising fact is that for fixed
+values of t, b the probability p is not monotone in v. This will be particularly
+difficult, as we only know upper bounds on the value v in the proof of the main
+protocol.
+Our soundness argument implicitly defines an extraction algorithm that runs
+in log2(k) rounds, where in each round the same total number of buckets is used
+(the number of buckets per iteration drops in half, but the total number of
+iterations per round doubles). What we then show (using the above Lemma) is
+that the upper bound on the number of unextracted preimages is reduced by a
+factor of 2 between each two successive rounds, while the error probability stays
+somewhat constant. This is due to the following thought experiment: assume as
+an invariant that, for O(k) buckets and k balls, at least k/2 of these balls land
+in their own bucket except with probability 2−O(k). By running the experiment
+again, we see that the error probability now increases because we now only
+use k/2 balls. But by independently running the experiment twice, one obtains
+that half of the k/2 balls are alone (in one of the two experiments) except
+with essentially the same probability as before. This now allows for a recursive
+extraction strategy.
+Theorem 2. Let f be an ivOWF, k be a statistical security parameter, β be a
+given upper bound and n > k · log2(k). Then PCompleteProof is an interactive
+honest-verifier zero-knowledge proof of the relation RKSP with knowledge error
+2−k+1. More specifically, it has the following properties (Fig. 2):
+Correctness: If P,V are honest then the protocol succeeds with probability at
+least 1 − 2−O(k).
+Soundness: For every deterministic prover P̂ that succeeds to run the protocol
+with probability p > 2−k+1 one can extract n values x′
+i such that f(x′
+i) = yi
+and ||x′
+i|| ≤ O((2k + 1)log2(k)/2 · n · r · β) except with negligible probability, in
+expected time poly(s, k)/p, where s is the size of the input to the protocol.
+Zero-Knowledge: The protocol is computational honest-verifier zero-
+knowledge.
+Proof.
+Correctness. The first call to PImperfectProof in step (1) will succeed with all
+but negligible probability due to Theorem1. For each i in step (2) the experiment
+is repeated 2i+4 times using 4k ·2−i buckets, hence the total number of sums for
+each such round is 64k which determines h. A set Ij as chosen in step (3) can have
+size at most n by definition, therefore ||δj || ≤ β · n. The call to PImperfectProof
+in step (4) will then be successful according to Theorem 1 with overwhelming
+probability.
+Soundness. We will first prove the existence of an efficient extractor, then give
+a bound on the extraction probability and only establish the bound on the norm
+of the preimage afterwards.
+492 C. Baum et al.
+Fig. 2. A protocol to prove the relation RKSP
+An Efficient Extractor. From the subprotocol used in step (1) and Theorem 1 all
+but k of the n ciphertexts can be extracted. The same holds for step (4) from
+which we can argue that at most k of the h sums are proven incorrectly. For
+each i, observe that of the ti = 2i+4 iterations, there must be at least 2i+3 of
+them that each contain at most 2−i · k/4 bad buckets. For otherwise, we would
+have at least 2i+3 iterations that each have at least 2−i ·k/4 buckets which adds
+up to 2k bad buckets.
+For i = 0, 1, .. the number of bad values entering into the experiment
+Expti(bi, n) is vi ≤ k · 2−i, except with negligible probability (we will consider
+the error probability later). This can be seen as follows: for i = 0, we have v0 ≤ k
+due to step (1). So let vi ≤ 2−ik, then by the proof of Lemma2 at least one of the
+2i+3 iterations, 3/4 ·vi or more buckets contain only one of the not-yet extracted
+elements and can hence be extracted now. For this instance, we established that
+at most 2−i · k/4 of the sums can be bad, hence
+vi+1 ≤ vi/4 + k/4 · 2−i ≤ k/4 · 2−i + k/4 · 2−i = k · 2−i−1
+Hence after Expti(bi, vi) we can extract at least vi/2 of the ciphertexts. In the last
+round we have vlog2(k)
+≤ 2 and must prove that after Exptlog2(k)(blog2(k)
+, vlog2(k)
+),
+no unextracted preimages are left. Therefore consider the following two cases:
+vlog2(k)
+= 1 In this case, for the experiment to fail the remaining unextracted
+preimage must be in the bad sum for all 8k instances. For each such instance,
+there are 4 buckets out of which at most 1 can be bad. The extraction will
+hence only fail with probability 2−16k.
+vlog2(k)
+= 2 To be able to extract, we want both unextracted preimages to be in
+different buckets and none of them in a bad bucket. The chance that the first
+How to Prove Knowledge of Small Secrets 493
+preimage ends up in a bad bucket is 1/4, and the second preimage can either
+fall into the bucket with the first preimage (with probability 1/4) or in the
+bad bucket, so in total with probability at most 3/4 one of the 8k iterations
+will fail, and all will be bad with probability at most (3/4)8k < 2−2k.
+By a union bound, the last experiment will fail with probability at most plog2(k) =
+2−k.
+For rounds i = 0, ..., log2(k) − 1, the extractor will only extract from the
+experiment i if k · 2−i−1 ≤ vi ≤ k · 2−i and otherwise safely continue with round
+i + 1. By Lemma 2, extraction will fail in this round with probability at most
+pi ≤ max
+ṽi∈[k·2−i−1,k·2−i]
+{3/4ṽi · εti·ṽi}
+< 3/4k · 2−i · ε2
+i+3·k·2−i−1
+= 3k · 22−i · ε4k
+because the actual value of vi is unknown. The extraction process can fail if it
+fails in one of the experiments. By a union bound, we obtain
+p0 + ... + plog2(n)
+< 3k · 22 · ε4k + ... + 3k · 22−log2(k)+1 · ε4k + 2−k
+= 3k · ε4k ·
+log2(k)−1∑
+j=0
+22−j + 2−k
+< 24k · ε4k + 2−k
+which is in 2−O(k) because ε < 1 and constant. Since soundness for Theorem1
+fails with probability 2−O(k) as well, this proves the claim.
+Extraction Bound. Let τ = 100r be the slackness chosen for the instances of
+innerProof. Consider a value x ′
+i extracted in round 0, i.e. there exists a good
+δj , i ∈ Ij such that x ′
+i = δj − ∑
+o∈Ij\{x ′
+i} x
+′
+o where all such x ′
+o were already
+extracted from PImperfectProof in step (1). Then
+||x ′
+i|| ≤ ||δj −
+∑
+o∈Ij\{i}
+x ′
+o||
+≤ ||δj || + ||
+∑
+o∈Ij\{i}
+x ′
+o||
+≤ 2 · τ · n · β + (n − 1) · 2 · τ · β
+< 4 · n · τ · β
+:= β0
+In round 1 each preimage that we extract will be a sum of preimage known from
+the cut-and-choose phase and those from round 0, where from the last round at
+most k/2 can be part of the sum. Calling this upper bound β1 we obtain
+β1 = 2 · τ · n · β +
+k
+2
+β0
+494 C. Baum et al.
+The above argument easily generalizes to an arbitrary round i > 0 where it
+then holds that
+βi = 2 · τ · n · β +
+i−1∑
+j=1
+k
+2j
+βj−1
+because in round 0 we extracted at most k/2 preimages, in round 1 k/4 and so
+on. In particular, the above can be rewritten as
+βi = 2 · τ · n · β +
+i∑
+j=1
+k
+2j
+βj−1
+= 2 · τ · n · β +
+i−1∑
+j=1
+k
+2j
+βj−1 +
+k
+2i
+βi−1
+≤ βi−1 +
+k
+2i
+βi−1
+=
+(
+k
+2i
++ 1
+)
+βi−1
+In particular, for the bound on the last preimages that are extracted in round
+log2(k) one obtains
+βlog2(k)
+=
+log2(k)−1∏
+i=1
+(
+k
+2i
++ 1
+)
+β0
+To compute a bound on the leading product, we consider the square of the
+above bound and reorder the terms as
+log2(k)−1∏
+i=1
+(
+k
+2i
++ 1
+)2
+=
+log2(k)−1∏
+i=1
+(
+k
+2i
++ 1
+) (
+k
+2log2(k)−i
++ 1
+)
+=
+log2(k)−1∏
+i=1
+(
+k +
+k
+2i
++
+k
+2log2(k)−i
++ 1
+)
+< (2k + 1)log2(k)
+and we can conclude that
+βlog2(k)
+< (2k + 1)log2(k)/2 · 4 · n · τ · β
+Zero-Knowledge. The simulation algorithm chooses the randomness for all
+the experiments like an honest V would do and then uses the simulator from
+Theorem 1 to simulate the calls to PImperfectProof. The computational HVZK
+property then follows directly from Theorem1. �
+How to Prove Knowledge of Small Secrets 495
+4 Applications
+As a first general remark, we note that even though our protocol is only honest
+verifier zero-knowlegde and proved sound using extraction by rewinding, we can
+nevertheless use it as a tool in a bigger protocol that is intended to be UC
+secure against malicious adversaries. Such a construction is already known from
+[DPSZ12]. The idea is first to generate the verifier’s challenge using a secure
+coin-flip protocol. Then honest verifier zero-knowledge suffices, and the cost of
+generating the challenge can be amortised over several proofs. Second, if the
+function f is an encryption function, the UC simulator can be given the secret
+key and can hence extract straight-line. Rewinding then only takes place in the
+reduction to show that the UC simulator works.
+In the rest of this section we will first show how to rephrase lattice-based
+encryption as ivOWFs and then show how to generalize the result from the
+previous section such that it applies in this setting.
+4.1 Encryption as ivOWFs
+As an example, let us consider a variant of the homomorphic encryption scheme
+due to Brakerski et al. [BGV12]. Let n,N, λ ∈ N
++, p, q ∈ P and q � p. Moreover,
+let χ be a distribution over Z such that, with overwhelming probability in k,
+e ← χ ⇒ |e| ≤ q/2. We consider λ to be the computational security parameter.
+KG(1λ): Sample t
+$←− χn, e
+$←− χN and B ← Z
+N×n
+q . Let u1 = (1, 0, ..., 0) ∈
+Z
+n+1
+q be the unit vector for the first coordinate. Then compute
+b ← Bt + p · e
+A ←
+(
+uT
+1
+∥∥∥
+(
+bT
+−BT
+) ∥∥∥ p · I n+1
+)
+where I n+1 is the identity matrix with n + 1 rows and columns. Output
+pk ← A, sk ← t .
+Encpk(
+(
+m
+r
+)
+): Check that m ∈ Zp, r ∈ Z
+N+n+1
+q and output
+c ← A ×
+(
+m
+r
+)
+Decsk(s): Compute
+m′ ←
+(〈
+c,
+(
+1
+t
+)〉
+mod q
+)
+mod p
+and output m′ ∈ Zp.
+For appropriately chosen parameters, the function Encpk is an ivOWF (by
+the natural embedding of Zq into the integers) assuming that the LWE problem
+is hard. It therefore seems natural to apply our proof framework in the above
+setting.
+Unfortunately we have to show different bounds for different indices of the
+preimage, which is impossible for the existing proof.
+496 C. Baum et al.
+Fig. 3. A protocol to prove the relation RKSP,f,β
+4.2 Refining the Proof Technique
+To gain more flexibility, we start out by defining a predicate InfNormβ, which
+we define as follows
+InfNormβ(x ) =
+{
+� if β ∈ N
++ ∧ ∀i ∈ [r] : |x [i]| ≤ β[i]
+⊥ else
+where β is supposed to be a coordinatewise upper bound on x .
+We call a vector x ∈ Z
+r to be β-bounded iff InfNormβ(x ) = �. For a function
+f : Zr → G and the set {c1, ..., ct} one then tries to prove the following relation
+RKSP,f,β =
+{
+(v ,w) | v = (c1, ..., ct) ∧ w = (x 1, ...,x t) ∧
+[
+ci = f(x i) ∧ InfNormβ(x i)]i∈[t]
+}
+That is, a proof of plaintext knowledge for our defined cryptosystem would then
+set β ∈ N
+N+n+2, f = Encpk with β[1] = βP ,β[2] = ... = β[N + n + 2] = βR
+where βP is the bound on the plaintext and βR on the randomness. One then
+uses a modified version of the proof PImperfectProof, namely the protocol from
+Fig. 4 and moreover replaces PCompleteProof with Fig. 3.
+Theorems 1 and 2 directly generalize to the above setting due to the linearity
+of all operations (if the simulators for the rejection sampling just sample from
+the appropriate bound for each coordinate). This is possible because none of the
+success probabilities changes since these are independent of the bound β in the
+How to Prove Knowledge of Small Secrets 497
+Fig. 4. Imperfect proof for the relation RKSP,f,β
+first place. The above could be generalized to other predicates which e.g. enforce
+2-norms. We leave this as future work.
+References
+[BCK+14] Benhamouda, F., Camenisch, J., Krenn, S., Lyubashevsky, V., Neven, G.:
+Better zero-knowledge proofs for lattice encryption and their application to
+group signatures. In: Sarkar, P., Iwata, T. (eds.) ASIACRYPT 2014. LNCS,
+vol. 8873, pp. 551–572. Springer, Heidelberg (2014)
+[BDOZ11] Bendlin, R., Damg̊ard, I., Orlandi, C., Zakarias, S.: Semi-homomorphic
+encryption and multiparty computation. In: Paterson, K.G. (ed.) EURO-
+CRYPT 2011. LNCS, vol. 6632, pp. 169–188. Springer, Heidelberg (2011)
+[BDTZ16] Baum, C., Damg̊ard, I., Toft, T., Zakarias, R.: Better preprocessing
+for secure multiparty computation. In: Manulis, M., Sadeghi, A.-R.,
+Schneider, S. (eds.) ACNS 2016. LNCS, vol. 9696, pp. 327–345. Springer,
+Heidelberg (2016). doi:10.1007/978-3-319-39555-5 18
+http://dx.doi.org/10.1007/978-3-319-39555-5_18
+498 C. Baum et al.
+[BG93] Bellare, M., Goldreich, O.: On defining proofs of knowledge. In:
+Brickell, E.F. (ed.) CRYPTO 1992. LNCS, vol. 740, pp. 390–420. Springer,
+Heidelberg (1993)
+[BGV12] Brakerski, Z., Gentry, C., Vaikuntanathan, V.: (Leveled) fully homomorphic
+encryption without bootstrapping. In: Proceedings of the 3rd Innovations in
+Theoretical Computer Science Conference, ITCS 2012, pp. 309–325. ACM,
+New York (2012)
+[BV14] Brakerski, Z., Vaikuntanathan, V.: Efficient fully homomorphic encryption
+from (standard) LWE. SIAM J. Comput. 43(2), 831–871 (2014)
+[CD09] Cramer, R., Damg̊ard, I.: On the amortized complexity of zero-knowledge
+protocols. In: Halevi, S. (ed.) CRYPTO 2009. LNCS, vol. 5677, pp. 177–
+191. Springer, Heidelberg (2009)
+[DF02] Damg̊ard, I.B., Fujisaki, E.: A statistically-hiding integer commitment
+scheme based on groups with hidden order. In: Zheng, Y. (ed.) ASI-
+ACRYPT 2002. LNCS, vol. 2501, pp. 125–142. Springer, Heidelberg (2002)
+[DKL+13] Damg̊ard, I., Keller, M., Larraia, E., Pastro, V., Scholl, P., Smart, N.P.:
+Practical covertly secure MPC for dishonest majority – or: breaking the
+SPDZ limits. In: Crampton, J., Jajodia, S., Mayes, K. (eds.) ESORICS
+2013. LNCS, vol. 8134, pp. 1–18. Springer, Heidelberg (2013)
+[DPSZ12] Damg̊ard, I., Pastro, V., Smart, N., Zakarias, S.: Multiparty computation
+from somewhat homomorphic encryption. In: Safavi-Naini, R., Canetti, R.
+(eds.) CRYPTO 2012. LNCS, vol. 7417, pp. 643–662. Springer, Heidelberg
+(2012)
+[GGH96] Goldreich, O., Goldwasser, S., Halevi, S.: Collision-free hashing from lat-
+tice problems. In: Electronic Colloquium on Computational Complexity
+(ECCC), vol. 3, pp. 236–241 (1996)
+[GSW13] Gentry, C., Sahai, A., Waters, B.: Homomorphic encryption from learning
+with errors: conceptually-simpler, asymptotically-faster, attribute-based.
+In: Canetti, R., Garay, J.A. (eds.) CRYPTO 2013, Part I. LNCS, vol. 8042,
+pp. 75–92. Springer, Heidelberg (2013)
+[KL14] Katz, J., Lindell, Y.: Introduction to Modern Cryptography. CRC Press,
+Boca Raton (2014)
+[LMPR08] Lyubashevsky, V., Micciancio, D., Peikert, C., Rosen, A.: SWIFFT: a mod-
+est proposal for FFT hashing. In: Nyberg, K. (ed.) FSE 2008. LNCS, vol.
+5086, pp. 54–72. Springer, Heidelberg (2008)
+[LNSW13] Ling, S., Nguyen, K., Stehlé, D., Wang, H.: Improved zero-knowledge proofs
+of knowledge for the ISIS problem, and applications. In: Hanaoka, G.,
+Kurosawa, K. (eds.) PKC 2013. LNCS, vol. 7778, pp. 107–124. Springer,
+Heidelberg (2013)
+[Lub02] Luby, M.: Lt codes. In: Proceedings of the 43rd Symposium on Foundations
+of Computer Science, p. 271. IEEE Computer Society (2002)
+[Lyu08] Lyubashevsky, V.: Lattice-based identification schemes secure under active
+attacks. In: Cramer, R. (ed.) PKC 2008. LNCS, vol. 4939, pp. 162–179.
+Springer, Heidelberg (2008)
+[Lyu09] Lyubashevsky, V.: Fiat-Shamir with aborts: applications to lattice and
+factoring-based signatures. In: Matsui, M. (ed.) ASIACRYPT 2009. LNCS,
+vol. 5912, pp. 598–616. Springer, Heidelberg (2009)
+[NO09] Nielsen, J.B., Orlandi, C.: LEGO for two-party secure computation. In:
+Reingold, O. (ed.) TCC 2009. LNCS, vol. 5444, pp. 368–386. Springer,
+Heidelberg (2009)
+	How to Prove Knowledge of Small Secrets
+	1 Introduction
+	1.1 Contributions and Techniques
+	1.2 Related Work
+	2 Homomorphic OWFs and Zero-Knowledge Proofs
+	2.1 Proving Knowledge of Preimage
+	3 Proofs of Preimage
+	3.1 The Imperfect Proof of Knowledge
+	3.2 The Full Proof of Knowledge
+	4 Applications
+	4.1 Encryption as ivOWFs
+	4.2 Refining the Proof Technique
+	References

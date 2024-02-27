@@ -1,0 +1,1692 @@
+Anti-Collusion Multiparty Smart Contracts for Distributed Watchtowers in Payment Channel Networks
+3600 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+Anti-Collusion Multiparty Smart Contracts for
+Distributed Watchtowers in Payment
+Channel Networks
+Miao Du , Peng Yang , Member, IEEE, Wen Tian , Member, IEEE, and Zhu Han , Fellow, IEEE
+Abstract— Leveraging watchtowers to monitor payment chan-
+nel networks (PCNs) is regarded to be a promising option
+to ensure off-chain transaction security and boost cryptocur-
+rency scalability. However, existing solutions have two major
+limitations: First, since the watchtower’s inaction or collusion
+with counterparties, the deposits in off-chain transactions will
+be threatened; Second, due to occasional false positives, the
+efficiency of the single watchtower in monitoring the payment
+channels for fraud is questionable. To solve this, we present anti-
+collusion multiparty smart contracts for distributed watchtowers
+in PCNs. Specifically, we first design the distributed watchtower
+mechanism to solve the false positive problem in regulating PCNs.
+In addition, we utilize smart contracts to constrain and force
+counterparties to relinquish collusion in the distributed watch-
+tower mechanism, thus making collusion impossible for rational
+parties. We further offer a mathematical proof and contract
+implementation in Solidity. Finally, extensive experiments and
+contracts executed on Ethereum under various benchmarks with
+baseline comparison demonstrate the validity of our proposals.
+Specifically, our scheme can both improve the throughput and
+accuracy by up to 20-25% and 10-15%, respectively, and reduce
+the false positive rate by up to 10% compared with existing single
+watchtower mechanism.
+Index Terms— Watchtowers, payment channel networks, col-
+lusion attacks, smart contract, crypto-economy, ethereum.
+I. INTRODUCTION
+W ITH the massive expansion of users and transactions,
+the scalability of cryptocurrencies has become an
+imminent problem. According to [1], the average transaction
+fee for Bitcoin transactions is over $19. The low transaction
+Manuscript received 14 February 2022; revised 14 June 2022; accepted
+30 June 2022. Date of publication 17 October 2022; date of current version
+22 November 2022. This work was supported in part by the Consulting
+Project of Chinese Academy of Engineering under Grant 2020-XY-5 and
+Grant 2018-XY-07, in part by the Fundamental Research Funds for the Central
+Universities and the Academy-Locality Cooperation Project of Chinese Acad-
+emy of Engineering under Grant JS2021ZT05, in part by the Nanjing Uni-
+versity of Information Science and Technology Talent Start-Up Funds under
+Grant 2022r068, and in part by NSF under Grant CNS-2107216 and Grant
+CNS-2128368. (Corresponding author: Peng Yang.)
+Miao Du and Peng Yang are with the Key Laboratory of Computer Network
+and Information Integration, School of Computer Science and Engineering,
+Southeast University, Ministry of Education, Nanjing 211189, China (e-mail:
+dumiao0118@seu.edu.cn; pengyang@seu.edu.cn).
+Wen Tian is with the School of Electronic and Information Engineering,
+Nanjing University of Information Science and Technology, Nanjing 211544,
+China (e-mail: csusttianwen@163.com).
+Zhu Han is with the Department of Electrical and Computer Engineer-
+ing, University of Houston, Houston, TX 77004 USA, and also with the
+Department of Computer Science and Engineering, Kyung Hee University,
+Seoul 446-701, South Korea (e-mail: hanzhu22@gmail.com).
+Color versions of one or more figures in this article are available at
+https://doi.org/10.1109/JSAC.2022.3213355.
+Digital Object Identifier 10.1109/JSAC.2022.3213355
+throughput and high transaction fees have severely constrained
+the development of cryptocurrencies (e.g., Bitcoin [2] and
+Ethereum [3]).
+To address the dilemma of cryptocurrencies, payment chan-
+nel networks (PCNs) provide a promising solution for micro
+and high-frequency transactions [4]. PCNs permit both parties
+to change the settlement scheme to achieve off-chain trans-
+action. Specifically, the blockchain only records the opening
+and closing of the channel, and provides security for off-
+chain transactions, while both parties only write the trans-
+actions that create and close the payment channel to the
+blockchain; however, there is no limit to the number of
+off-chain transactions [5]. In order to avoid a payment channel
+where one party is offline and the other party is unable to
+close the payment channel and retrieve the funds, the payment
+channel allows participants to independently close the payment
+channel by sending the latest channel state proof (CSP) at any
+time [6]. However, the blockchain cannot determine whether
+the submitted state is the latest one, and a malicious participant
+may send a fraud CSP to close the payment channel, thereby
+reaping additional payoffs. This security risk requires channel
+participants to stay online regularly to monitor the state of
+transactions and synchronize with the blockchain [7]. Accord-
+ing to [8], there are only 10,126 and 6,061 active users in
+Bitcoin and Ethereum who can continuously synchronize with
+the blockchain, respectively, representing less than 0.1% of all
+cryptocurrency users. Therefore, the majority of blockchain
+users face security concerns when implementing off-chain
+transactions in payment channels.
+Fortunately, watchtowers have recently shown great poten-
+tial to solve these issues. Large-scale blockchain communities
+such as Bitcoin and Ethereum have begun to implement
+watchtower mechanisms to supervise off-chain payment chan-
+nels, thereby reducing the security risk of channel deposits.
+The prototype of watchtowers first appeared in the Lightning
+White Paper [9]. The core idea is to monitor counterparty
+fraud and issue default compensation transactions through
+a third-party agent. Once the watchtowers discover that the
+payment channel is settling with fraud CSPs, the security
+mechanism will be activated immediately to help users recover
+losses and punish malicious participants [10]. In recent years,
+researchers and development teams have been continuously
+proposing sophisticated technical solutions for the watchtower
+mechanism. For instance, McCorry et al. [11] proposed the
+Pisa protocol, Avarikioti et al. [12] proposed the distributed
+service protocol Disclose Cascade Watch Commit (DCWC) for
+0733-8716 © 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+https://orcid.org/0000-0002-1184-8117
+https://orcid.org/0000-0003-1648-3863
+https://orcid.org/0000-0002-6606-5822
+https://orcid.org/0000-0002-7303-8726
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3601
+watchtowers, as well as the watchtower incentive-compatible
+Cerberus channel [13]. In addition to academic research, the
+industry is also trying to implement watchtower mechanisms
+in real-world scenarios. For example, Lightning Labs first
+integrated watchtower technology into an expiring lightning
+network [14]. BitMEX upgraded its lightning network nodes
+to a version that includes watchtower functionality [15].
+Indeed, these proposals design and implement the watch-
+tower mechanism in PCNs. However, there still exist some
+daunting challenges that are unsolved. First, watchtowers may
+have an impact on the security of the payment channels.
+If the watchtower is a trusted third party, users can go offline
+at will without fear of malicious shutdown of the payment
+channel. In reality, neither watchtowers nor payment channel
+participants are necessarily trusted, as watchtowers may be
+passive or conspire with malicious nodes in the channel to
+inflict losses on honest users. The watchtower collusion issue
+has also been studied by some researchers. Zhang et al. [6]
+combined game theory and smart contract approaches to solve
+the watchtower collusion problem in PCNs. Nevertheless,
+we observe that the single watchtower mechanism suffers
+from the false positives problem. It is impossible to accurately
+determine whether this false positive is related to the collu-
+sion, thus rendering the efficiency and quality of supervision
+transactions.
+Motivated by such facts, in this article, we propose anti-
+collusion multiparty smart contracts for distributed watchtow-
+ers in PCNs. Specifically, a hiring party can choose to engage
+multiple watchtowers, and then freely decide whether to go
+offline. The watchtowers can either earn payoffs from each
+detected fraud or just by monitoring PCNs. On the other hand,
+the hiring party sends the latest CSPs to the watchtowers after
+each transaction, while the counterparty intends to close the
+channel by sending fraud CSPs. In return, the watchtowers
+also need to offer proof to the hiring party that they have been
+monitoring the blockchain and storing CSPs. Once the counter-
+party’s malicious behavior is monitored by the watchtowers,
+the counterparty will be punished, and the watchtower will
+receive revenue accordingly. Nonetheless, if one of the watch-
+towers fails to respond in time or incurs a false positive, it will
+also be punished and the payoffs will be deducted. We design
+smart contracts to constrain the behavior and benefits of each
+participant. Considering that watchtowers and participants are
+not always trustworthy, rational participants may achieve more
+payoffs by initiating collusion. As a result, we devise four
+distinct smart contracts to circumscribe the collusion problem
+and provide rigorous mathematical proofs of the corresponding
+solution. Specifically, the Watchtower Contract is an employ-
+ment contract between channel participants and watchtowers,
+where the latter obtains payoffs by monitoring the payment
+channel. To break the equilibrium of employment contracts,
+the Collusion Contract is designed as a collusion between
+two watchtowers to obtain additional payoffs. Additionally,
+there can be collusion between counterparties and a malicious
+watchtower, as analyzed in the Fraud Contract. Finally, the
+Anti-collusion Contract is devised to effectively resist the
+above two collusion attacks, making rational channel partici-
+pants give up collusion. Last but not least, we use Solidity to
+implement the proposed smart contract scheme. In conclusion,
+this article makes the following contributions:
+1) We are the first to investigate smart contracts to deploy
+distributed watchtowers against collusion attacks in
+PCNs. This scheme can be effective against collusion in
+PCNs, and also reduce watchtower false positives and
+improve regulatory efficiency.
+2) We design and leverage four smart contracts (i.e., Watch-
+tower Contract, Collusion Contract, Fraud Contract and
+Anti-Collusion Contract) to constrain and counter pos-
+sible collusion attacks in various outsourced watchtower
+scenarios.
+3) We analyze smart contracts using game tree models and
+prove that there exists a unique sequential equilibrium
+for each contract. In accordance with rigorous mathe-
+matical derivations, it is proved that rational parties will
+never execute collusion or betray the contracts.
+4) We conduct smart contracts in Solidity and execute
+them on Ethereum. In addition, we setup the distributed
+watchtower platform on NS3 and simulate false positive
+experiments. Experimental results show that our scheme
+can effectively defend against collusion attacks with
+a small cost. In addition, distributed watchtowers can
+effectively reduce the false positive rate, while improv-
+ing the efficiency and quality of regulatory transactions.
+The remainder parts of this article are organized as follows.
+Section II illustrates the related work. We further present the
+preliminaries in Section III. The system model is demonstrated
+in Section IV. Then, we devise and analyze four smart con-
+tracts in Sections V-VIII, respectively. After that, we describe
+the implementation and experiment results in Section IX.
+Finally, Section X draws the conclusion.
+II. RELATED WORK
+In this section, we present the existing literatures on PCNs,
+and watchtowers for collusion attacks.
+A. Payment Channel Networks
+Payment channel network has flourished in recent years
+along with the growing Bitcoin community [16]. Specifically,
+the Lightning Network [17] has been a prominent proposal
+for a Bitcoin payment channel, providing secure and effi-
+cient off-chain transactions. In addition, industry has designed
+and implemented Thunder [18] and Eclair [19], as well as
+Raiden [20] to provide technical support for off-chain trans-
+actions in Bitcoin and Ethereum, respectively. On the other
+hand, academics have focused more on onion routing security
+and optimal routing algorithms for PCNs [21], [22], [23], [24].
+Zhang et al. [21] designed the cheapest routing scenario by
+assuming that each PCN routing node imposes a constant
+tariff. Malavolta et al. [25] presented SilentWhisper to solve
+the security constraint in onion routing. The scheme anchors
+a security landmark [26] and requires that all paths must
+pass through the landmark, thus improving security and pri-
+vacy. SpeedyMurmurs [27] designed embedded paths [28]
+to address the issue of long paths in landmark schemes.
+Yu et al. [29] addressed the problem of inefficient and
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3602 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+costly payments using a distributed routing algorithm, but
+without taking into account the constraining effect of trans-
+action costs. Engelmann et al. [30] designed a streamlined
+routing model such that the actual transaction costs were
+only correlated with the payment amount, but the costs of
+interlocutory nodes cannot be accountable. Wang et al. [24]
+proposed a dynamically balanced algorithm for path opti-
+misation and detectable envelope overhead in onion routing
+networks. Sivaraman et al. [31] ingeniously packaged massive
+transactions for processing and designed a path switching
+transmission algorithm [32] to improve transaction efficiency
+and throughput. Schnorr et al. [33] developed a public-key
+signature-based authentication mechanism to detect identity
+information in PCN networks. Zhang et al. [34] improved the
+HTLC protocol so that both its robustness and security were
+strengthened.
+B. Watchtowers for Collusion Attacks
+The security and scalability of off-chain transactions
+has drawn widespread attention from the Bitcoin commu-
+nity [35], [36], [37], [38]. The proposal and implementation of
+the watchtower mechanism [39] has brought an effective solu-
+tion to this problem. Dryja et al. presented Monitor [40], which
+uses isolated witness technology to achieve secure protection
+of off-chain transactions. Osuntokunn et al. [41] designed and
+deployed Watchtower by modifying the consensus rules of
+the bitcoin network to improve the efficiency of execution
+efficiency. Both schemes default to the watchtower as a fully
+trusted third party, ignoring the economic losses caused by
+the watchtower’s inaction. Pisa [11] and Outpost [42] provide
+the hiring party with hash-based cryptographically verifiable
+CSPs that can be used to penalize the watchtower for inac-
+tion. Cerberus [13] ensures the security of watchtowers by
+introducing a deposit mechanism. Liu et al. [43] proposed the
+Fail-safe scheme, which introduced a review mechanism so
+that a single watchtower could intervene in off-chain status
+updates and on-chain channel closures, and periodically send
+the latest CSPs to the channel contract to ensure security.
+Table I is the performance comparison of each watchtower
+scheme. Note that the majority of current state-of-art focuses
+on the security design optimization and implementation of
+watchtower protocols (e.g., Pisa, Fail-safe and Cerberus), but
+there is little research on collusion attacks in PCNs. The tradi-
+tional approach is to defend against collusion attacks through
+complex cryptography, which is effective but expensive and
+difficult to implement. Game theory provides a good idea as an
+emerging crypto-economy method [44], [45]. Zhang et al. [6]
+proposed a single watchtower mechanism and combined game
+theory and smart contract approaches to solve the collusion
+problem in PCNs. Nevertheless, single watchtower mechanism
+suffers from false positives, affecting the efficiency and quality
+of regulatory transactions. To this end, we propose a distrib-
+uted watchtower mechanism to address the collusion problem
+in off-chain transactions. Specifically, we develop four dif-
+ferent smart contracts and use a game theoretic approach to
+analyse the equilibrium to find the optimal solution rather than
+sophisticated encryption algorithms. In addition, we deal with
+TABLE I
+THE PERFORMANCE COMPARISON OF EACH WATCHTOWER SCHEME
+the problem of high false positive rate of a single watchtower
+and improve the throughput and scalability.
+III. PRELIMINARIES
+In this section, we give a brief introduction to the finite
+imperfect-information extensive-form game, strategy profile,
+and sequential equilibrium.
+A. Finite Imperfect-Information Extensive-Form Game
+The transactions in the payment channel are anonymous and
+the channel participants cannot obtain complete information.
+Motivated by this, we design finite imperfect-information
+extensive-form game, and further use the game tree to visualize
+the equilibrium point of the game.
+Definition 1 (Finite Imperfect-Information Extensive-
+Form Game): A finite imperfect-information extensive-form
+game [60] is defined as G = {N , H, A, Z, z,
+χ, i, ηi, ρ, I}, where:
+• N is a set of players in the game.
+• H is a set of non-terminal nodes.
+• A is a set of players’ finite actions.
+• Z is a set of terminal nodes.
+• z is a terminal node, each z completely determines a path
+in the game tree, and z∈Z .
+• χ: H → 2A is the possible action of each non-terminal
+node.
+• i: H → N represents the action taken by player i at this
+node.
+• ηi is a set of payoff functions, where ηi(z): Z → R is
+player i’s payoff function at terminal node z.
+• ρ: H → N is an action that each player i ∈ N is
+designated to choose at a non-terminal node.
+• I = (I1, I2, . . . , In) is a set of information collected by
+players when they choose their actions.
+Game trees are commonly used in extensive-form
+games [48], which explain the strategies and information that
+players can use while taking actions, as well as the sequence
+in which they execute actions and the games’ outcomes and
+payoffs. Fig. 1 is an example game tree. The action set in
+this game is A = {U, M, D, L, F}, the chosen node
+and the terminal node is H = {v0, u0, u1, u2}, and
+z = {l0, l1, l2, l3, l4, l5}, respectively. In addition, χ maps
+the chosen node to the action set. Specifically, the node of
+P1 and P2 is {v0} and {u0, u1, u2}, respectively, while the
+action set of node {v0} and {u0, u1, u2} is {U, M, D} and
+{L, F}, respectively. The game then continues to the child
+node on the edge indicated with action once the player has
+made their choice. Each player’s payoff function is located
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3603
+Fig. 1. Example game tree is a guidance for subsequent sequential games,
+in which action players P1 and P2 can choose the optimal strategy in the
+strategy set {U, M, D} and {L, F} to obtain the optimal payoff.
+Fig. 2. The overview of our scheme. The watchtowers are responsible
+for monitoring PCNs in real time and regularly updating CSPs to match
+those sent by channel participants. Collusion risks can occur between two
+watchtowers, or between counterparty and malicious watchtowers. Our scheme
+adopts crypto-economy method and combines smart contracts to empower
+watchtowers to solve collusion attacks in PCNs.
+to the right of the leaf node. Unless the information set
+has only one node, the information sets are represented as
+connected by dashed lines, that is, the participants cannot
+distinguish nodes in the same information set. For example,
+P1 can rationally choose one of the strategies U , M or D to
+reach a certain child node according to the payoffs, which is
+unknown to P2 since P2 cannot know which specific strategy
+P1 chooses.
+B. Strategy and Sequential Equilibrium
+We further give some necessary definitions about the strat-
+egy profiles and sequential equilibrium [46] in the following.
+Definition 2 (Strategy & Strategy Profile): A strategy of a
+player i is a tuple of actions that specify the probability distri-
+bution of actions in each information set and are independent
+of each other under different information sets. In addition,
+TABLE II
+LIST OF SYMBOLS IN THE PAPER
+a strategy profile of a game is a set of all players’ strategies
+s = (si)i∈N .
+Definition 3 (Sequential Equilibrium): If a strategy profile
+s is a sequential equilibrium of G, there exist probability
+distributions ηi, which satisfy (s, η) = lim
+n→∞(sn, ηn) for some
+sequence (s1, η1), (s2, η2), ..., where sn is fully mixed, and
+ηn is consistent with sn.
+IV. SYSTEM MODEL
+In this section, we design the distributed watchtowers
+model, and introduce the contract parameters.
+A. Distributed Watchtowers Model
+As shown in Fig. 2, participants in off-chain transactions
+need to update their CSPs after each transaction is completed.
+Obviously, it is unrealistic for these participants to remain
+online for long periods of time. Therefore, participants can
+hire multiple watchtowers to assist off-chain transactions by
+signing smart contracts. However, collusion is still possible in
+this scenario. Specifically, the counterparty can enter into a
+contract with the watchtower to complete the fraud, thereby
+obtaining additional benefits. On the other hand, distributed
+watchtowers may also collude to defraud more commissions.
+To this end, we further devise various smart contracts to defend
+possible collusion attacks in various outsourced watchtower
+scenarios.
+B. Contract Parameters
+We assume that channel participants are rational players [6],
+and accordingly give the following contract parameters.
+• s: The deposit that counterparty and watchtowers pay to
+the watchtower contract.
+• c: The cost that watchtowers pay to monitor the payment
+channel.
+• p: The bribe that Watchtower1(W1) paid to
+Watchtower2(W2) in the collusion contract.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3604 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+• g: The deposit paid by the watchtowers in the collusion
+contract.
+• r: The hiring party (Hp) agrees to compensate the watch-
+towers for monitoring the payment channel.
+• k: The cost of secondary proofreading when the latest
+CSP feedback from the two watchtowers is inconsistent.
+• e: The additional payoffs that counterparty can obtain by
+issuing a fraud CSP.
+• h: The deposit paid by the counterparty and the watch-
+towers in the fraud contract.
+• a: The bribe that the counterparty agreed to pay to the
+watchtowers in the fraud contract.
+• z: The benefits from the watchtower that honestly moni-
+tors the payment channel, and z = r − c + (s − k)/2.
+The above symbols have the following relationships:
+1) r ≥ c: the watchtowers otherwise cannot accept the
+hiring party’s monitor request.
+2) e ≥ a: the counterparty is unwilling to pay more bribe
+in excess of the collusion.
+3) p < c: W2 agrees to collusion only if the bribe offered
+by W1 is greater than the typical payoffs of W2.
+The detailed list of notations is provided in the Table II.
+Next, we will gradually design several smart contracts and
+analyze their equilibrium.
+V. THE WATCHTOWER CONTRACT
+In this section, we We design the Watchtower contract and
+use game trees to analyze sequential equilibrium.
+A. The Watchtower Contract
+The watchtower contract is actually an outsourcing contract
+signed by the hiring party (Hp) and the two watchtowers
+W1 and W2, which allows the hiring party to entrust W1 and
+W2 to monitor the payment channel. However, the premise
+is that the watchtowers need to pay a deposit to the contract
+before monitoring the payment channel. Note that the deposit
+will be returned after verifying that the watchtower responds
+to the latest CSP in a timely manner and proves to be correct,
+while the watchtower that submits the fraud CSP will lose
+this deposit. If only one watchtower offers the correct CSP,
+the deposit of the watchtower that submitted the incorrect
+CSP will be paid to the trustworthy watchtower as a reward
+(after deducting the necessary fees). Although it appears that
+the two watchtowers colluding may achieve the maximum
+payoffs, both watchtowers may remain honest since they know
+the collusion is unstable, and the other party may betray and
+conspire to ensure their best payoffs. Therefore, they can try to
+obtain high payoffs by refusing the collusion. The contract’s
+detailed steps are as follows:
+1) The Watchtower contract is signed by Hp and W1, and
+Hp and W2, respectively.
+2) Hp, W1 and W2 jointly follow the contract, and set three
+deadlines, T1 < T2 < T3.
+3) Hp agrees to pay funds r to the watchtower that submits
+the latest CSP correctly and timely.
+4) W1 and W2 need to pay deposit s to the contract
+before the deadline T1, otherwise the contract will be
+Fig. 3. Game 1 induced by the Watchtower Contract.
+terminated, and the deposit can be temporarily managed
+by the contract.
+5) W1 and W2 must submit the latest CSPs (y1 and y2)
+before the deadline T2.
+6) W1 and W2 have reported the latest CSPs, or after the
+deadline T2:
+(a) If W1 and W2 cannot report the latest CSP, their
+deposits will be paid to Hp.
+(b) If W1 and W2 provide the same CSP, which
+means W1 and W2 have effectively monitored the
+payment channel, Hp needs to pay funds to W1 and
+W2, and the deposit can be returned to W1 and W2.
+(c) Otherwise, move to step (7).
+7) Perform a second proofreading, and achieve the latest
+CSP as yt:
+(a) If both W1 and W2 provide the correct CSPs
+y1 and y2, Hp must pay each watchtower and
+return their deposits, in addition to paying for the
+second proofreading fee.
+(b) If both W1 and W2 return the fraud CSP, their
+deposit will be paid to Hp, then Hp will pay the
+second proofreading fee.
+(c) If only one watchtower returns the fraud CSP, then
+the deposit of the watchtower will be paid to Hp.
+In addition, Hp cannot only pay for the second
+proofreading, but also pay (s − k)/2 additional
+rewards to the watchtower that provides the correct
+CSP, and return its deposit.
+8) If Hp still fails to pay W1 and W2 after the deadline T3,
+Hp will be required to pay W1 and W2 (provide CSP
+before the deadline T2) according to the contract, and
+return their deposits.
+The deadline (T1 < T2 < T3) in the contract is used to
+enforce timeliness, which can prevent funds from being frozen
+if one party refuses to execute forward.
+B. Game Tree Analysis
+Game 1 is induced by the Watchtower Contract. As shown
+in Fig. 3, the players are N = {Counterparty(C), W1, W2},
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3605
+and the action set is A = {y, y′, other}, where y is the
+correct CSP returned by W1 and W2 before the deadline, and
+y′ is the fraud CSP given by W if collusion occurs (obviously
+y′ �= y). Moveover, other represents any other results that W
+may return. Game 1 contains 5 information sets: I1 = {v0},
+I2 = {u0, u1, u2}, I3,1 = {q0, q1, q2}, I3,2 = {q3, q4, q5},
+I3,3 = {q6, q7, q8}. In addition, η1, η2, η3 is the payoff
+functions, and the payoffs of each party is listed next to the
+terminal node.
+Next, we further analyze the strategies that all players will
+use in sequential equilibrium, as well as the conditions for
+achieving equilibrium. Formally, we have:
+Theorem 1: If e ≥ a and s > c + k, Game 1 has a unique
+sequential equilibrium ((s1, s2), (η1, η2)):
+⎧⎪⎪⎪⎨
+⎪⎪⎪⎩
+s1 = (1(y), 0(y′), 0(other))
+s2 = (1(y), 0(y′), 0(other))
+η1 = ([1(v0)])
+η2 = ([1(u0), 0(u1), 0(u2)]).
+According to the equilibrium, Game 1 will end at l0.
+Proof: We observe W2’s payoff at u0, u1, u2, respec-
+tively. Note that the game will reach at nodes {q0, q1, q2}, {q3,
+q4, q5}, and {q6, q7, q8} when W2 sends CSP {y, y′, other},
+respectively. Intuitively, the payoff of W2 at q0 is (r−c), while
+the payoff at q1 and q2 is (−s). Obviously, (r− c) is positive,
+and (r − c) > (−s). Analogously, W2’s payoff at node q3 is
+z, which is better than r and (−s) at nodes q4 and q5, while
+W2’s payoff at node q6 is z, which is better than (−s) at nodes
+q7 and q8, respectively. It can be judged that no matter what
+the strategy of W1 is, W2 will send CSP y to maximize its
+payoff. According to the above derivation, the actual reachable
+nodes of W1 are q0, q3 and q6, since W2 is unable to send y′
+or other. Moreover, the payoff of W1 at q0 is (r−c), which is
+better than (−s) at q3 and q6, respectively. Therefore, W1 will
+choose to send CSP y to maximize its payoff as well.
+VI. THE COLLUSION CONTRACT
+In this section, we present the Collusion contract and
+analyze the sequential equilibrium in this contract.
+A. The Collusion Contract
+The Collusion Contract aims to break the Watchtower
+Contract’s equilibrium. Furthermore, the Collusion Contract
+imposes additional rules that influence the all parties’ payoffs,
+making collusion the most profitable option. In this contract,
+the watchtower that initiated the collusion will pay a bribe
+to the other watchtower to encourage the collusion. In addi-
+tion, both watchtowers will pay a deposit when signing this
+contract. The deposits of the betrayal and conspiracy will be
+deducted. The detailed steps of the contract are as follows:
+1) The Collusion contract is signed by W1 and W2. Assume
+that the collusion is initiated by W1.
+2) W1 and W2 agree to send fraud CSPs y′ in the Watch-
+tower Contract.
+3) W1 and W2 need to pay deposits p + g and g, respec-
+tively when signing the Collusion contract, and these
+Fig. 4. Game 2 induced by the Collusion Contract and the Watchtower
+Contract.
+two deposits are temporarily managed by the Collusion
+Contract.
+4) W1 and W2 must pay the above deposits before the
+deadline T4 < T2. Otherwise, the contract will be
+forcibly terminated, and the deposits will be refunded.
+5) When the Watchtower Contract ends, the following
+operations will be performed on the deposit balance held
+in the Collusion Contract:
+(a) If W1 and W2 both follow the Collusion Contract,
+the deposits g and g+p will be returned to W1 and
+W2, respectively.
+(b) If W2 betrays the contract, the deposit 2g + p will
+be returned to W1, and W2 will lose the deposit g.
+(c) If W1 betrays the contract, the deposit g + p will
+be returned to W2, and W1 will lose the deposit
+g + p.
+(d) If W1 and W2 both betray the contract, the deposits
+g + p and g will be returned to W1 and W2,
+respectively.
+The Collusion Contract must be signed before the deadline
+T2, since W1 and W2 need to send the latest CSP before the
+deadline T2. The game induced by the Collusion Contract and
+the Watchtower contract is shown in Fig. 4. Actually, rational
+W1 and W2 will choose whether to sign the Collusion Contract
+according to their own payoffs. In this scenario, if only the
+Watchtower Contract is valid, the game will reach at Game 1.
+B. Game Tree Analysis
+Game 2 is induced by the Watchtower Contract and the
+Collusion Contract. The players are N = {C, W1, W2},
+and the action set is A = {not init, init, disagree,
+agree, y, y′, other}. As shown in Fig. 4, Game 2 contains 7
+information sets: I1,1 = {v0}, I1,2 = {v1}, I2,1 = {u0},
+I2,2 = {u1, u2, u3}, I3,1 = {q9, q10, q11}, I3,2 =
+{q12, q13, q14}, I3,3 = {q15, q16, q17}. In addition,
+η1, η2, η3 is the payoff functions, and the payoffs of each
+party is listed next to the terminal node.
+In the Collusion Contract, W1 pays a bribe to W2 to initiate
+a collusion and satisfies p < c, where c is the cost that the
+watchtowers pay to monitor the PCN. If W1 and W2 both send
+fraud CSP y′, the collusion is successful. Moreover, W1 needs
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3606 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+to pay a bribe p, and its payoff is (r − p). If W1 is unable
+to initiate a collusion, its payoff is (p − c). According to the
+collusion hypothesis, W1 will initiate a collusion when r−p >
+r − c (p < c). Furthermore, W1 and W2 must pay a deposit
+g for this contract and demonstrate that g > z + s− p, where
+z = r − c + (s − k)/2. This criterion ensures that:
+1) The payoffs who betrayed the collusion will be fewer
+than those who did not betray the collusion.
+2) The payoffs who participated in the collusion will be
+higher than those who did not participate in the collu-
+sion.
+Theorem 2: If e ≥ a, s > c + k, p < c and g > z +
+s− p, Game 2 has a unique sequential equilibrium ((s1, s2),
+(η1, η2)):
+⎧⎪⎪⎪⎨
+⎪⎪⎪⎩
+s1 = ([1(init), 0(notinit)], [0(y), 1(y′), 0(other)])
+s2 = ([1(agree), 0(disagree)], [0(y), 1(y′), 0(other)])
+η1 = ([1(v0), 1(v1)])
+η2 = ([1(u0)], [0(u1), 1(u2), 0(u3)]).
+According to the equilibrium, Game 2 will end at l13.
+Proof: Similar to Theorem 1, we observe W2’s payoff
+at u1, u2, u3, respectively. Note that the game will reach
+at nodes {q9, q10, q11}, {q12, q13, q14}, and {q15, q16, q17}
+when W2 sends CSP {y, y′, other}, respectively. Obviously,
+the payoff of W2 at q10 is (−s + g + p), which is higher than
+(r−c) and (−s−g) at nodes q9 and q11, respectively. Similarly,
+W2’s payoff at node q13 is (r+p), which is higher than (z−g)
+and (−s−g) at nodes q12 and q14, while W2’s payoff at node
+q16 is (−s + g + p), which is higher than z and (−s) at
+nodes q15 and q17, respectively. In other words, W1’s strategy
+cannot affect W2’s choice, and W2 will always choose to send
+fraud CSP y′ under Game 2. Then, the actual reachable nodes
+of W1 are q10, q13 and q16. Moreover, the payoff of W1 at
+q13 is (r − p), which is higher than (z − g − p) and (−s −
+g − p) at nodes q10 and q16, respectively. Therefore, W1 will
+likewise choose to send fraud CSP y′ to achieve its maximum
+payoff.
+VII. THE FRAUD CONTRACT
+In this section, we propose the Fraud Contract and analyze
+the sequential equilibrium using game tree model.
+A. The Fraud Contract
+The Fraud Contract is signed between the counterparty
+and a watchtower. The contract modifies the reward and
+punishment mechanism to encourage the watchtower to join
+the collusion and send a fraud CSP to terminate the trans-
+action channel, thereby further defrauding the hiring party’s
+transaction money as well as another watchtower’s deposit in
+the Watchtower Contract. The rules in the Fraud Contract
+will inevitably affect the payoffs of all parties. Therefore,
+the counterparty and the watchtower will pay a deposit when
+signing this contract, and the deposits of the party who betrays
+the contract will be deducted. The detailed steps of the Fraud
+Contract are in the following:
+1) The Fraud Contract is signed by C and W1.
+Fig. 5. Game 3 induced by the Fraud Contract and the Watchtower contract.
+2) W1 agrees to send CSP y in the Watchtower Contract.
+3) C and W1 need to pay deposits h+a and h, respectively
+when signing the Fraud Contract, and these two deposits
+are temporarily managed by the Fraud Contract.
+4) C and W1 must pay the above deposits before the
+deadline T5, and T4 < T5 < T2. Otherwise, the contract
+will be terminated and the deposits will be refunded.
+5) When the Watchtower Contract ends, the following
+operations will be performed on the deposit balance held
+in the Fraud Contract:
+(a) If W1 follows the Fraud Contract, and sends latest
+CSP y in the Watchtower Contract, the deposits
+h and h + a will be returned to C and W1,
+respectively.
+(b) If W1 is unable to follow the Fraud Contract, the
+deposit 2h + a will be returned to C.
+According to Theorems 1 and 2, W1 and W2 will normally
+monitor the PCN and send the latest CSP y when the Collusion
+Contract does not exist. However, if W1 wants to obtain
+additional rewards from C in the Fraud Contract, W1 can
+pretend to sign a collusion with W2. Then, when W2 sends
+fraud CSP y′ in the Watchtower Contract, W1 can betray the
+Collusion Contract and choose to send CSP y. As a result,
+W1 will be punished and lose the deposit g in the Collusion
+Contract. In summary, W1 can choose whether to collude with
+W2 at this time. The following analyzes the game caused by
+the two situations.
+B. Game Tree Analysis
+We assume that W1 can rationally choose whether to collude
+according to the payoffs situation. The specific analysis is as
+follows:
+• Case 1: W1 chooses not to collude with W2.
+Game 3 is induced by the Fraud Contract and the Watch-
+towers Contract. As shown in Fig. 5, the players are N =
+{C, W1, W2}, and the action set is A = {y, y′, other}.
+Game 3 contains 5 information sets: I1 = {v0}, I2 =
+{u0, u1, u2}, I3,1 = {q18, q19, q20}, I3,2 = {q21, q22, q23},
+I3,3 = {q24, q25, q26}. In addition, η1, η2, η3 is the payoff
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3607
+functions, and the payoffs of each party is listed next to the
+terminal node.
+Theorem 3: If e > (s − k)/2 > a, Game 3 has a unique
+sequential equilibrium ((s1, s2), (η1, η2)):
+⎧⎪⎪⎪⎨
+⎪⎪⎪⎩
+s1 = (1(y), 0(y′), 0(other))
+s2 = (1(y), 0(y′), 0(other))
+η1 = ([1(v0)])
+η2 = ([1(u0), 0(u1), 0(u2)]).
+According to the equilibrium, Game 3 will end at l18.
+Proof: We observe W2’s payoff at u0, u1, u2, respec-
+tively. Note that the game will reach at nodes {q18, q19, q20},
+{q21, q22, q23}, and {q24, q25, q26} when W2 sends CSP {y,
+y′, other}, respectively. Intuitively, the payoff of W2 at q18 is
+(r − c), while the payoff at q19 and q20 is (−s). Obviously,
+(r − c) is positive, and (r − c) > (−s). Analogously, W2’s
+payoff at node q21 is z, which is better than r and (−s)
+at nodes q22 and q23, while W2’s payoff at node q24 is z,
+which is better than (−s) at nodes q25 and q26, respectively.
+It can be judged that no matter what the strategy of W1 is,
+W2 will send CSP y to maximize its payoff. According to
+the above derivation, the actual reachable nodes of W1 are
+q18, q21 and q24, since W2 is unable to send y′ or other.
+Moreover, the payoff of W1 at q18 is (r−c+a), which is better
+than (−s − h) and (−s) at nodes q21 and q24, respectively.
+Therefore, W1 will choose to send CSP y to maximize its
+payoff as well.
+• Case 2: W1 chooses to collude with W2.
+Game 4 is induced by the Fraud Contract, the Collusion
+Contract and the Watchtower Contract. As shown in Fig. 6,
+the players are N = {C, W1, W2}, and the action set is
+A = {y, y′, other}. Game 4 contains 5 information sets:
+I1 = {v0}, I2 = {u0, u1, u2}, I3,1 = {q27, q28, q29},
+I3,2 = {q30, q31, q32}, I3,3 = {q33, q34, q35}. In addition,
+η1, η2, η3 is the payoff functions, and the payoffs of each
+party is listed next to the terminal node.
+Theorem 4: a) If e ≥ a and h > r− z− a+ g, Game 4 has
+a unique sequential equilibrium ((s1, s2), (η1, η2)):
+⎧⎪⎪⎪⎨
+⎪⎪⎪⎩
+s1 = (0(y), 1(y′), 0(other))
+s2 = (0(y), 1(y′), 0(other))
+η1 = ([1(v0)])
+η2 = ([1(u0), 0(u1), 0(u2)]).
+According to the equilibrium, W1 will send CSP y and betray
+the Collusion Contract, and Game 4 will end at l28.
+b) If e ≥ a and h < r − z − a + g, Game 4 has a unique
+sequential equilibrium ((s1, s2), (η1, η2)):
+⎧⎪⎪⎪⎨
+⎪⎪⎪⎩
+s1 = (1(y), 0(y′), 0(other))
+s2 = (0(y), 1(y′), 0(other))
+η1 = ([1(v0)])
+η2 = ([0(u0), 1(u1), 0(u2)]).
+According to the equilibrium, W1 will send fraud CSP y′ and
+betray the Fraud Contract, and Game 4 will end at l31.
+Proof: We observe W2’s payoff at u0, u1, u2, respectively.
+Note that the game will reach at nodes {q27, q28, q29}, {q30,
+Fig. 6. Game 4 induced by the Fraud Contract, the Collusion Contract and
+the Watchtower contract.
+q31, q32}, and {q33, q34, q35} when W2 sends CSP {y, y′,
+other}, respectively. Intuitively, the payoff of W2 at q28 is
+(−s+g+p), which is higher than r−c and (−s) at nodes q29
+and q30. Analogously, W2’s payoff at node q31 is (r+p), which
+is higher than (z−g) and (−s−g) at nodes q30 and q32, while
+W2’s payoff at node q34 is (−s+ g +p), which is higher than
+z and (−s) at nodes q33 and q35, respectively. It can be judged
+that no matter what the strategy of W1 is, W2 will send CSP
+y to maximize its payoff. According to the above derivation,
+the actual reachable nodes of W1 are q28, q31 and q34, since
+W2 is unable to send y′ or other. Moreover, the payoff of
+W1 at nodes q28 and q31 is respectively (z + a − p − g) and
+(r−p−h), which is higher than (−s−g−p−h) at node q34.
+Therefore, W1 will choose different strategies according to the
+real payoffs at nodes q28 and q31. Specifically, W1 will send
+CSP y and betray the Collusion Contract if h > r−z−a+g,
+otherwise W1 will send fraud CSP y′ and betray the Fraud
+Contract.
+VIII. THE ANTI-COLLUSION CONTRACT
+In order to avoid effective collusion mentioned above,
+we further design an Anti-collusion Contract to break the equi-
+librium in the Collusion Contract and the Fraud Contract by
+providing additional rewards to honest watchtowers, making
+collusion an inappropriate choice.
+A. The Anti-Collusion Contract
+The Anti-collusion Contract allows the watchtower that
+reports to the hiring party to secretly betray the other party
+while pretending to follow the collusion. Without this exemp-
+tion, the watchtower will not voluntarily report collusion: 1)
+If the watchtower reports and follows the Collusion Con-
+tract, it will lose its deposit in the Watchtower Contract.
+2) If the watchtower reports to the hiring party and then
+betrays the collusion, it will lose its deposit in the Collusion
+Contract. In any scenario, it appears that reporting is less
+lucrative than not reporting. According to this, the Anti-
+collusion Contract guarantees that the watchtower that reports
+the collusion will not be penalized under the Watchtower
+Contract. The watchtower can then pretend to follow the
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3608 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+collusion, which can also avoid the punishment caused by
+betraying the Collusion Contract. On the other hand, if a
+collusion is discovered through secondary proofreading, the
+Anti-collusion Contract will reward the watchtower for report-
+ing collusion. Accordingly, the report is not only risk-free but
+also profitable. In short, the Anti-collusion Contract breaks the
+collusion by incentivizing betrayal between the watchtowers,
+which can create distrust between the watchtowers and will
+ultimately prevent the collusion. In addition, the punishment
+mechanism of the Anti-collusion Contract can also effec-
+tively avoid the following false reports: 1) The watchtower
+reports a fraud collusion to the hiring party to obtain payoffs.
+2) The watchtower deliberately sends a fraud CSP, triggering
+a second proofreading to obtain payoffs. The detailed steps of
+the contract are listed below:
+1) The Anti-collusion Contract is signed by Hp and W .
+Assume that the collusion is initiated by W1, and the
+collusion is reported by W2. At this time, Hp and W
+need to have signed the Watchtower Contract.
+2) Hp only signs the Anti-collusion Contract with the
+watchtower that first reports the collusion, and agrees to
+compensate the deposit lost in the Watchtower Contract
+where appropriate.
+3) Hp needs to pay a deposit r + 2s − k, which is equal
+to W2’s maximum possible loss in the Watchtower
+Contract, while W2 needs to pay a deposit k, which
+is equal to the cost of possible secondary proofreading.
+These deposits will be temporarily managed by the Anti-
+collusion Contract.
+4) The contract should be signed before the deadline T2,
+otherwise the contract is terminated and any deposits
+paid will be refunded.
+5) W2 must report the latest CSP y∗ in this contract before
+the deadline T2.
+6) Hp needs to apply for a second proofreading and per-
+form the following operations according to the judgment
+results:
+(a) If there is no fraud CSP in the Watchtower Con-
+tract, then refund the Hp’s deposit r +2s− k, and
+pay the W2’s deposit r to the Hp.
+(b) If W1 sends the correct CSP y in the Watchtower
+Contract, while W2 sends the fraud CSP y′ and
+reports the CSP y∗ = y in the Watchtower Contract
+and the Anti-collusion Contract, respectively. Then,
+Hp and W2 will be paid 2s − k and r + k,
+respectively.
+(c) If both W1 and W2 sends the fraud CSP y′ in the
+Watchtower Contract, while W2 reports the CSP
+y∗ = y in the Anti-collusion Contract. Then, W1’s
+deposit k will be returned, and the rewards r+2s−
+k will be paid to W2.
+(d) Otherwise, Hp and W2 will be paid r+2s−k and
+k, respectively.
+7) If W2 reports the latest CSP y∗ in this contract, and the
+deadline T3 is exceeded, all deposits will be refunded to
+W2.
+In addition, W2 also needs to meet the following conditions:
+Fig. 7. Game 5 induced by the Watchtower Contract, the Fraud Contract
+and the Anti-collusion Contract.
+1) W1 intends to initiate a collusion with W2 and draw up
+the Collusion Contract.
+2) W2 reports the collusion to Hp before signing the
+Collusion Contract. W2 can choose to submit evidence
+of the collusion, such as the address of the Collusion
+Contract and the fraud CSP y′ sent at the time of
+collusion.
+3) W2 needs to sign the Anti-collusion Contract before
+signing the Collusion Contract
+Before reporting, W2 needs to wait for W1 to initiate a
+collusion and sign the Collusion Contract. Otherwise, if the
+collusion is reported to the hiring party without collusion,
+W2 will fall into a false report situation, since W1 will provide
+the correct CSP y in the Watchtower Contract. Different
+from [6], in the distributed watchtowers scenario, rational
+W2 is unlikely to obtain additional payoffs through false
+reports(e.g., report some forged evidence), since W2 cannot
+know whether it is possible that W1 has also signed the Anti-
+collusion Contract. Consequently, distributed watchtowers can
+impose mutual restrictions, effectively preventing false reports.
+The subsequent experiments will also confirm our observa-
+tions.
+B. Game Tree Analysis
+Fig. 7 is Game 5 induced by the Watchtower Contract, the
+Fraud Contract and the Anti-collusion Contract. At this time,
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3609
+the watchtowers do not initiate a collusion, or the collusion is
+rejected. In this game, the players are N = {C, W1, W2},
+and the action set is A = {not report, report y∗ =
+y, report y∗ �= y, y, y′, other}. Game 5 contains
+14 information sets: I1 = {v0, v1, v2}, I2,1 = {u0},
+I2,2 = {u1, u2, u3}, I2,3 = {u4, u5, u6}, I2,4 =
+{u7, u8, u9}, I3,1 = {q36, q37, q38}, I3,2 = {q39, q40, q41},
+I3,3 = {q42, q43, q44}, I3,4 = {q45, q46, q47},
+I3,5 = {q48, q49, q50}, I3,6 = {q51, q52, q53},
+I3,7 = {q54, q55, q56}, I3,8 = {q57, q58, q59}, I3,9 =
+{q60, q61, q62}. In addition, η1, η2, η3 is the payoff functions,
+and the payoffs of each party is listed next to the terminal node.
+Theorem 5: If e ≥ a and s > c + k, Game 5 has a unique
+sequential equilibrium ((s1, s2), (η1, η2)):
+⎧⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎨
+⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎩
+s1 = ([1(y), 0(y′), 0(other)])
+s2 =([1(not report), 0(report, y∗=y), 0(report, y∗ �=y)],
+[1(y), 0(y′), 0(other)], [1(y), 0(y′), 0(other)],
+[1(y), 0(y′), 0(other)]),
+η1 = (1(v0), 0(v1), 0(v2)),
+η2 =([1(u0)], [1(u1), 0(u2), 0(u3)], [1(u4), 0(u5), 0(u6)],
+[1(u7), 0(u8), 0(u9)]).
+According to the equilibrium, Game 5 will end at l36.
+Proof: At the information set I2,1, we first observe
+W2’s payoff at {(u1, u2, u3), (u4, u5, u6), (u7, u8, u9)},
+respectively. Note that the game will reach at nodes {[(q36,
+q37, q38), (q39, q40, q41), (q42, q43, q44)],[(q45, q46, q47), (q48,
+q49, q50), (q51, q52, q53)], [(q54, q55, q56), (q57, q58, q59), (q60,
+q61, q62)]} when W2 sends CSP {y, y′, other}, respectively.
+Obviously, W2’s payoff at q36 is (r− c), which is higher than
+(−s) at nodes q37 and q38. Similarly, W2’s payoff at node q39
+is z, which is higher than r and (−s) at nodes q40 and q41,
+while W2’s payoff at node q42 is z, which is higher than (−s)
+at nodes q43 and q44, respectively. Therefore, no matter what
+the strategy of W1 is, W2 will send CSP y to maximize its
+payoff.
+Deriving backwards, at I2,2, W2’s payoff at q45 is (r−c−k),
+which is higher than (−s+r+c) at nodes q46 and q47. Further,
+W2’s payoff at node q48 is z, which is equal to those at nodes
+q49 and q50, the same situation also occurs at nodes q51, q52,
+and q53. As a result, only when W2 chooses to send CSP y,
+can its payoffs be maximized.
+Deriving backwards, at I2,3, W2’s payoff at q54 is (r−c−k),
+which is higher than (−s) at nodes q55 and q56. Similarly,
+W2’s payoff at node q57 is z, which is higher than (−s) at
+nodes q58 and q59, while W2’s payoff at node q60 is z, which
+is higher than (−s) at nodes q61 and q62, respectively. In short,
+no matter what the strategy of W1 is, W2 will send CSP y to
+maximize its payoff.
+Deriving backwards, at I1, W1’s actual reachable nodes are
+{(q36, q39, q42), (q45, q48, q51), (q54, q57, q60)}. Moreover,
+W1’s payoff at q36 is (r − c), which is higher than (−s) at
+nodes q39 and q42. The same payoff situations also appear at
+nodes (q45, q48, q51) and (q54, q57, q60). Thus, W1 will send
+CSP y to maximize its payoff as well.
+Deriving backwards, at I2,1, W2’s actual reachable nodes
+are q36, q45 and q54. Apparently, W2’s payoff at q36 is (r−c),
+Fig. 8. Relationship among all the contracts. Watchtower Contract is an
+employment contract between channel participants and watchtowers. Collu-
+sion Contract is designed as a collusion between two watchtowers to obtain
+additional payoffs. There can be collusion between counterparties and a
+malicious watchtower, as analyzed in Fraud Contract. Anti-collusion Contract
+is devised to effectively resist the above two collusion attacks.
+which is higher than (r−c−k) at nodes q45 and q54. Therefore,
+Game 5 will end at l36.
+In summary, we analyze and derive the sequential equi-
+libria of rational channel participants under the Watchtower
+Contract, the Collusion Contract, the Fraud Contract, and the
+Anti-collusion Contract scenarios, respectively. As shown in
+Fig. 8, the Watchtower Contract is a contract of employment
+between Hp and W1, Hp and W2, respectively, where W1 and
+W2 are paid for monitoring the payment channel. In order
+to undermine the former equilibrium, the Collusion Contract
+is designed as a conspiracy between W1 and W2 to obtain
+additional payoffs beyond the Watchtower Contract. Further,
+the Fraud Contract is a conspiracy between a counterparty and
+one of the malicious watchtowers, in which the counterparty
+intends to cooperate with the malicious watchtower for more
+additional revenue. Finally, we design the Anti-collusion Con-
+tract to effectively counter the Fraud Contract, which compels
+malicious watchtowers to betray previously signed contracts
+by exempting them from penalties.
+C. The Full Game and Analysis
+Next, we integrate all contracts for game analysis. Fig. 9 is
+Game 6 induced by the Watchtower Contract, the Collusion
+Contract, the Fraud Contract, and the Anti-collusion Con-
+tract. We first assume that W1 initiates the collusion, and
+chooses strategies first. If W1 does not initiate a collusion,
+or initiates a collusion but W2 refuses to join, then there
+is no Collusion Contract in the game, and the game will
+enter Game 5. However, if W2 agrees to collude with W1,
+in this game, W2 will report the collusion to Hp and sign
+the Anti-collusion Contract. Besides, if W1 and Hp sign
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3610 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+Fig. 9. Game 6 induced by all the contracts.
+the Anti-collusion Contract, W2 will not sign the Collusion
+Contract, and the game will enter Game 6. In this game,
+the players are N = {C, W1, W2}, and the action set
+is A = {not report, report y∗ = y, report y∗ �=
+y, not init, init, disagree, agree, y, y′, other}. Game 6
+contains 7 information sets: I1,1 = {v0}, I1,2 = {v1, v2, v3},
+I2,1 = {u0}, I2,2 = {u1}, I2,3 = {u2, u3, u4}, I2,4 =
+{u5, u6, u7}, I2,5 = {u8, u9, u10}. In addition, η1, η2, η3 is
+the payoff functions, and the payoffs of each party is listed
+next to the terminal node.
+Theorem 6: If e ≥ a, s > c + k, p < c and g > z +
+s− p, Game 6 has a unique sequential equilibrium ((s1, s2),
+(η1, η2)):
+⎧⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎨
+⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎪⎩
+s1 = ([1(not init), 0(init)], [0(y), 1(y′), 0(other)])
+s2 = ([0(disagree), 1(agree)],
+[0(not report), 1(report, y∗=y), 0(report, y∗ �=y)],
+[0(y), 1(y′), 0(other)], [0(y), 1(y′), 0(other)],
+[0(y), 1(y′), 0(other)]),
+η1 = ([1(v0)], [0(v1), 1(v2), 0(v3)]),
+η2 = ([0(u2), 1(u3), 0(u4)], [0(u5), 1(u6), 0(u7)],
+[0(u8), 1(u9), 0(u10)]).
+According to the equilibrium, Game 6 will end at l76.
+Proof: Similar to Theorem 5, we first observe W2’s
+payoff. At the information set I2,1, W2’s payoff at q64 is
+(−s + g + p), which is higher than (r− c) and (−s) at nodes
+q63 and q65. As a result, W2 will send fraud CSP y′ at I2,1.
+Deriving backwards, at I2,2, W2’s payoff at node q73 is
+(−s + r − c + g + p), which is higher than (r − c − k) and
+(−s+r−c) at nodes q72 and q74, while W2’s payoff at nodes
+q76 and q79 is (z + p) and (z + g + p), which is higher than
+(z − g) and z at nodes (q75, q77) and (q78, q80), respectively.
+Obviously, W2 will send fraud CSP y′ at I2,2.
+Deriving backwards, at I2,3, W2’s payoff at node q82 is
+(−s + g + p), which is higher than (r − c − k) and (−s) at
+nodes q81 and q83, while W2’s payoff at nodes q85 and q88 is
+(−s + p) and (−s + g + p), which is higher than (z − g) and
+(−s− g), as well as z and (−s) at nodes (q84, q86) and (q87,
+q89), respectively. Thus, W2 will send fraud CSP y′ at I2,2.
+In summary, no matter what the strategy of W1 is, W2 will
+send fraud CSP y′ to maximize its payoff.
+Next, we observe W1’s payoff. At I1,2, since W2 is able
+to send fraud CSP y′, and then W1’s reachable nodes at
+(v0,v1,v2) are (q64, q67, q70), (q73, q76, q79), and (q82, q85,
+q88), respectively. Apparently, W1’s payoff at q67 is (r − p),
+which is higher than (z − g − p) and (−s − g − p) at nodes
+q64 and q70. Similarly, W1’s payoff at node q76 is (−s − p),
+which is higher than (z−g−p) and (−s) at nodes q73 and q79,
+while W1’s payoff at node q85 is (−s − p), which is higher
+than (z − g − p) and (−s − g − p) at nodes q82 and q88,
+respectively. In short, W1 will send fraud CSP y′ to maximize
+its payoff as well.
+Deriving backwards, at I2,2, since W1 is able to send fraud
+CSP y′, then W2’s reachable nodes at v0 are q67, q76 and
+q85. Moreover, W2’s payoff at q76 is (z + p), which is higher
+than (r + p) and (−s + p) at nodes q67 and q85. Therefore,
+W2 will choose to report collusion and send CSP y∗ = y in
+the Anti-collusion Contract.
+Deriving backwards, at I2,1, W2’s actual reachable nodes
+are q76 and Game 6. Apparently, W2’s payoff at q76 is (z+p),
+which is higher than (r − c) at nodes Game 6. Then, W2 will
+choose to agree the collusion.
+Deriving backwards, at I1,1, W1’s actual reachable nodes
+are q76 and Game 6 as well. It is obvious that W1’s pay-
+off at q76 is (−s + p), which is higher than (r − c) at
+nodes Game 6. Then, W1 will choose not to agree the
+collusion. Not only is it impossible for a rational coun-
+terparty to maliciously collude with the watchtower under
+Game 6 to fraud other watchtowers’s deposits and the the
+hiring party’s balance, but also the rational watchtower cannot
+commence a collusion while routinely monitoring the PCN
+and truthfully sending CSP y. Consequently, Game 6 will end
+at l76.
+According to Game 6, the unique sequential equilibrium
+requires that rational participants will not rashly initiate
+collusion in order to maximize their respective benefits,
+otherwise not only will they be unable to obtain normal
+benefits, but they will also pay more fines for this. Next,
+we will verify the validity of these contracts through massive
+experiments.
+IX. IMPLEMENTATION AND EVALUATION
+A. Experimental Setup
+We conduct experiments on an Intel Core i7-6700 with
+a 3.4GHz CPU and an NVIDIA Tesla K80 GPU acceler-
+ator [49]. Specifically, we first leverage Solidity to create
+the Watchtower Contract, the Collusion Contract, the Fraud
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3611
+TABLE III
+THE COST OF EXECUTING SMART CONTRACTS ON ETHEREUM
+Contract, and the Anti-collusion Contract. Then, we deploy
+our proposal on Ethereum [3] to verify its effectiveness and
+scalability. In order to test the improvement of the distrib-
+uted watchtowers in terms of false positive rate, furthermore,
+we build a simulation testbed on NS3 [50], and use Fail-
+safe [43] and Single Watchtower [6] as comparative bench-
+marks to test the throughput, accuracy and false positive
+rate of distributed watchtowers in processing transactions,
+respectively.
+We first formulate the definition of accuracy and false
+positive rate as follows:
+Accuracy =
+TP + TN
+TP + TN + FP + FN
+, (1)
+False Positive Rate =
+FP
+FP + TN
+, (2)
+where TP (True Positive) and FN (False Positive) respectively
+represent the number of fraud CSPs that can be correctly
+identified, while FP (False Positive) and TN (Ture Negative)
+respectively represent the number of normal CSPs that can be
+correctly identified.
+B. Cost
+We test the cost of implementing smart contracts on
+Ethereum, as shown in Table III. We can quantify the cost
+as the total amount of gas consumed to perform each func-
+tion of the smart contracts. More intuitively, we can also
+quantify the cost in US dollars ($) by converting the cur-
+rent exchange rate. According to the latest investigation, the
+gas price was 2 × 10−9 ether (2 Gwei) and the exchange
+rate was 1 ether = 2440.81 USD as of January 2022.
+We find that the total cost of Watchtower Contract, Collu-
+sion Contract, Fraud Contract and Anti-Collusion Contract
+is about 2.0 million gas ($10.26), 2.2 million gas ($10.99),
+2.1 million gas ($10.58), and 2.6 million gas ($12.75),
+respectively.
+The financial cost of running smart contracts is roughly
+related to the computational and storage complexity of the
+function. For example, the cost of the Init operation is
+significantly higher than other operations. The fundamen-
+tal reason is that the data storage cost on the blockchain
+Fig. 10. Throughput of the watchtowers.
+is very expensive, and the data structure initialization cost
+needs to be paid in advance when the watchtower con-
+tract is initialized, but this part of the cost will be slightly
+reduced as the number of requests to close the state channel
+increases.
+C. Throughput
+We run the watchtower throughput on a system with an
+Intel Core i7 CPU and 64GB of RAM and compared the
+throughput of single watchtower [6] and Fail-safe [43] with
+that of distributed watchtowers. We first create 10i off-chain
+transactions (0 � i � 6) between the participants, each
+of which was requested to exchange CSPs once with at
+least one watchtower. Then, we calculate the time required
+to exchange CSPs, as well as the average time required to
+process each transaction to quantify throughput. As shown
+in Fig. 10, we can see that the throughput of the Fail-safe
+and single watchtower becomes stable when the number of
+requests is greater than 103 and 104, respectively, while the
+throughput of distributed watchtowers tends to be stable when
+the number of requests is greater than 105. In addition,
+when the number of requests reaches 106, we can clearly
+find that the throughput of Fail-safe and single watchtower
+shows a significant downward trend, while the distributed
+watchtower can still process requests as usual in the interval
+of 105 to 106, indicating that distributed watchtowers are
+more efficient at processing high volumes of transactions in
+batches.
+D. Accuracy
+We further build the simulation testbed on NS3 to test the
+accuracy and false positive rate of the watchtower processing
+transactions. Fig. 11 shows that the accuracy of the watch-
+towers decreases as the number of transactions processed in
+a batch accumulates. However, the accuracy of the distributed
+watchtowers is significantly superior to that of a single watch-
+tower. Moreover, when the number of transactions is stable
+at a certain interval (104 off-chain transactions), as shown in
+Fig. 12, numerous experiments show that the accuracy of the
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3612 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+Fig. 11. Accuracy comparison with different number of off-chain
+transcations.
+Fig. 12. Inspection on accuracy.
+distributed watchtowers is also higher than that of the single
+watchtower.
+E. False Positive Rate
+Similarly, we have also conducted experimental tests on the
+false positive rate of watchtowers. Fig. 13 shows that the false
+positive rate of the watchtowers increases as the number of
+transactions processed in a batch accumulates. Particularly,
+when the number of off-chain transactions reaches an order of
+magnitude of 105, the false positive rate of the single watch-
+tower increases significantly, while the distributed watchtower
+still fluctuates within the normal range. In addition, from
+Figure 14, when the number of off-chain transactions is stable
+on the order of 104, the false positive rate of both the single
+watchtower and the distributed watchtowers fluctuate within
+the normal range (between 0.1 and 0.25). However, we can
+visually observe that the fluctuation of the single watchtower
+is significantly larger than that of the distributed watchtowers,
+Fig. 13. False positive comparison with different number of off-chain
+transcations.
+Fig. 14. Inspection on false positive.
+thus we can infer that the distributed watchtowers are more
+stable and efficient in handling CSPs and off-chain transac-
+tions.
+X. CONCLUSION
+In this paper, we propose the anti-collusion multiparty smart
+contracts for distributed watchtowers in PCNs. We first pro-
+pose the distributed watchtowers model to solve the false pos-
+itive problem of off-chain transactions with the single watch-
+tower. Then, to address the collusion attack in the off-chain
+transaction scenario, we design multiple smart contracts and
+analyze the contracts through the game tree model, and obtain
+a unique sequential equilibrium through mathematical deriva-
+tion and proof. Finally, we perform extensive experiments on
+Ethereum and NS3 to verify the effectiveness and reliability
+of our scheme. The experimental results demonstrate that the
+proposed scheme can achieve low false positives and accuracy
+guarantees for distributed watchtowers, as well as effectively
+counter collusion attacks.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+DU et al.: ANTI-COLLUSION MULTIPARTY SMART CONTRACTS FOR DISTRIBUTED WATCHTOWERS IN PCNs 3613
+REFERENCES
+[1] [Online]. Available: https://www.blockchain.com/charts/fees-usd-per-
+transaction
+[2] S. Nakamoto, “Bitcoin: A peer-to-peer electronic cash system,”
+Tech. Rep., 2008.
+[3] (2015). Ethereum Wiki: Geth. [Online]. Available:
+https://github.com/ethereum/go-ethereum/wiki/geth
+[4] N. Khan and R. State, “Lightning network: A comparative review
+of transaction fees and data analysis,” in Blockchain and Applica-
+tions (Advances in Intelligent Systems and Computing). Avila, Spain:
+Springer, Jun. 2019.
+[5] A. Back et al. (Oct. 2014). Enabling Blockchain Innova-
+tions With Pegged Sidechains [EB/OL]. [Online]. Available:
+http://kevinriggen.com/files/sidechains.pdf
+[6] Y. Zhang, D. Yang, G. Xue, and R. Yu, “Counter-collusion smart
+contracts for watchtowers in payment channel networks,” in Proc.
+IEEE INFOCOM Conf. Comput. Commun., Vancouver, BC, Canada,
+May 2021, pp. 1–10.
+[7] S. Kim, Y. Kwon, and S. Cho, “A survey of scalability solutions on
+blockchain,” in Proc. Int. Conf. Inf. Commun. Technol. Converg. (ICTC),
+Jeju, South Korea, Oct. 2018, pp. 1204–1207.
+[8] [Online]. Available: https://etherscan.io/charts
+[9] Fraud-Fighting Watchtowers to Arrive in Next Bitcoin Lightning
+Release. [Online]. Available: https://www.coindesk.com/fraud-fighting-
+watchtowers are-coming-with-the-next-big-lightning-release
+[10] G. Wood, “Ethereum: A secure decentralised generalised transaction
+ledger,” Ethereum Project Yellow Paper, vol. 151, pp. 1–32, Apr. 2014.
+[11] P. McCorry, S. Bakshi, I. Bentov, S. Meiklejohn, and A. Miller, “PISA:
+Arbitration outsourcing for state channels,” in Proc. 1st ACM Conf. Adv.
+Financial Technol., Zurich, Switzerland, Oct. 2019, pp. 1–20.
+[12] G. Avarikioti, O. S. T. Litos, and R. Wattenhofer, “CERBERUS
+channels: Incentivizing watchtowers for Bitcoin,” in Proc. Int. Conf.
+Financial Cryptogr. Data Secur., Kota Kinabalu, Malaysia, Jul. 2020,
+pp. 346–366.
+[13] Cerberus Script. [Online]. Available: https://github.com/OrfeasLitos/
+cerberus-script
+[14] [Online]. Available: https://github.com/lightningnetwork/lnd/releases/tag/
+v0.7.0-beta-rc3
+[15] K. Soska, J. Dong, A. Khodaverdian, A. Z. Jones, B. Routledge, and
+N. Christin, “Towards understanding cryptocurrency derivatives: A case
+study of BitMEX,” in Proc. Web Conf. (WWW), Ljubljana, Slovenia,
+Apr. 2021, pp. 45–57.
+[16] Bitcoin Wiki: Bitcoin Contract. [Online]. Available: https://en.bitcoin.it/
+wiki/Contract
+[17] The Bitcoin Lightning Network: Scalable Off-Chain Instant
+Payments. [Online]. Available: https://www.bitcoinlightning.com/
+wpcontent/uploads/2018/03/ lightning-network-paper.pdf
+[18] Thunder Network: Off-Chain Bitcoin Payments Using Smart Contracts.
+[Online]. Available: https://github.com/blockchain/thunder
+[19] Eclair: A Scala Implementation of The Lightning Network. [Online].
+Available: https: //github.com/ACINQ/eclair
+[20] The Raiden Network. [Online]. Available: https://raiden.network
+[21] Y. Zhang, D. Yang, and G. Xue, “CheaPay: An optimal algorithm for
+fee minimization in blockchain-based payment channel networks,” in
+Proc. IEEE Int. Conf. Commun. (ICC), Shanghai, China, May 2019,
+pp. 1–6.
+[22] V. Sivaraman, S. B. Venkatakrishnan, M. Alizadeh, G. Fanti, and
+P. Viswanath, “Routing cryptocurrency with the spider network,” in
+Proc. 17th ACM Workshop Hot Topics Netw., Redmond, WA, USA,
+Nov. 2018, pp. 29–35.
+[23] V. Bagaria, J. Neu, and D. Tse, “Boomerang: Redundancy improves
+latency and throughput in payment-channel networks,” in Proc. Int. Conf.
+Financial Cryptogr. Data Secur., Kota Kinabalu, Malaysia, Mar. 2020,
+pp. 304–324.
+[24] P. Wang, H. Xu, X. Jin, and T. Wang, “Flash: Efficient dynamic routing
+for offchain networks,” in Proc. 15th Int. Conf. Emerg. Netw. Exp.
+Technol., Orlando, FL, USA, Dec. 2019, pp. 1–13.
+[25] G. Malavolta, P. Moreno-Sanchez, A. Kate, and M. Maffei,
+“SilentWhispers: Enforcing security and privacy in decentralized credit
+networks,” in Proc. Netw. Distrib. Syst. Secur. Symp., San Diego, CA,
+USA, 2017, pp. 1–15.
+[26] P. F. Tsuchiya, “The landmark hierarchy: A new hierarchy for routing in
+very large networks,” ACM SIGCOMM Comput. Commun. Rev., vol. 18,
+no. 4, pp. 35–42, Aug. 1988.
+[27] S. Roos, P. Moreno-Sanchez, A. Kate, and I. Goldberg, “Settling
+payments fast and private: Efficient decentralized routing for path-based
+transactions,” 2017, arXiv:1709.05748.
+[28] C. H. Papadimitriou and D. Ratajczak, “On a conjecture related to
+geometric routing,” Theor. Comput. Sci., vol. 344, no. 1, pp. 3–14, 2005.
+[29] R. Yu, G. Xue, V. T. Kilari, D. Yang, and J. Tang, “CoinExpress: A
+fast payment routing mechanism in blockchain-based payment channel
+networks,” in Proc. IEEE Int. Conf. Comput. Commun. Netw., Hangzhou,
+China, Jul. 2018, pp. 1–9.
+[30] F. Engelmann, H. Kopp, F. Kargl, F. Glaser, and C. Weinhardt, “Towards
+an economic analysis of routing in payment channel networks,” in Proc.
+1st Workshop Scalable Resilient Infrastructures Distrib. Ledgers, Las
+Vegas, NV, USA, Dec. 2017, pp. 1–7.
+[31] V. Sivaraman et al., “High throughput cryptocurrency routing in payment
+channel networks,” in Proc. USENIX Symp. Networked Syst. Design
+Implement., Santa Clara, CA, USA, Feb. 2020, pp. 777–796.
+[32] L. Eckey, S. Faust, K. Hostakova, and S. Roos, “Splitting pay-
+ments locally while routing interdimensionally,” IACR, Lyon, France,
+Tech. Rep. 555, 2020.
+[33] C.-P. Schnorr, “Efficient signature generation by smart cards,” J. Cryp-
+tol., vol. 4, no. 3, pp. 161–174, Jan. 1991.
+[34] Y. Zhang and D. Yang, “RobustPay: Robust payment routing with
+approximation guarantee in blockchain-based payment channel net-
+works,” IEEE/ACM Trans. Netw., vol. 29, no. 4, pp. 1–11, Apr. 2021.
+[35] Bitcoin Lightning Fraud? Laolu is Building a Watchtower to
+Fight it. [Online]. Available: https://www.coindesk.com/laolu-building-
+watchtower-fight-bitcoin-lightning-fraud
+[36] Bitcoin Wallet Electrum Now Supports Lightning, Watchtowers and Sub-
+marine Swaps. [Online]. Available: https://www.coindesk.com/bitcoin-
+wallet-electrum-nowsupports-lightning- -and-submarine-swaps
+[37] Blockstreams Watchtowers Will Bring a New Justice System to
+the Lightning Network. [Online]. Available: https://www.coindesk.
+com/blockstreamswatchtowers-will-bring-a-new-justice- system-to-the-
+lightning-network
+[38] Fraud-Fighting Watchtowers to Arrive in Next Bitcoin Lightning
+Release. [Online]. Available: https://www.coindesk.com/fraud-fighting-
+watchtowers-are-coming-with-the-next-big-lightning-release
+[39] P. Prihodko, S. Zhigulin, M. Sahno, A. Ostrovskiy, and O. Osuntokun,
+“Flare: An approach to routing in lightning network,” Whitepaper, 2016.
+[40] T. Dryja and S. B. Milano. (2016). Unlinkable Outsourced
+Channel Monitoring. [Online]. Available: https://diyhpl.
+us/wiki/transcripts/scalingbitcoin/milan/unlinkable-outsourced-channel-
+monitoring
+[41] O. Osuntokunn, “Hardening lightning,” in Proc. BPASE, 2018.
+[42] M. Khabbazian, T. Nadahalli, and R. Wattenhofer, “Outpost: A respon-
+sive lightweight watchtower,” in Proc. 1st ACM Conf. Adv. Financial
+Technol., Zurich, Switzerland, Oct. 2019, pp. 31–40.
+[43] B. Liu, P. Szalachowski, and S. Sun, “Fail-safe watchtowers and short-
+lived assertions for payment channels,” in Proc. 15th ACM Asia Conf.
+Comput. Commun. Secur., Taipei, Taiwan, Oct. 2020, pp. 506–518.
+[44] J. Li, D. Niyato, C. S. Hong, K.-J. Park, L. Wang, and Z. Han,
+“Cyber insurance design for validator rotation in sharded blockchain
+networks: A hierarchical game-based approach,” IEEE Trans. Netw.
+Service Manage., vol. 18, no. 3, pp. 3092–3106, Sep. 2021.
+[45] S. Xia, F. Lin, Z. Chen, C. Tang, Y. Ma, and X. Yu, “A Bayesian
+game based vehicle-to-vehicle electricity trading scheme for blockchain-
+enabled internet of vehicles,” IEEE Trans. Veh. Technol., vol. 69, no. 7,
+pp. 6856–6868, Jul. 2020.
+[46] L. Huang and Q. Zhu, “A dynamic game framework for ratio-
+nal and persistent robot deception with an application to deceptive
+pursuit-evasion,” IEEE Trans. Autom. Sci. Eng., vol. 16, pp. 1–15,
+2021.
+[47] I. H. Abdulqadder, S. Zhou, D. Zou, I. T. Aziz, and S. M. A. Akber,
+“Bloc-Sec: Blockchain-based lightweight security architecture for
+5G/B5G enabled SDN/NFV cloud of IoT,” in Proc. IEEE 20th Int. Conf.
+Commun. Technol. (ICCT), Nanning, China, Oct. 2020, pp. 499–507.
+[48] J. Li, T. Liu, D. Niyato, P. Wang, J. Li, and Z. Han, “Contract-theoretic
+pricing for security deposits in sharded blockchain with Internet of
+Things,” IEEE Internet Things J., vol. 8, no. 12, pp. 10052–10070,
+Jun. 2021.
+[49] Z. Xiong, S. Feng, W. Wang, D. Niyato, P. Wang, and Z. Han,
+“Cloud/fog computing resource management and pricing for blockchain
+networks,” IEEE Internet Things J., vol. 6, no. 3, pp. 4585–4600,
+Nov. 2018.
+[50] M. Du, K. Wang, Z. Xia, and Y. Zhang, “Differential privacy preserving
+of training model in wireless big data with edge computing,” IEEE
+Trans. Big Data, vol. 6, no. 2, pp. 283–295, Jun. 2020.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+3614 IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS, VOL. 40, NO. 12, DECEMBER 2022
+Miao Du is currently pursuing the Ph.D. degree with
+the School of Computer Science and Engineering,
+Southeast University, Nanjing, China. His current
+research interests include wireless sensor networks,
+the Internet of Things, edge computing, network
+security, game theory, and blockchain.
+Peng Yang (Member, IEEE) received the Ph.D.
+degree from Southeast University in 2006 by taking
+a successive postgraduate and doctoral program.
+He worked as a Research Scientist with CERN
+to participate in the alpha magnetic spectrome-
+ter (AMS) experiment (PI: Nobel laureate Samuel
+C.C. Ting) from 2007 to 2009. He is currently
+a Professor with the School of Computer Science
+and Engineering, Southeast University, where he
+is also the Deputy Director of the Future Net-
+work Research Center. His research interests include
+new-generation network architecture, edge computing, natural language
+processing, blockchain, and cyber content governance. He is a member of the
+National Technical Committee of Standardization Administration of China.
+Wen Tian (Member, IEEE) received the B.S. degree
+in physics from the Changsha University of Science
+and Technology, Changsha, China, in 2014, the M.S.
+degree in control theory and control engineering
+from the Jiangsu University of Science and Technol-
+ogy, Zhenjiang, China, in 2017, and the Ph.D. degree
+in control science and engineering from the Nan-
+jing University of Science and Technology, Nanjing,
+China. He is currently a Lecturer with the School
+of Electronic and Information Engineering, Nanjing
+University of Information Science and Technology.
+His research interests include covet communication, cyber-physical systems,
+the Internet of Things, game theory, and network security.
+Zhu Han (Fellow, IEEE) received the B.S. degree
+in electronic engineering from Tsinghua University
+in 1997 and the M.S. and Ph.D. degrees in elec-
+trical and computer engineering from the Univer-
+sity of Maryland, College Park, in 1999 and 2003,
+respectively.
+From 2000 to 2002, he was a Research and Devel-
+opment Engineer at JDSU, Germantown, Maryland.
+From 2003 to 2006, he was a Research Associate
+at the University of Maryland. From 2006 to 2008,
+he was an Assistant Professor at Boise State Uni-
+versity, ID, USA. He is currently a John and Rebecca Moores Professor
+with the Electrical and Computer Engineering Department and the Computer
+Science Department, University of Houston, TX, USA. His research interests
+include wireless resource allocation and management, wireless communica-
+tions and networking, game theory, big data analysis, security, and smart grid.
+He received a NSF Career Award in 2010, the Fred W. Ellersick Prize of
+the IEEE Communication Society in 2011, the EURASIP Best Paper Award
+for the EURASIP Journal on Advances in Signal Processing in 2015, IEEE
+Leonard G. Abraham Prize in the field of communications systems (Best Paper
+Award in IEEE JOURNAL ON SELECTED AREAS IN COMMUNICATIONS) in
+2016, and several best paper awards in IEEE conferences. He was an IEEE
+Communications Society Distinguished Lecturer from 2015 to 2018. He has
+been an AAAS Fellow since 2019 and an ACM Distinguished Member since
+2019. He has been a 1% highly cited researcher since 2017 according to
+Web of Science. He is also the Winner of the 2021 IEEE Kiyo Tomiyasu
+Award for outstanding early to mid-career contributions to technologies
+holding the promise of innovative applications with the following citation
+“for contributions to game theory and distributed management of autonomous
+communication networks.”
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:23:46 UTC from IEEE Xplore.  Restrictions apply. 
+<<
+  /ASCII85EncodePages false
+  /AllowTransparency false
+  /AutoPositionEPSFiles true
+  /AutoRotatePages /None
+  /Binding /Left
+  /CalGrayProfile (Black & White)
+  /CalRGBProfile (sRGB IEC61966-2.1)
+  /CalCMYKProfile (U.S. Web Coated \050SWOP\051 v2)
+  /sRGBProfile (sRGB IEC61966-2.1)
+  /CannotEmbedFontPolicy /Warning
+  /CompatibilityLevel 1.4
+  /CompressObjects /Tags
+  /CompressPages true
+  /ConvertImagesToIndexed true
+  /PassThroughJPEGImages true
+  /CreateJobTicket false
+  /DefaultRenderingIntent /Default
+  /DetectBlends true
+  /DetectCurves 0.0000
+  /ColorConversionStrategy /LeaveColorUnchanged
+  /DoThumbnails true
+  /EmbedAllFonts true
+  /EmbedOpenType false
+  /ParseICCProfilesInComments true
+  /EmbedJobOptions true
+  /DSCReportingLevel 0
+  /EmitDSCWarnings false
+  /EndPage -1
+  /ImageMemory 524288
+  /LockDistillerParams true
+  /MaxSubsetPct 100
+  /Optimize true
+  /OPM 0
+  /ParseDSCComments false
+  /ParseDSCCommentsForDocInfo true
+  /PreserveCopyPage true
+  /PreserveDICMYKValues true
+  /PreserveEPSInfo true
+  /PreserveFlatness true
+  /PreserveHalftoneInfo true
+  /PreserveOPIComments true
+  /PreserveOverprintSettings true
+  /StartPage 1
+  /SubsetFonts true
+  /TransferFunctionInfo /Remove
+  /UCRandBGInfo /Preserve
+  /UsePrologue false
+  /ColorSettingsFile ()
+  /AlwaysEmbed [ true
+    /AdobeArabic-Bold
+    /AdobeArabic-BoldItalic
+    /AdobeArabic-Italic
+    /AdobeArabic-Regular
+    /AdobeHebrew-Bold
+    /AdobeHebrew-BoldItalic
+    /AdobeHebrew-Italic
+    /AdobeHebrew-Regular
+    /AdobeHeitiStd-Regular
+    /AdobeMingStd-Light
+    /AdobeMyungjoStd-Medium
+    /AdobePiStd
+    /AdobeSansMM
+    /AdobeSerifMM
+    /AdobeSongStd-Light
+    /AdobeThai-Bold
+    /AdobeThai-BoldItalic
+    /AdobeThai-Italic
+    /AdobeThai-Regular
+    /ArborText
+    /Arial-Black
+    /Arial-BoldItalicMT
+    /Arial-BoldMT
+    /Arial-ItalicMT
+    /ArialMT
+    /BellGothicStd-Black
+    /BellGothicStd-Bold
+    /BellGothicStd-Light
+    /ComicSansMS
+    /ComicSansMS-Bold
+    /Courier
+    /Courier-Bold
+    /Courier-BoldOblique
+    /CourierNewPS-BoldItalicMT
+    /CourierNewPS-BoldMT
+    /CourierNewPS-ItalicMT
+    /CourierNewPSMT
+    /Courier-Oblique
+    /CourierStd
+    /CourierStd-Bold
+    /CourierStd-BoldOblique
+    /CourierStd-Oblique
+    /EstrangeloEdessa
+    /EuroSig
+    /FranklinGothic-Medium
+    /FranklinGothic-MediumItalic
+    /Gautami
+    /Georgia
+    /Georgia-Bold
+    /Georgia-BoldItalic
+    /Georgia-Italic
+    /Helvetica
+    /Helvetica-Bold
+    /Helvetica-BoldOblique
+    /Helvetica-Oblique
+    /Impact
+    /KozGoPr6N-Medium
+    /KozGoProVI-Medium
+    /KozMinPr6N-Regular
+    /KozMinProVI-Regular
+    /Latha
+    /LetterGothicStd
+    /LetterGothicStd-Bold
+    /LetterGothicStd-BoldSlanted
+    /LetterGothicStd-Slanted
+    /LucidaConsole
+    /LucidaSans-Typewriter
+    /LucidaSans-TypewriterBold
+    /LucidaSansUnicode
+    /Mangal-Regular
+    /MicrosoftSansSerif
+    /MinionPro-Bold
+    /MinionPro-BoldIt
+    /MinionPro-It
+    /MinionPro-Regular
+    /MinionPro-Semibold
+    /MinionPro-SemiboldIt
+    /MVBoli
+    /MyriadPro-Black
+    /MyriadPro-BlackIt
+    /MyriadPro-Bold
+    /MyriadPro-BoldIt
+    /MyriadPro-It
+    /MyriadPro-Light
+    /MyriadPro-LightIt
+    /MyriadPro-Regular
+    /MyriadPro-Semibold
+    /MyriadPro-SemiboldIt
+    /PalatinoLinotype-Bold
+    /PalatinoLinotype-BoldItalic
+    /PalatinoLinotype-Italic
+    /PalatinoLinotype-Roman
+    /Raavi
+    /Shruti
+    /Sylfaen
+    /Symbol
+    /SymbolMT
+    /Tahoma
+    /Tahoma-Bold
+    /Times-Bold
+    /Times-BoldItalic
+    /Times-Italic
+    /TimesNewRomanPS-BoldItalicMT
+    /TimesNewRomanPS-BoldMT
+    /TimesNewRomanPS-ItalicMT
+    /TimesNewRomanPSMT
+    /Times-Roman
+    /Trebuchet-BoldItalic
+    /TrebuchetMS
+    /TrebuchetMS-Bold
+    /TrebuchetMS-Italic
+    /Tunga-Regular
+    /Verdana
+    /Verdana-Bold
+    /Verdana-BoldItalic
+    /Verdana-Italic
+    /Webdings
+    /Wingdings-Regular
+    /ZapfDingbats
+    /ZWAdobeF
+  ]
+  /NeverEmbed [ true
+  ]
+  /AntiAliasColorImages false
+  /CropColorImages true
+  /ColorImageMinResolution 150
+  /ColorImageMinResolutionPolicy /OK
+  /DownsampleColorImages true
+  /ColorImageDownsampleType /Bicubic
+  /ColorImageResolution 600
+  /ColorImageDepth -1
+  /ColorImageMinDownsampleDepth 1
+  /ColorImageDownsampleThreshold 1.50000
+  /EncodeColorImages true
+  /ColorImageFilter /DCTEncode
+  /AutoFilterColorImages true
+  /ColorImageAutoFilterStrategy /JPEG
+  /ColorACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /ColorImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000ColorACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000ColorImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasGrayImages false
+  /CropGrayImages true
+  /GrayImageMinResolution 150
+  /GrayImageMinResolutionPolicy /OK
+  /DownsampleGrayImages true
+  /GrayImageDownsampleType /Bicubic
+  /GrayImageResolution 600
+  /GrayImageDepth -1
+  /GrayImageMinDownsampleDepth 2
+  /GrayImageDownsampleThreshold 1.50000
+  /EncodeGrayImages true
+  /GrayImageFilter /DCTEncode
+  /AutoFilterGrayImages true
+  /GrayImageAutoFilterStrategy /JPEG
+  /GrayACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /GrayImageDict <<
+    /QFactor 0.15
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000GrayACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000GrayImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasMonoImages false
+  /CropMonoImages true
+  /MonoImageMinResolution 300
+  /MonoImageMinResolutionPolicy /OK
+  /DownsampleMonoImages true
+  /MonoImageDownsampleType /Bicubic
+  /MonoImageResolution 900
+  /MonoImageDepth -1
+  /MonoImageDownsampleThreshold 1.33333
+  /EncodeMonoImages true
+  /MonoImageFilter /CCITTFaxEncode
+  /MonoImageDict <<
+    /K -1
+  >>
+  /AllowPSXObjects false
+  /CheckCompliance [
+    /None
+  ]
+  /PDFX1aCheck false
+  /PDFX3Check false
+  /PDFXCompliantPDFOnly false
+  /PDFXNoTrimBoxError true
+  /PDFXTrimBoxToMediaBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXSetBleedBoxToMediaBox true
+  /PDFXBleedBoxToTrimBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXOutputIntentProfile (None)
+  /PDFXOutputConditionIdentifier ()
+  /PDFXOutputCondition ()
+  /PDFXRegistryName ()
+  /PDFXTrapped /Unknown
+  /CreateJDFFile false
+  /Description <<
+    /ENU ()
+  >>
+>> setdistillerparams
+<<
+  /HWResolution [600 600]
+  /PageSize [612.000 792.000]
+>> setpagedevice

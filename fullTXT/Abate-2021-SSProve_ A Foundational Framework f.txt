@@ -1,0 +1,1828 @@
+SSProve: A Foundational Framework for Modular Cryptographic Proofs in Coq
+SSProve: A Foundational Framework
+for Modular Cryptographic Proofs in Coq
+Carmine Abate1 Philipp G. Haselwarter2 Exequiel Rivas3 Antoine Van Muylder4 Théo Winterhalter1
+Cătălin Hrit,cu1 Kenji Maillard5 Bas Spitters2
+1MPI-SP 2Aarhus University 3Inria Paris 4Vrije Universiteit Brussel 5Inria Rennes
+Abstract—State-separating proofs (SSP) is a recent method-
+ology for structuring game-based cryptographic proofs in a
+modular way. While very promising, this methodology was pre-
+viously not fully formalized and came with little tool support. We
+address this by introducing SSProve, the first general verification
+framework for machine-checked state-separating proofs. SSProve
+combines high-level modular proofs about composed protocols,
+as proposed in SSP, with a probabilistic relational program logic
+for formalizing the lower-level details, which together enable
+constructing fully machine-checked crypto proofs in the Coq
+proof assistant. Moreover, SSProve is itself formalized in Coq,
+including the algebraic laws of SSP, the soundness of the program
+logic, and the connection between these two verification styles.
+1 Introduction
+Cryptographic proofs can be challenging to make fully pre-
+cise and to rigorously check. This has caused a “crisis of
+rigor” [17] in cryptography that Shoup [50], Bellare and
+Rogaway [17], Halevi [32], and others, proposed to address
+by systematically structuring proofs as sequences of games.
+This game-based proof methodology is not only ubiquitous
+in provable cryptography nowadays, but also amenable to full
+machine-checking in proof assistants such as Coq [9, 44] and
+Isabelle/HOL [16]. It has also led to the development of spe-
+cialized proof assistants [13] and automated verification tools
+for crypto proofs [12, 15, 22]. There are two key ideas behind
+these tools: (i) formally representing games and the adversaries
+against them as code in a probabilistic programming language,
+and (ii) using program verification techniques to conduct all
+game transformation steps in a machine-checked manner.
+For a long time however, game-based proofs have lacked
+modularity, which made them hard to scale to large, composed
+protocols such as TLS [47] or the upcoming MLS [8]. To
+address this issue, Brzuska et al. [23] have recently introduced
+state-separating proofs (SSP), a methodology for modular
+game-based proofs, inspired by the paper proofs in the miTLS
+project [20, 21, 30], by prior compositional cryptography
+frameworks [24, 40], and by process algebras [41]. In the SSP
+methodology, the code of cryptographic games is split into
+packages, which are modules made up of procedures sharing
+state. Packages can call each other’s procedures (also known as
+oracles) and can operate on their own state, but cannot directly
+access other packages’ state. Packages have natural notions
+of sequential and parallel composition that satisfy simple
+algebraic laws, such as associativity of sequential composition.
+This law is used to define cryptographic reductions not only
+in SSP, but also in the The Joy of Cryptography textbook [49],
+which teaches crypto proofs in a style very similar to SSP.
+While the SSP methodology is very promising, the lack
+of a complete formalization makes it currently only usable for
+informal paper proofs, not for machine-checked ones. The SSP
+paper [23] defines package composition and the syntax of a
+cryptographic pseudocode language for games and adversaries,
+but the semantics of this language is not formally defined, and
+the meaning of their assert operator is not even clear, given
+the probabilistic setting. Moreover, while SSP provides a good
+way to structure proofs at the high-level, using algebraic laws
+such as associativity, the low-level details of such proofs are
+usually treated very casually on paper. Yet none of the existing
+crypto verification tools that could help machine-check these
+low-level details supports the high-level part of SSP proofs:
+equational reasoning about composed packages (i.e., modules)
+is either not possible at all [9, 32, 44, 53], or does not exactly
+match the SSP package abstraction [13, 36] (see §6 for details).
+The main contribution of this work is to introduce SSProve,
+the first general verification framework for machine-checked
+state-separating proofs. SSProve brings together two different
+proof styles into a single unified framework: (1) high-level
+proofs are modular, done by reasoning equationally about
+composed packages, as proposed in SSP [23]; (2) low-level de-
+tails are formally proved in a probabilistic relational program
+logic [9, 13, 44]. Importantly, we show a formal connection
+between these two proof styles in Theorem 1.
+SSProve is a foundational framework, fully formalized in
+Coq. To achieve this, we define the syntax of crypto pseu-
+docode in terms of a free monad, in which external calls
+are represented as algebraic operations [45]. This gives us a
+principled way to define sequential composition of packages
+based on an algebraic effect handler [46] and to give machine-
+checked proofs of the SSP package laws [23], some of which
+were treated informally on paper. Moreover, we make precise
+the minimal state-separation requirements between adversaries
+and the games with which they are composed—this reduces
+the proof burden and allows us to prove more meaningful
+security results, that do not require the adversary’s state to
+be disjoint from intermediate games in the proof.
+Beyond just syntax, we also give a denotational semantics
+to crypto code in terms of stateful probabilistic functions
+that can signal assertion failures by sampling from the empty
+20
+21
+ IE
+EE
+ 3
+4t
+h 
+C
+om
+pu
+te
+r S
+ec
+ur
+ity
+ F
+ou
+nd
+at
+io
+ns
+ S
+ym
+po
+si
+um
+ (C
+SF
+) |
+ 9
+78
+-1
+-7
+28
+1-
+76
+07
+-9
+/2
+1/
+$3
+1.
+00
+ ©
+20
+21
+ IE
+EE
+ | 
+D
+O
+I: 
+10
+.1
+10
+9/
+C
+SF
+51
+46
+8.
+20
+21
+.0
+00
+48
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+probability subdistribution. Finally, we prove the soundness
+of a probabilistic relational program logic for relating pairs of
+crypto code fragments.
+For this soundness proof we build a semantic model based
+on relational weakest-precondition specifications. Our model is
+modular with respect to the considered side-effects (currently
+probabilities, state, and assertion failures). To obtain it, we
+follow a general recipe by Maillard et al. [38], who recently
+proposed to characterize such semantic models as relative
+monad morphisms, mapping two monadic computations to
+their canonical relational specification. This allows us to first
+define a relative monad morphism for probabilistic, potentially
+failing computations and then to extend this to state by sim-
+ply applying a relative monad transformer. Working out this
+instance of Maillard et al.’s [38] recipe involved formalizing
+various non-standard categorical constructs in Coq, in an
+order-enriched context: lax functors, lax natural transforma-
+tions, left relative adjunctions, lax morphisms between such
+adjunctions, state transformations of such adjunctions, etc.
+This formalization is of independent interest and should also
+allow us to more easily add extra side-effects and F?-style
+sub-effecting [53] to SSProve in the future.
+We have already started reaping the benefits of formalizing
+SSP in a proof assistant: our recently completed SSProve
+formalization of the KEM-DEM case study presented in [23]
+has led us to find—in conjunction with the authors of [23]—
+an error in the originally published proof. The authors of [23]
+have since proposed a revised version of their theorem, which
+we have adapted and fully proved in SSProve. We will describe
+this case study in a future publication.
+Outline. The remainder of this paper is structured as fol-
+lows. §2 illustrates the key ideas of how to use SSProve
+on two simple crypto proofs, showing semantic security of
+ElGamal and PRF-based encryption. In §3 we formalize
+the SSP methodology: cryptographic pseudocode, packages,
+sequential and parallel composition, and the algebraic laws
+they satisfy. In §4 we introduce the rules of our probabilistic
+relational program logic and use them to prove Theorem 1,
+which formally connects SSP to this program logic. In §5 we
+outline the effect-modular semantic model we use to prove the
+soundness of the program logic. Finally, §6 discusses related
+work and §7 future directions.
+The full formalization of SSProve and of the examples from
+this paper (circa 20K lines of Coq code including comments)
+are available under the MIT open source license at https:
+//github.com/SSProve/ssprove/tree/csf-paper.
+2 Using SSProve: Key Ideas and Examples
+Formalizing the SSP methodology for high-level proofs allows
+us to formally link it to the methodology of probabilistic rela-
+tional program logics for low-level proofs. In this section, we
+begin with a brief introduction to SSP (§2.1). Then, we present
+our new theorem connecting SSP to a probabilistic relational
+program logic (§2.2). Finally, by way of two examples, we
+show how the two methodologies are used together to obtain
+fully formal security proofs. The first example looks at a
+package: P
+mem: n : nat
+X(b):
+if b then
+return 1
+else
+return Z(n)
+Y():
+return 5
+Figure 2. Possible pseudocode implementation for P .
+symmetric encryption scheme built out of a pseudo-random
+function (§2.3), while the second looks at ElGamal, a popular
+asymmetric encryption scheme (§2.4).
+2.1 An introduction to SSP
+We begin by introducing (our variant of) the SSP method-
+ology of Brzuska et al. [23]. The main concept behind this
+methodology is the package, which is a collection of pro-
+cedure implementations that together manipulate a common
+piece of state, and that may depend on a set of external
+procedures. We refer to the set of external procedures on
+which the package can depend as the imports of the package.
+X
+Y
+Z
+P
+Figure 1. Package P .
+In Figure 1, we can see a high-level
+picture of a package P : it implements
+and exports the procedures X and Y,
+and it imports the external procedure
+Z. The arrows indicate the direction
+of calls. We use import(P ) to de-
+note the set of procedure names the
+package P imports, and export(P ) to denote the names of
+the procedures it exports. The term interface is used to refer to
+such a set of procedure names.1 While the import and export
+interfaces of a package tell us where it can be used, in the
+SSP papers, the package implementations are usually given in
+separate figures, which describe, in pseudocode, each of the
+procedures exported by the package. For example, a possible
+pseudocode implementation corresponding to the package P
+can be found in Figure 2. We refer to the code of the procedure
+X exported by package P as P.X.
+Package algebra. Packages can be combined as algebraic
+objects. We can build complex packages out of simpler ones
+using the following composition operations.2
+• Sequential composition: given two packages P1 and P2
+with import(P1) ⊆ export(P2), then P1◦P2 is obtained
+by inlining procedure definitions, each time P1 calls a
+procedure in P2.
+• Parallel composition: given two packages P1 and P2 such
+that export(P1) and export(P2) are disjoint, then P1 ‖
+P2 is the union of P1 and P2: it provides the procedures
+from both P1 and P2.
+1In SSProve the procedure names within interfaces are also associated with
+argument and result types, but we omit this detail until §3.1.
+2In the SSProve formalization, composition can actually be performed on
+arbitrary packages, but the obtained packages are guaranteed to be valid only
+when the requirements stated here are met, as detailed in §3.3.
+2
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+...
+...
+...P1 P2
+P1
+P2
+...
+...
+...
+...
+Figure 3. Sequential and parallel composition.
+• Identity package: given an interface I , we have a package
+that simply forwards all calls in this interface. We refer to
+it as the identity package on the interface I , written IDI ,
+and we have that import(IDI) = export(IDI) = I .
+These operations have graphical counterparts which we
+show in Figure 3. Moreover, there are natural algebraic laws
+that hold between these operators. For example, sequential
+composition is an associative operator. Such laws are con-
+venient for cryptographic proofs, since they allow the com-
+positional structure of a package to be manipulated without
+having to look at all at the implementation of its procedures.
+Games and distinguishers. A package with no imports
+is called a game. A game pair contains two games that
+export the same procedures, i.e. a tuple (G0, G1) such
+that export(G0) = export(G1) and import(G0) =
+import(G1) = ∅. A distinguisher for a game pair is a package
+D with import(D) = export(G0) = export(G1) and
+export(D) = {run}, where run is an entry-point procedure
+that can call the procedures exported by the games and returns
+a boolean value: true or false. When a game G (so without
+imports) exports a single procedure run : unit → bool as
+above, we denote by Pr [b← G] the probability that G.run
+returns the boolean value b when running on initial memory.
+We can quantify how much a distinguisher can distinguish the
+two packages in a game pair:
+Definition 1 (Distinguisher advantage). The advantage of a
+distinguisher D against a game pair G = (G0, G1) is
+α(G)(D) =
+∣∣Pr[true← D ◦G0
+]
+− Pr
+[
+true← D ◦G1
+]∣∣
+Reasoning about advantage. Next, we review the two main
+results used for equational-like reasoning about advantage
+against games in SSP:
+Lemma 1 (Triangle Inequality). Let G0, G1 and G2 be games,
+we have that for every distinguisher D,
+α(G0, G2)(D) ≤ α(G0, G1)(D) + α(G1, G2)(D).
+Proof. By unfolding Definition 1 we have
+α(G0, G2)(D)
+=
+∣∣Pr[true←D ◦G0
+]
+− Pr
+[
+true←D ◦G2
+]∣∣
+= |Pr
+[
+true←D ◦G0
+]
+− Pr
+[
+true←D ◦G1
+]
++ Pr
+[
+true←D ◦G1
+]
+− Pr
+[
+true←D ◦G2
+]
+|
+≤
+∣∣Pr[true←D ◦G0
+]
+− Pr
+[
+true←D ◦G1
+]∣∣
++
+∣∣Pr[true←D ◦G1
+]
+− Pr
+[
+true←D ◦G2
+]∣∣
+= α(G0, G1)(D) + α(G1, G2)(D)
+In general, we want to bound the advantage to distinguish
+G0 and Gn (i.e., the advantage α(G0, Gn)(D) against game
+pair (G0, Gn)). In order to do so, by repeatedly apply-
+ing Lemma 1, it is enough to exhibit a chain of games
+G0, G1, G2, . . . , Gn so that a bound for α(G0, Gn)(D) can
+be given by
+α(G0, G1)(D) + α(G1, G2)(D) + . . .+ α(Gn−1, Gn)(D).
+Lemma 2 (Reduction).
+Let (G0, G1) be a game pair and let M be an arbitrary
+package. Then, for every distinguisher D, we have
+α(M ◦G0,M ◦G1)(D) = α(G0, G1)(D ◦M).
+Proof. By unfolding Definition 1 and applying the associativity
+law of sequential composition, we have
+α(M ◦G0,M ◦G1)(D)
+=
+∣∣Pr[true← D ◦ (M ◦G0
+)]
+− Pr
+[
+true← D ◦
+(
+M ◦G1
+)]∣∣
+=
+∣∣Pr[true← (D ◦M) ◦G0
+]
+− Pr
+[
+true← (D ◦M) ◦G1
+]∣∣
+= α(G) (D ◦M)
+As its name indicates, Lemma 2 is used to reduce the
+advantage of the distinguisher over a composed game (M◦Gb),
+to the advantage over part of the game (M ), for which we
+know a bound. We will use both these SSP lemmas in §2.3.
+One difference in SSProve with respect to the SSP papers
+is that up to this point we made no “state separation” assump-
+tions. We proved instead in Coq that the algebraic laws for
+package composition as well as the two lemmas above hold
+even when the involved packages share state.
+Adversaries. State separation is, however, still crucial for
+defining adversaries against game pairs. Formally, an adver-
+sary A for a game pair is a distinguisher whose state is disjoint
+from the state of each game in the pair.
+Perfect game indistinguishability. We say that the games
+G0 and G1 of a game pair are perfectly indistinguishable
+when α(G0, G1)(A) = 0 for every adversary A. Perfect
+indistinguishability is a form of observational equivalence and
+states that no adversary can learn any information about which
+game in the pair it is interacting with.
+2.2 Proving perfect indistinguishability steps in a
+probabilistic relational program logic
+We now present a novel result brought by SSProve. The SSP
+laws above deal only with the high-level structure of composed
+packages. However we often also need to show that two con-
+crete games are equivalent with respect to what an adversary
+can learn from using them, i.e. perfect indistinguishability.
+In SSProve we formally verify this kind of equivalence by
+reducing it to proving a family of semantic judgments in
+a probabilistic relational program logic. The logic we use
+is a variant of pRHL, a probabilistic relational Hoare logic
+introduced by Barthe et al. [9]. Judgments of this logic are of
+the form
+� {{{(m0,m1). φ}}} c0 ∼ c1 {{{((m′0, a0), (m′1, a1)). ψ}}},
+3
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+and intuitively mean that after separately running the two code
+fragments c0 and c1 on the corresponding component of a
+pair of memories m0,m1 satisfying a precondition φ, the final
+memories m′0,m
+′
+1 and results a0, a1 satisfy the postcondition
+ψ. In this paper write as p.M a function that binds p and
+has body M (usually denoted by λp.M in the functional
+programming community). This notation will be handy for
+writing postconditions, which depend on final memories and
+on final results. We adopt the convention that the variables
+m0 and m1 stand for the state associated to c0 and c1 in
+preconditions, and m′0,m
+′
+1 stand for the corresponding state
+in postconditions. We will omit them from judgments when
+no ambiguity can arise.
+We now state the main theorem of SSProve:
+Theorem 1. Let G = (G0, G1) be a game pair with respect to
+export interface E = export(G0) = export(G1). Moreover,
+assume that ψ is a stable invariant that relates the memories
+of G0 and G1, and that it holds on the initial memories.
+If for each provided procedure f : A → B ∈ E , we have
+that for all a ∈ A,
+� {{{ψ}}} G0.f(a) ∼ G1.f(a) {{{(b0, b1). b0 = b1 ∧ ψ(m′0,m′1)}}}
+then we can conclude that α(G0, G1)(A) = 0 for any A.
+Intuitively, we ask that both procedures, run on memories
+satisfying ψ, yield results drawn from the same distribution
+and memories still satisfying ψ. We leave the precise definition
+of stable invariants and how this theorem is proved to §4.2,
+but the main idea behind this invariant is that it keeps track of
+a relation between the memories of G0 and G1, and that this
+relation is preserved as different procedures from the interface
+are called during the execution. We illustrate how this theorem
+is used in the examples from the next two subsections.
+2.3 Security proof of PRF-based encryption in SSProve
+We first illustrate the key ideas of SSProve on a crypto proof
+by Brzuska et al. [23] that we have verified in Coq using our
+framework. In this proof, reasoning about composed packages
+(using Lemmas 1 and 2 above) allows for a high level of
+abstraction that drives the proof argument. Some steps of this
+proof are, however, justified by perfect indistinguishability
+between games, which involves inspecting the procedures of
+the games and applying program transformations to show the
+equivalence. In the previous paper proof [23] these steps were
+only justified informally by code inspection. Instead, we have
+formally verified these steps too, using Theorem 1 and our
+relational program logic.
+Brzuska et al. [23] show how to construct a symmetric
+encryption scheme out of a pseudo-random function (PRF)
+and use the SSP methodology to reduce security of the en-
+cryption scheme to the security of the PRF, expressed as being
+indistinguishable from a package doing random sampling.
+The scheme assumes a PRF, with the following signature,
+prf : {0, 1}n × {0, 1}n → {0, 1}n
+where {0, 1}n represents the set of n-bit sequences. It is
+possible to formalize and quantify the security of PRF as the
+package: PRF0
+mem: k : option KEY
+EVAL(x):
+if k = ⊥ then
+k <$ uniform {0, 1}n
+return prf(k, x)
+package: PRF1
+mem: T : map [KEY -> KEY]
+EVAL(x):
+if T[x] = ⊥ then
+T[x] <$ uniform{0, 1}n
+return T[x]
+Figure 4. Packages PRF0 and PRF1.
+enc(k, m):
+r <$ uniform {0, 1}n
+pad ← prf(k, r)
+c ← m xor pad
+return (r, c)
+kgen():
+k <$ uniform {0, 1}n
+return k
+dec(k, (r, c)):
+pad ← prf(k, r)
+m ← c xor pad
+return m
+Figure 5. Algorithms for prf-based encryption scheme.
+probability for an adversary to distinguish it from a package
+that samples from an uniform distribution (real vs random
+paradigm [49]). Formally, given the packages PRF0 and PRF1
+as in Figure 4, the security of PRF, α(PRF)(A) is defined using
+Definition 1 as the advantage of an adversary for the game pair
+PRF = (PRF0, PRF1):
+α(PRF)(A) =
+∣∣Pr[true← A ◦ PRF0]− Pr
+[
+true← A ◦ PRF1
+]∣∣
+The three basic algorithms constructing a symmetric encryp-
+tion scheme out of prf are given in Figure 5. These are not
+packages themselves, but rather code used inside packages.
+The security property proposed for this encryption scheme
+is defined as the advantage on a game pair that captures
+indistinguishability under chosen-plaintext attack (IND-CPA).
+We refer to this game pair as (IND-CPA0, IND-CPA1), and the
+packages involved are introduced in Figure 6. Notice that
+in procedure IND-CPA1.ENC the argument m is never used,
+the encryption procedure is run on a random m’. Therefore
+the advantage of an adversary w.r.t. the game (IND-CPA0,
+IND-CPA1) represents the probability that the adversary is able
+to distinguish the encryption of m from the encryption of a
+random bit-string. The security of the encryption procedure
+with respect to an adversary A is then α(IND-CPA)(A).
+Brzuska et al. [23] use a sequence of game-hops to bound
+α(IND-CPA) in terms of (a linear function of) α(PRF). This
+technique of game-hops follows the style of inequality rea-
+package: IND-CPA0
+mem: k : option KEY
+ENC(m):
+if k = ⊥ then
+k <$ uniform {0, 1}n
+(r,c) ← enc(k, m)
+return (r,c)
+package: IND-CPA1
+mem: k : option KEY
+ENC(m):
+if k = ⊥ then
+k <$ uniform {0, 1}n
+m’ <$ uniform {0, 1}n
+(r,c) ← enc(k, m’)
+return (r,c)
+Figure 6. Packages IND-CPA0 and IND-CPA1.
+4
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+package: MOD-CPA0
+mem:
+ENC(m):
+r <$ uniform {0, 1}n
+pad ← EVAL(r)
+c ← m xor pad
+return (r, c)
+ENC EVAL
+MOD-CPAb PRFi
+package: MOD-CPA1
+mem:
+ENC(m):
+m’ <$ uniform {0, 1}n
+r <$ uniform {0, 1}n
+pad ← EVAL(r)
+c ← m’ xor pad
+return (r, c)
+Figure 7. Packages MOD-CPAb import EVAL from PRFi
+soning chains from §2.1 (Lemma 1 in particular), where each
+step involves establishing the advantage on a game pair, and
+as a result we obtain a bound on the advantage of the game
+consisting of the initial and final game.
+In this example, IND-CPAb is shown equivalent to a variant,
+MOD-CPAb, that gets the secret key through the PRF, i.e., with
+a call to EVAL of the package PRF0 or PRF1 (see Figure 7).
+By repeatedly applying Lemma 1, we bound α(IND-CPA)(A)
+by
+α(IND-CPA0, MOD-CPA0 ◦ PRF0)(A)+
+α(MOD-CPA0 ◦ PRF0, MOD-CPA0 ◦ PRF1)(A)+
+α(MOD-CPA0 ◦ PRF1, MOD-CPA1 ◦ PRF1)(A)+
+α(MOD-CPA1 ◦ PRF1, MOD-CPA1 ◦ PRF0)(A)+
+α(MOD-CPA1 ◦ PRF0, IND-CPA1)(A)
+By observing that α(IND-CPA0, MOD-CPA0 ◦ PRF0)(A) = 0,
+and α(MOD-CPA1 ◦ PRF0, IND-CPA1)(A) = 0, and by using
+Lemma 2 twice, we reduce this bound to
+α(PRF)(A ◦ MOD-CPA0) + εstat.(A) + α(PRF)(A ◦ MOD-CPA1).
+where εstat.=α(MOD-CPA0 ◦ PRF1, MOD-CPA1 ◦ PRF1). The ad-
+vantage of an attacker w.r.t MOD-CPA0 and MOD-CPA1 is usually
+referred to as statistical gap—a polynomial function of the
+number of calls from the adversary (see [23, appendix A]).
+It remains to justify the two perfect indistinguishabilities
+stated above. These steps involve replacing an informal argu-
+ment [23] by a fully formal one, moving to our probabilis-
+tic relational program logic, as such we will detail one of
+them: α(IND-CPA0, MOD-CPA0 ◦ PRF0)(A) = 0. The other one
+α(MOD-CPA1 ◦ PRF0, IND-CPA1)(A) = 0 is analogous.
+In order to prove this equivalence, Brzuska et al. [23] notice
+that the ENC procedures of IND-CPA0 and MOD-CPA0◦PRF0 (see
+Figure 8) return the same ciphertext when called on the same
+m. The two procedures are obtained by “inlining” the code of
+PRF0.EVAL inside MOD-CPA0, and by “unfolding” the code of
+enc.
+The only difference between the left and the right side
+is in the case k = ⊥ and w.r.t. k <$ uniform {0,1}n that
+on the left is the first command to be executed and on
+the right only comes after r <$ uniform {0,1}n, another
+independent random sampling. Here Brzuska et al. [23] con-
+clude informally that independence allows to “swap” the two
+operations. We instead use Theorem 1 to formally reduce
+IND-CPA0.ENC(m)
+if k = ⊥ then
+k <$ uniform {0, 1}n
+r <$ uniform {0, 1}n
+pad ← prf(k,r)
+c ← m xor pad
+return (r, c)
+(MOD-CPA0 ◦ PRF0).ENC(m)
+r <$ uniform {0, 1}n
+if k = ⊥ then
+k <$ uniform {0, 1}n
+pad ← prf(k,r)
+c ← m xor pad
+return (r, c)
+Figure 8. ENC procedures expanded
+KeyGen ():
+sk <$ uniform {0,..n-1}
+pk ← gsk
+return (pk , sk)
+Enc(A, M):
+b <$ uniform {0,..n-1}
+B ← gb
+return (B, M * Ab)
+Dec(a, (B, X)):
+return X * (Ba)-1
+Figure 9. Algorithms for ElGamal encryption scheme.
+α(IND-CPA0, MOD-CPA0 ◦ PRF0)(A)=0 to showing the equiv-
+alence of the two ENC procedures from Figure 8. In our
+probabilistic relational program logic, this comes down to
+proving the following judgment for all plaintext messages m,
+� {{{m0 = m1}}}
+IND-CPA0.ENC(m) ∼
+(
+MOD-CPA0 ◦ PRF0
+)
+.ENC(m)
+{{{(c0, c1).m′0 = m′1 ∧ c0 = c1}}}.
+This judgment intuitively states that encrypting m with the
+same initial memories “m0 = m1”, terminates still in
+memories and ciphertexts drawn from the same distribution,
+“m′0 = m′1 ∧ c0 = c1”. We use the following instance of the
+swap rule from Figure 13, to formally justify this swapping:
+� {{{m0 = m1}}} k <$ uniform {0,1}n ∼ r <$ uniform {0,1}n {{{m′0 = m′1 ∧ c0 = c1}}}
+� {{{m0 = m1}}} r <$ uniform {0,1}n ∼ k <$ uniform {0,1}n {{{m′0 = m′1 ∧ c0 = c1}}}
+� {{{m0 = m1}}}
+k <$ uniform {0,1}n ; r <$ uniform {0,1}n ∼
+r <$ uniform {0,1}n ; k <$ uniform {0,1}n
+{{{m′0 = m′1 ∧ c0 = c1}}}
+2.4 Security proof of ElGamal in SSProve
+We also illustrate the key ideas of SSProve on a security proof
+for the ElGamal public-key encryption scheme inspired by The
+Joy of Cryptography textbook [49, Chapter 15.3]. ElGamal is
+parameterized by a multiplicative cyclic group (G, *) with n
+elements and generated by g, usually denoted by 〈g〉 = G.
+Plaintexts are elements M ∈ G and ciphertexts are pairs
+of group elements C = (C1, C2) ∈ G × G. Secret keys
+are elements of Zn, while public keys are group elements
+once again, A ∈ G. The key generation algorithm (KeyGen
+in Figure 9) generates a secret key that is a random number
+a ∈ {0, . . . , n − 1} and a public key that is ga. Encryption
+and decryption (Enc and Dec Figure 9) involve the group
+operation (_*_), exponentiation (_)_ and the multiplicative
+inverse (_)-1.
+Under the Decisional Diffie–Hellman (DDH) assumption
+for the group G, i.e. DDH0 and DDH1 from Figure 10 are
+computationally indistinguishable, one can prove that an ad-
+5
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+package: DDH0
+mem:
+pk : option PUBKEY
+a : option SECKEY
+QUERY()
+a <$ uniform {0,..n-1}
+b <$ uniform {0,..n-1}
+pk ← ga
+return (ga,gb,gab)
+package: DDH1
+mem:
+pk : option PUBKEY
+a : option SECKEY
+QUERY()
+a <$ uniform {0,..n-1}
+b <$ uniform {0,..n-1}
+c <$ uniform {0,..n-1}
+pk ← ga
+return (ga,gb,gc)
+Figure 10. The DDH assumption states that DDH0 and DDH1
+are computationally indistinguishable.
+package: CPA0
+mem:
+pk : option PUBKEY
+sk : option SECKEY
+counter : nat
+ENC(M):
+assert counter = 0
+(pk , sk) ← KeyGen ()
+(B, C) ← Enc (pk, M)
+counter ++
+return (B, C)
+package: CPA1
+mem:
+pk : option PUBKEY
+sk : option SECKEY
+counter : nat
+ENC(M):
+assert counter = 0
+(pk , sk) ← KeyGen ()
+(B, C) <$ uniform GxG
+counter ++
+return (B, C)
+Figure 11. Packages CPA0 and CPA1 in ElGamal.
+versary cannot distinguish messages encrypted with the El-
+Gamal scheme from ciphertexts that are randomly sampled
+(CPA). Our formalization only considers the case in which the
+adversary can see a single ciphertext (one-time CPA, written
+OT-CPA), as it is known that this suffices for public-key
+encryption schemes to satisfy CPA [49, Claim 15.5]. We leave
+the formalization of this last result as future work and discuss
+hereafter our proof of OT-CPA in SSProve.
+OT-CPA is expressed in terms of the advantage against
+game pair (CPA0, CPA1) in Figure 11. Both packages return
+a ciphertext only if the counter is 0—as expressed by the use
+of assert—so the adversary can only see one ciphertext. Both
+packages call KeyGen to generate public and private keys, but
+while CPA0 effectively encrypts the message provided by the
+adversary with the public key through Enc (pk, M), CPA1
+returns a randomly sampled ciphertext ( B, C) <$ uniform GxG,
+i.e. a pair of group elements sampled uniformly at random
+from G × G.
+The OT-CPA proof reduces the advantage of adversary A
+package: Aux
+mem: counter : nat
+ENC(M):
+assert counter = 0
+(A, B, C) ← QUERY()
+counter ++
+return (B, M * C)
+ENC QUERY
+Aux DDHb
+Figure 12. Package Aux imports QUERY from DDHb.
+against (CPA0, CPA1) to the advantage of A ◦ Aux against
+(DDH0, DDH1), with the auxiliary package Aux listed in Fig-
+ure 12:
+α(CPA)(A) ≤ α(DDH)(A ◦ Aux).
+We once again obtain this result by first repeatedly applying
+Lemma 1 to bound α(CPA)(A) by
+α(CPA0, Aux ◦ DDH0)(A)+
+α(Aux ◦ DDH0, Aux ◦ DDH1)(A)+
+α(Aux ◦ DDH1, CPA1)(A)
+We will see that the first and last advantages are null by prov-
+ing the packages perfectly indistinguishable, and the remaining
+advantage is equal to α(DDH)(A ◦ Aux) by simple application
+of Lemma 2. It now remains to show the equivalences below:
+Step α(CPA0, Aux ◦ DDH0)(A)=0: We apply Theorem 1
+and reduce the goal to a relational judgment between
+CPA0.ENC(M) and (Aux◦DDH0).ENC(M) for a generic plaintext
+M, and where the invariant ψ is equality of memories. Inlining
+the code of QUERY provided by DDH0 inside Aux and unfolding
+one realizes the two code fragments coincide and the judgment
+holds by application of the reflexivity rule in Figure 13.
+Step α(Aux◦DDH1, CPA1)(A)=0: This step is quite similar to
+the one above. After inlining however the two code fragments
+are not exactly the same, since in particular CPA1 completely
+ignores M and returns a random ciphertext, while Aux ◦ DDH1
+returns M*gc for a random c. To have equality of memories as
+invariant ψ, we show that in G, multiplication by g^(_) acts
+like a one time pad, which is a standard result [9, Section 6.2].
+3 Formalizing State-Separating Proofs
+We separate the programming language and thus the reasoning
+into two strata: code and packages. We define the syntax of
+code (§3.1), relate it to the notation used in §2.1, and explain
+its semantics (§3.2). We then give a formal description of
+packages (§3.3) and the algebraic laws they obey (§3.4).
+3.1 Syntax for cryptographic code (free monad)
+The language of the Coq system, Gallina, is a dependently
+typed, purely functional programming language. As such, we
+can directly express functional code in Gallina, but not code
+with side-effects such as reading from and writing to memory,
+probabilistic sampling, or external procedure calls. We thus
+represent cryptographic code via a combination of the ambient
+language Gallina and a monad of effectful computations.
+Monads constitute an established way of adding effects to a
+purely functional language [42, 54]. Free monads in particular
+allow to separate the representation (syntax) of an embedded
+language from its interpretation (semantics).
+Raw code We use a hybrid approach [44] of embedding
+the pure fragment of our cryptographic programming language
+shallowly in Coq, and embedding the effects deeply via a free
+monad. This free monad is defined as an inductive type:
+Inductive raw_code A : Type :=
+| ret ( x : A)
+6
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+| call ( p : opsig) ( x : src p)
+(κ : tgt p → raw_code A)
+| get ( ` : Location) (κ : type ` → raw_code A)
+| put ( ` : Location) ( v : type `) (κ : raw_code A)
+| sample ( op : Op) (κ : Arit op → raw_code A).
+This type of raw code comes equipped with an induction
+principle, which is used for instance in the proof of Theorem 1,
+in Theorem 2, and in the definition of the bind operation and
+sequential composition of packages by recursion over code.
+Some more explanations about raw_code are in order. The
+type parameter A indicates the result of a computation. The
+first clause of the above definition lets us inject any pure
+value x of type A into the monad as ret x. Calls to external
+procedures are represented via call p x κ, where p : opsig
+specifies the name of the procedure, the type of its argument
+(src p), and its return type (tgt p). The last argument κ
+is the continuation of the program, awaiting the result of
+the call to p. The get and put operations take a (typed)
+location ` as argument, respectively read from and write to
+that location, and continue with the continuation κ. Finally, we
+may sample from a collection of probabilistic subdistributions
+Op. Subdistributions constitute the base of our code semantics
+and are further discussed in §3.2. The type Op is a parameter
+of the language that can be instantiated by the user. Sampling
+a subdistribution op on type Arit op can be composed with a
+matching continuation κ (continuations are explained below).
+We will use the following two pieces of code as running
+examples to explain different aspects of the definition.
+get ` (λ x` . put ` (x` + 1) ( ret x`)) (1)
+sample ( uniform {0, 1}n)
+( λ y . call prf ( y, 101010) ( λ z . ret z)) (2)
+The code in (1) increments the value stored at location ` and
+returns the value before the increment. The code in (2) draws
+a random bit-string y of length n, calls an external procedure
+prf with arguments y and 101010, and returns the result.
+Valid code Raw code is merely a representation of syntax.
+To record which probabilistic sampling operations, imported
+procedures, and locations are used, we introduce a notion
+of valid code. Validity is defined relatively to a collection
+of sampling operations Op, a set of locations L, and fi-
+nally an import interface I which is a set of procedure
+signatures (opsig) consisting of a name, an input type and
+an output type. Concretely, the code in (1) is valid with
+respect to {` : nat} and the empty import interface, while
+(2) is valid with respect to the empty set of locations
+and the interface {prf : nat × nat → nat}, assuming fur-
+ther that uniform {0, 1}n : Op is a valid sampling operation.
+The type code is then simply defined as valid raw code,
+i.e. codeL,I A = { c : raw_code A | is_valid c L I }, where
+in the paper we sometimes omit the set of locations and the
+interface. Thanks to the use of tactics and Coq’s type classes,
+proofs of validity for well-scoped user-written code are con-
+structed automatically without requiring user intervention.
+Continuations A continuation is a suspended computation
+awaiting the result of an operation, intuitively corresponding
+to the rest of the program. Consider for instance the code (1).
+The get operation performs a memory lookup at the location
+`, and its continuation is a Coq function ( λ x` . put ...) of
+type ( type ` → raw_code nat) which receives the value stored
+at ` as its parameter x`. The continuation in turn performs a
+put operation, storing the value x` + 1 at memory location
+`, and returns the value x`. The code thus corresponds to the
+expression commonly written as `++.
+Variables As demonstrated in example (1), we draw a strict
+distinction between a location `, which can be accessed and
+updated via get and put, and the value stored in memory at
+location `. In (1), this value is available in the continuation
+of get ` (λ x` . put ...) as x`. Formally speaking, x` is an
+immutable Coq variable, and in (1) the location ` itself is a
+Coq variable of type Location.
+Monadic bind The bind operation of the monad, with type
+code A → (A → code B) → code B, allows the composition of
+effectful code. Take for instance the following pieces of code.
+Definition c : code nat :=
+sample ( uniform bool) ( λb. if b then ret m1 else ret m2)
+Definition κ : nat → code nat := λm. put ` m (ret 0)
+We would like to use c as an argument to κ, but the types
+don’t match: κ expects a value of type nat as argument,
+not a computation of type code nat. We define a standard
+bind operation that achieves this by traversing the code of
+c, applying κ when a returned value is encountered, and
+recursively pushing κ into any other continuations.
+Fixpoint bind ( c : code A) (κ : A → code B) : code B :=
+match c with
+| ret a ⇒ κ a
+| call p x κ’ ⇒ call p x (λ p . bind (κ’ p) κ)
+| get l κ’ ⇒ get l (λ v . bind (κ’ v) κ)
+| put l v κ’ ⇒ put l v (bind κ’ κ)
+| sample op κ’ ⇒ sample op (λ a . bind (κ’ a) κ)
+end
+An easy structural induction over code allows us to prove that
+bind satisfies the expected monad laws.
+Loops We do not have syntax for loops in code. However,
+since we are embedding in Coq we take advantage of its
+recursion mechanisms to write terminating loops. The most
+basic construction we can write is a “for i := 0 to N do c”
+loop that repeats (n+1)-times a command c, providing to c
+the value of the index i:
+Fixpoint for_loop (N : nat)
+( c : nat → code unit) : code unit :=
+match N with
+| 0 ⇒ c 0
+| S m ⇒ bind (for_loop m c) (λ _ . c N)
+end.
+More generally, we can define a “do-while” loop that repeat-
+edly executes a loop body while a condition holds, checked
+after each iteration. To ensure termination in Coq we add a
+natural number N to bound the maximum number of iterations:
+7
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+Fixpoint do_while (N : nat)
+( c : code bool) : code bool :=
+match N with
+| 0 ⇒ ret false
+| S n ⇒ bind c (fun b ⇒ match b with
+| false ⇒ ret true
+| true ⇒ do_while n c
+end)
+end.
+At the end, the returned boolean signals whether there was
+remaining fuel (i.e. iteration steps) available or not.
+Standard subdistributions Probabilistic operations denot-
+ing a collection of subdistributions we may sample from are
+included in the parameter type Op. Standard subdistributions
+including uniform sampling on finite types as well as a
+null subdistribution are predefined for convenience. The null
+subdistribution in particular allows us to represent assert.
+Definition assert (b : bool) : code unit :=
+if b then ret tt else sample null ( λ F . ret F)
+Here unit stands for the Coq singleton type with a unique
+inhabitant tt. If b is true, then assert returns the trivial
+value tt, but if b is false, we instead sample from the
+null distribution, which assigns probability zero to the tt
+values. Sampling from the null subdistribution is similar to
+non-termination, and it means that the continuation will never
+be called.
+Procedure calls A call to an external procedure such as prf
+in (2) is represented by the call operation, taking a procedure
+name p annotated with type, a value matching the argument
+type of p, and a continuation κ matching the return type of p.
+In §3.3 we show how an implementation gets substituted for
+this placeholder via sequential packages composition.
+Notation The use of continuations is pervasive in monadic
+code, and to alleviate the presentation we introduce the fol-
+lowing more familiar notation.
+ret v := ret v
+x ← c1 ;; c2 := bind c1 ( λx. c2)
+x ← call(p, a) ;; c := call p a ( λx. c)
+x ← get ` ;; c := get ` (λx.c)
+put ` := v ;; c := put ` v c
+x <$ D ;; c := sample D ( λx. c)
+Type safety The typing constraints imposed by the raw_code
+definition enforce type-safety for user-written code, guaran-
+teeing that operations and their continuations are compatible.
+For instance, let the continuation of get in (1) be f. Then f
+is only compatible with ` if its domain matches the type of `,
+i.e. f : type ` → raw_code A for some type A.
+To see the full definition in action, we restate the procedure
+EVAL(x) from Figure 4 more formally.
+Definition EVAL (x : {0, 1}n) : raw_code {0, 1}n :=
+val_k_opt ← get k ;;
+val_k ← (match val_k_opt with
+| ⊥ ⇒ y <$ uniform {0, 1}n ;;
+put k := Some y ;;
+ret y
+| Some val_k’ ⇒ ret val_k’
+end) ;;
+val_prf ← call(prf, (val_k, x)) ;;
+ret val_prf.
+Here we freely mix constructors of raw_code with other
+Gallina terms such as the match _ with _ ⇒ _ end construct.
+The result of the match is made available to the continuation
+of the code as val_k via a use of bind.
+3.2 Semantics of cryptographic code
+When no external procedure calls (call o x k) appear in a
+piece of code c : code A, it is possible to interpret c as a
+state-transforming probability subdistribution of type
+Pr_code c : mem → SD (A × mem)
+This semantics is similar to that of Barthe et al. [10]. The type
+SD A denotes the collection of all subdistributions over type A.
+Generally speaking, a subdistribution is a function d : A→ R
+assigning a certain probability d(a) to each a : A in such a way
+that
+∫
+A
+d ≤ 1. We use the definition of subdistributions from
+mathcomp-analysis [2, 37], a Coq library for real analysis.
+The semantics function Pr_code is defined by recursion on the
+structure of c. Its definition basically boils down to providing
+an effect handler that interprets state and probabilities in the
+monad mem → SD(− × mem).
+Using this subdistribution semantics, we can formalize the
+notation Pr[b← G] from §2.1 as follows: (i) Extract the
+run function from G (ii) Apply Pr_code to it (iii) Run it
+on the initial memory (iv) Extract the boolean component
+(first projection) from the resulting subdistribution. The final
+result has type d : SD bool, the type of subdistributions for
+booleans, and we precisely define Pr[b← G] = d(b) as the
+probability assigned to b by this subdistribution on booleans.
+3.3 Packages
+A raw package is a finite map from names to raw procedures.
+An interface is a finite set of operation signatures (opsig),
+each specifying the name, argument type, and result type of
+a procedure. A package is then a raw package RP together
+with an import interface I, an export interface E , and a set
+of locations L, such that each procedure in RP is valid with
+respect to L and I, and each procedure name listed in E is
+implemented by a procedure in RP of the appropriate type.
+package: L
+mem: counter : nat
+ENC(M):
+if counter = 0 then
+(A,B,C) ← QUERY()
+counter ++
+return (B, M * C)
+else
+return ⊥
+Consider for instance the package
+L from Figure 12. The memory
+used, mem(L), consists of one
+location {counter : nat}. the
+import interface import(L)
+contains a single procedure
+{QUERY : unit → G × G × G}.
+There is one procedure
+implemented by L, yielding an
+export interface export(L) = {ENC : G → option (G × G)}.
+We define composition of packages, following Brzuska
+et al. [23]. Given two raw packages P , Q we may define their
+8
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+sequential composition Q ◦ P by traversing Q and replacing
+each call by the corresponding procedure implementation in
+P . In case P does not implement the searched for procedure,
+we use a dummy value instead. If the exports of P match the
+imports of Q, i.e. import(Q) ⊆ export(P ), and both pack-
+ages are valid, then so is Q◦P , in which case no dummy value
+is needed. Concretely, during the traversal each ( call p a κ)
+node is replaced by bind ( P. p a) ( λ x . linkP (κ x)) where
+linkP stands for the recursive call of the function com-
+posing P with the remaining code. Experts will recog-
+nize this transformation as an algebraic effect handler, in-
+terpreting the free monad for probabilities, state and the
+operations imported by P to code in the free monad for
+probabilities, state, and the operations imported by Q. We
+have mem(Q ◦ P ) = mem(P ) ∪ mem(Q), import(Q ◦ P ) =
+import(P ) and export(Q ◦ P ) = export(Q).
+Given two raw packages P and Q we may define their
+parallel composition P ‖ Q by aggregating the implemen-
+tations and delegating calls to the respective package pro-
+viding it. This operation is defined even if both packages
+have overlapping export signatures, in which case procedures
+in P will be given priority. If they are both valid and
+their exports are disjoint, i.e. export(P ) ∩ export(Q) =
+∅, then this overlap situation does not happen and P ‖
+Q is also valid. We have mem(P ‖ Q) = mem(P ) ∪
+mem(Q), import(P ‖ Q) = import(Q) ∪ import(P ) and
+export(P ‖ Q) = export(Q) ∪ export(P ).
+Private state When formalizing composition in SSProve we
+do not impose restrictions on the disjointness of the state that
+P and Q manipulate. The two lemmas from §2.1 and the SSP
+package laws below hold without any such assumptions. The
+essence of state separation can be thus viewed as disjointness
+of state between the adversary and the games in a pair. We
+thus introduce the more economical assumption that only the
+adversary has to have disjoint state in our security definitions
+(e.g., perfect indistinguishability from §2.1) and corresponding
+theorem statements (e.g., Theorem 1).
+Thanks to this finer-grained state separation, we not only
+remove some of the burden of formally proving disjointness,
+but we are also able to prove more meaningful final results. For
+instance, in the PRF example, enforcing state separation for
+all intermediary packages would mean in particular requiring
+the adversary to have disjoint state from PRF1, which is just
+an intermediary game used within our proof. In SSProve such
+proof internals don’t leak into the final security statements.
+3.4 Package laws
+We formally proved the algebraic laws obeyed by packages
+as stipulated by Brzuska et al. [23]. Sequential composition
+is associative and parallel composition is commutative and
+associative, so for any packages P1, P2, P3:
+P1 ◦ (P2 ◦ P3) = (P1 ◦ P2) ◦ P3
+P1 ‖ P2 = P2 ‖ P1
+P1 ‖ (P2 ‖ P3) = (P1 ‖ P2) ‖ P3.
+We furthermore relate the two package operations with an
+interchange law stating
+(P1 ◦ P3) ‖ (P2 ◦ P4) = (P1 ‖ P2) ◦ (P3 ‖ P4).
+Commutativity of parallel composition only holds if the
+packages have indeed disjoint interfaces: export(P1) ∩
+export(P2) = ∅. The interchange law will only ask this of
+P3 and P4: export(P3) ∩ export(P4) = ∅.
+The identity package IDI behaves as an identity for sequen-
+tial composition when using the correct interface:
+IDexport(P ) ◦ P = P = P ◦ IDimport(P ).
+As we have hinted before, these laws do not require dis-
+jointness of state, because they are pretty syntactic equalities.
+In fact, in SSProve they hold with respect to the syntactic
+equality of Coq, without the need to define a separate notion
+of “code equality” [23].
+4 Probabilistic Relational Program Logic
+Some of the SSP proof steps can be carried out at a high-
+level of abstraction relying on the package formalism from §3.
+The justification of other steps like perfect indistinguishability
+requires, however, a finer, lower-level analysis. As already
+pointed out in §2.2, we can perform such analyses in a
+relational program logic, a deductive system in which it is
+possible to show that two pieces of code c0, c1 satisfy a certain
+relational specification, e.g. that they are equivalent.
+In §4.1 we present some of the elementary rules constituting
+our program logic. We then sketch a proof of Theorem 1, the
+link between the high-level reasoning based on the package
+laws to the low-level one based on our probabilistic relational
+program logic in §4.2.
+4.1 Selected rules
+Our logic exposes relational judgments of the form �
+{{{pre}}} c0 ∼ c1 {{{post}}}, for which a basic intuition is provided
+in §2.2. Formally, c0 and c1 denote probabilistic stateful
+code with return type A0 and A1 respectively, and the m0 :
+mem,m1 : mem ` pre : P is a proposition with free variables
+m0 and m1 denoting the initial state of the memory (before
+execution of the code). The postcondition m′0 : mem,m′1 :
+mem ` post : A0 × A1 → P is a predicate on the values
+returned by the executed code, which is parametrized by the
+variables m′0 and m′1 representing the final state of the memory
+(after execution). The code fragments appearing in a judgment
+are drawn from the free monad codeL,I of §3.1, and meet the
+further requirement that no oracle calls call o x k appear in
+them (exactly as in §3.2). The precondition pre is defined to be
+a relation between initial memories (for instance, m0 = m1).
+Similarly the postcondition post relates final memories and
+final results, intuitively obtained after the execution of ci on
+mi. We describe how to assign a formal semantics for such
+probabilistic judgments in §5.2. The semantics is based on the
+notion of probabilistic couplings, already adopted by Barthe
+et al. [14]. In the remainder of this subsection we describe a
+selection of our rules, displayed in Figure 13.
+9
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+c : code L A
+reflexivity
+� {{{m0 = m1}}} c ∼ c {{{(a0, a1). m′0 = m′1 ∧ a0 = a1}}}
+c0 : code L0 A0 c1 : code L1 A1
+κ0 : A0 → code L0 B0 κ1 : A1 → code L1 B1
+� {{{pre}}} c0 ∼ c1 {{{ψ}}}
+∀a0 a1. � {{{ψ(a0,m0)(a1,m1)}}} κ0(a0) ∼ κ1(a1) {{{post}}}
+seq
+� {{{pre}}} (a0 ← c0 ; κ0(a0)) ∼ (a1 ← c1 ; κ1(a1)) {{{post}}}
+c0 : code L A0 c1 : code L A1
+� {{{I}}} c0 ∼ c1 {{{(a0, a1). I ∧ post(a0, a1)}}}
+� {{{I}}} c1 ∼ c0 {{{(a1, a0). I ∧ post(a0, a1)}}}
+swap
+� {{{I}}} c0 ; c1 ∼ c1 ; c0 {{{(a0, a1). I ∧ post(a0, a1)}}}
+c0 c
+′
+0 : code L A0 c1 : code J A1
+� {{{pre}}} c0 ∼ c1 {{{post}}} Pr_code c0 = Pr_code c′0
+eqDistrL
+� {{{pre}}} c′0 ∼ c1 {{{post}}}
+c0 : code L A0 c1 : code L A1
+� {{{pre(m0,m1)}}} c0 ∼ c1 {{{(a0, a1). post(m′0, a0)(m′1, a1)}}}
+symmetry
+� {{{pre(m1,m0)}}} c1 ∼ c0 {{{(a0, a1). post(m′1, a1)(m′0, a0)}}}
+c0, c1 : N→ code L unit N : N
+∀i. � {{{I i}}} c0 i ∼ c1 i {{{I (i+ 1)}}}
+for-loop
+� {{{I 0}}} for_loopN c0 ∼ for_loopN c1 {{{I (N + 1)}}}
+c0, c1 : code L bool N : N
+� {{{I(true, true)}}} c0 ∼ c1 {{{(b0, b1). b0 = b1 ∧ I(b0, b1)}}}
+do-while
+� {{{I(true, true)}}} do_whileN c0 ∼
+do_whileN c1 {{{(b0, b1). b0 = b1 = false ∨ I(false, false)}}}
+|A|, |B| < ω f : A→ B bijective
+uniform
+� {{{pre}}} a <$ U(A) ∼ b <$ U(B) {{{(a, b). f(a) = b ∧ pre}}}
+b0, b1 : bool
+asrt
+� {{{b0 = b1}}} assert b0 ∼ assert b1 {{{b0 = true ∧ b1 = true}}}
+b : bool
+asrtL
+� {{{b = true}}} assert b ∼ return () {{{b = true}}}
+r : unit→ code L A v : A ` : L
+put-get
+� {{{m0 = m1}}} put ` v ; x← get `; return x ∼
+put ` v ; return v {{{(a0, a1). m′0 = m′1 ∧ a0 = a1}}}
+Figure 13. Selected probabilistic relational program logic rules
+The rule reflexivity relates the code c to itself when
+executed twice on identical initial memories.
+The rule seq relates two sequentially composed commands
+using bind by relating each of the sub-commands.
+The swap rule states that if a certain relation on memories
+I is invariant with respect to the execution of c0 and c1, then
+the order in which the commands are executed is not relevant.
+We used the rule swap in §2.3 to swap two independent
+samplings; in that case the invariant I consisted in the equality
+of memories.
+The rule eqDistrL allows us to replace c_0 by c_0’ if
+both codes have the same denotational semantics as defined
+by Pr_code, in the sense of §3.2.
+The symmetry rule simply states that the symmetric judg-
+ment holds if the arguments of the pre- and postconditions are
+swapped accordingly.
+The for-loop rule relates two executions of for-loops with
+the same number of iterations by maintaining a relational
+invariant through each step of the iteration. The do-while
+rule relates two bounded while loops with bodies c0 and c1.
+Every iteration preserves a relational invariant on memories I
+that depends on a pair of booleans, and the postcondition also
+stipulates that c0 and c1 return the same boolean, i.e. b0 = b1.
+This rule follows the pattern of the unbounded do-while rule
+defined for simple imperative programs by Maillard et al. [38].
+We believe that, with some additional work, their ideas could
+be used to also support unbounded loops in SSProve.
+The rule uniform relates sampling from uniform distribu-
+tions on finite sets A and B that are in a bijective correspon-
+dence.
+The asrt rule relates two assert commands, as long
+as “b0 = b1” holds before the commands, and guarantees
+“b0 = true ∧ b0 = true” afterwards. The asrtL rule is
+an asynchronous variant of asrt that specifies the behavior
+of assert, by relating it with return () when the boolean
+involved in the assert is true. Note that if a code frag-
+ment c0 is showed equivalent to a failure � {{{True}}} c0 ∼
+assert false {{{post}}}, c0 must necessarily contain a failure
+statement as well. Indeed the (sound) model of the logic
+at hand, devised in §5, extends a total correctness non-
+termination semantics: failures only relate to failures.
+Finally the put-get rule states that looking up the value at
+location ` after storing v at ` results in the value v.
+4.2 Proof sketch for Theorem 1
+If we denote by mem the type of memories, then a binary
+memory predicate
+m0 : mem,m1 : mem ` ψ : P
+holds on a pair of memories (h0, h1), written (h0, h1) � ψ
+if ψ [m0 7→ h0,m1 7→ h1] holds. Moreover, we say that such
+predicate is stable on L0 and L1 if for all h0, h1 such that
+(h0, h1) � ψ, we have that for all memory locations l, such
+that l 6∈ L0 and l 6∈ L1,
+1) h0[l] = h1[l].
+2) for all v, (h0[l 7→ v] , h1[l 7→ v]) � ψ.
+When we want to prove that two packages with the same
+interface are equivalent w.r.t. perfect indistinguishability, we
+will assume that we have a stable predicate on the locations of
+the packages, and moreover, that this predicate is an invariant
+on the different operations of the interface. This invariantness
+of the predicate is the reason why ψ appears both in the
+pre- and postcondition from Theorem 1. Notice that stable
+predicates do not condition the intermediate states of each
+procedure in the interface of Theorem 1, e.g. two related
+procedures could differ in their internal order of updates, as
+long as the final results of computations are related.
+Before giving the proof sketch for Theorem 1, we postulate
+a theorem that is also proved in Coq and relates the probabilis-
+tic relational program logic with the probabilistic semantics.
+10
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+Theorem 2. Given values a, b, if two pieces of code c0, c1 are
+such that
+� {{{ψ}}} c0 ∼ c1 {{{(r0, r1). φ(r0, r1)}}},
+ψ holds on the initial memories, and for all x, y we have that
+φ(x, y) =⇒ (x = a ⇐⇒ y = b) ,
+then we have
+Pr[a← c0] = Pr[b← c1] .
+We are now ready to sketch the proof for Theorem 1.
+Proof sketch of Theorem 1. We want to prove that for each
+adversary A we have α(G0, G1)(A) = 0, i.e.,
+|Pr[true← A ◦G0]− Pr[true← A ◦G1]| = 0.
+Using the hypothesis and that the predicate ψ is stable, we
+perform an induction on the code of the procedure A.run, to
+establish
+� {{{ψ}}} (A ◦G0).run() ∼
+(A ◦G1).run() {{{(b0, b1). b0 = b1 ∧ ψ}}}.
+As the induction proceeds, the rules from §4.1 are used to
+prove each case. We illustrate the get case, which after apply-
+ing the seq rule with respect to the continuation, and using
+the inductive hypothesis, reduces to the following judgment:
+� {{{ψ}}} get l ( λx. ret x) ∼
+get l ( λx. ret x) {{{(v0, v1). v0 = v1 ∧ ψ}}}
+As ψ is stable, we know that the result of get on the left and
+on the right will coincide (i.e. m0[l] = m1[l]), because l 6∈ L0
+and l 6∈ L1 as l is a location used in the adversary’s code, and
+we explicitly asked for the adversary memory mem(A) to be
+disjoint from mem(G0) and mem(G1). As the memory was not
+changed, the invariant ψ still holds on the final memory.
+As the predicate ψ holds on the initial memories, and the
+postcondition b0 = b1 ∧ ψ implies that b0 = true ⇐⇒ b1 =
+true, we know from Theorem 2 that
+Pr[true← A ◦G0] = Pr[true← A ◦G1] ,
+and therefore the advantage is 0.
+5 Semantic Model and Soundness of Rules
+We build a semantic model validating the rules of the effectful
+relational program logic from §4. The construction of the
+model follows the effect-modular framework [38], instantiat-
+ing it with probabilities, simple failures, and global state. We
+first give in §5.1 an overview of the framework of Maillard
+et al. [38]. We then explain how we apply it to (1) obtain
+modularly a model for a probabilistic relational program logic
+in §5.2 and (2) enrich it with state in §5.3.
+5.1 Relational effect observation
+The aforementioned framework builds upon a monadic repre-
+sentation of effects to provide sound semantics to a large class
+of relational program logics. As we shall see, this class notably
+contains logics for reasoning about cryptographic code: code
+that can manipulate state and sample randomly (see Figure 13).
+A generic relational program logic rL is a deductive system
+with a relational judgment � c0 ∼ c1 { w } asserting that pairs
+of effectful code fragments c0, c1 behave according to a given
+specification w. The exact shape of code and specifications
+appearing in such a judgment can vary depending on what
+programming language and logic are considered.
+The recipe laid out by Maillard et al. [38] stems from the
+realization that not only effectful code can be modeled using
+monads, but specifications can too, and we can build semantics
+for rL using a so-called relational effect observation in 3 steps:
+1) Model the effects involved in the considered left and right
+programs as monads M0 and M1.
+2) Turn the collection of relational specifications w into
+a relational specification monad (A0, A1)7→W (A0, A1)
+(RSM) ordered by entailment of specifications.
+3) Finally, find an appropriate relational effect observation
+θ mapping computations in M0A0 ×M1A1 to specifi-
+cations in W (A0, A1), preserving the monadic features
+present on both sides.
+Once a relational effect observation θ is specified we can
+define a semantic judgment for rL as follows :
+�θ c0 ∼ c1 { w } ⇐⇒ θ(c0, c1) ≤ w
+where ci :MiAi and w :W (A0, A1).
+RSM and effect observation. An RSM W maps a pair
+of types (A0, A1) to a preorder W (A0, A1) equipped with
+operations return and bind at each pair (A0, A1), (B0, B1):
+retW : A0 ×A1 →W (A0, A1)
+bindW :W (A0, A1)→(A0×A1→W (B0, B1))→W (B0, B1)
+Even though RSMs do not fit exactly in the usual presentation
+of a monad, they must satisfy laws similar to the usual identity
+and associativity monad laws. Moreover, the bind operation
+should be monotonic with respect to both of its arguments.
+A typical example of an RSM is the relational backward
+predicate transformer monad BP(A0, A1) := (A0 × A1 →
+P) → P, where P is the type of propositions. Intuitively
+a backward predicate transformer w : BP(A0, A1) maps a
+relational postcondition φ to a precondition sufficient to ensure
+φ on the result of the executions of code fragments c0, c1
+respecting w (i.e. for which �θ c0 ∼ c1 { w } for some θ).
+Every pre-/postcondition pair can systematically be translated
+into a single backward predicate transformer.
+A relational effect observation θ between two monads
+M0,M1 and a RSM W is a mapping
+θ(A0,A1) :M0A0 ×M1A1 →W (A0, A1)
+laxly preserving the return and bind operations:
+θ (retM0 a0, ret
+M1 a1) ≤ retW (a0, a1)
+θ (bindM0 m0 f0, bind
+M1 m1 f1) ≤
+bindW θ (m0,m1) (θ ◦ (f0, f1))
+The second inequation can be understood as a semantic
+formulation of the
+seq rule defined in Figure 13. The validity proof for this
+rule in our model relies directly on this inequation.
+11
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+In our Coq formalization RSMs and relational effect ob-
+servations are defined through the abstract algebraic structure
+of order-enriched relative monads and suitable morphism of
+such. The description given here can easily be derived from
+the abstract structure.
+5.2 Effect observation for probabilities and failures
+The technique above can be exploited to build a model for a
+probabilistic relational program logic. We model probabilistic
+code using a free monad over a probabilistic signature noted
+FPr, reusing codeL,I mentioned in §3.1, where we require that
+only sampling operations are performed. This code can be
+assigned a probabilistic semantics using the monad of subdis-
+tributions [5, 31], following the track of §3.2, but ignoring
+considerations around state. The semantics assignment can in
+fact be seen as a monad morphism FPr → SD.
+Specifications and effect observation. To model specifi-
+cations for probabilistic code we use the backward pred-
+icate transformer RSM given by BP(A0, A1) := (A0 ×
+A1→P)→P. The relational effect observation θPr is based
+on probabilistic couplings as mentioned in §4.1. A coupling
+d : coupling(d0, d1) of two subdistributions d0 : SD(A0) and
+d1 : SD(A1) is a subdistribution over A0 × A1 such that its
+left and right marginals correspond to d0 and d1 respectively.
+For ci:FPr(Ai) and di:SD(Ai) the associated subdistributions
+(i = 0, 1) we set:
+θA0A1
+Pr (c0, c1) = λ(φ : A0 ×A1 → P).
+∃d : coupling(d0, d1)∀a0a1. d(a0, a1)>0⇒ φ(a0, a1)
+If w : BP (A0, A1) is a translated (pre, post) pair, the
+obtained judgment holds if one can find a coupling d of d0, d1
+whose support validates post whenever pre is valid.
+Our probabilistic model �θPr
+c0 ∼ c1 { w } validates state-
+free accounts of several rules of Figure 13. First, since the
+subdistribution monad is commutative (sampling operations
+always commute), our semantics validates a state-free variant
+of the swap rule. Second, as it is often the case for an arbitrary
+effect observation, symmetric rules like uniform involving
+similar effectful operations on both sides (here a <$ U(A))
+are validated as well. Third, failing assertions at type A can
+be modeled using the zero subdistribution on A, and this
+interpretation allows us to validate the assert rule in our
+model. Fourth, a state-free variant of the reflexivity can be
+established by building, for any subdistribution s, a coupling
+d : coupling(s, s) of s with itself.
+5.3 Adding state
+In order to extend this first model to stateful code and state-
+aware specifications, we adapt to our setting the classical
+notion of state monad transformer [34]. A monad transformer
+maps monads M to monads TM and monad morphisms θ
+to monad morphisms T θ. Besides, it comes equipped with a
+family of liftings ∀M,M → TM . We generalize this, and
+build modularly an effect observation θPr,St on top of θPr:
+θ′Pr,St := StT θPr : StT(F
+2
+Pr)(A0, A1)→ StT(BP)(A0, A1)
+where (Si is the left or right set of global states):
+StT(F2
+Pr)(A0, A1) := S0×S1→FPr(A0×S0)×FPr(A1×S1),
+StT(BP)(A0, A1) := (A0×S0×A1×S1→P)→S0×S1→P.
+To comply with what was done for θPr in §5.2 we further
+extend θ′Pr,St by turning its domain into a product of free
+monads F2
+Pr,St := FPr,St×FPr,St over a stateful and probabilistic
+signature. The extension FPr,St, evoked in §3.2, is obtained
+from θ′Pr,St by precomposition: θPr,St := θ′Pr,St ◦ Pr_code.
+From an abstract point of view, the existence and correctness
+of the state monad transformer relies on a delicate piece of
+abstract category theory: we can obtain StTm for a j-relative
+monad m by simply pasting an adequate 2-cell (∗) induced
+by a j-relative adjunction that exists whenever I is cartesian,
+C is cartesian closed and j preserves cartesian products.
+I C
+I C
+m
+j
+S×− jS⇒−
+j
+ret
+(∗)
+Because this construction is modular, we can prove that the
+final model restricts exactly to the model devised in §5.2
+when considering code and specifications not using state.
+In other words there is an operation lifting every seman-
+tic judgment from the previous model θPr to the current
+model θPr,St. This modularity is moreover reflected in the
+way θPr,St(c0, c1) evaluates. A first pass converts stateful
+operations of c0, c1 and yields state-transforming probabilistic
+code. A second pass interprets the remaining sampling op-
+erations and yields state-transforming subdistributions. Lastly
+a third pass uses θPr and yields the expected specification
+θPr,St(c0, c1) : StT(BP)(A0, A1). Finally, θPr,St validates all of
+the rules of our relational program logic (including Figure 13).
+A substantial amount of work was required for the imple-
+mentation of our model in Coq. To establish the existence of
+the first layer θPr of the model, we developed a mathematical
+theory of couplings and of their interaction with probabilistic
+programs. This theory relies internally on the mathcomp-
+analysis library [1, 2], particularly on their formalization
+of real numbers, subdistributions and discrete integrals. The
+custom state transformer we develop for θPr,St is built upon the
+formalization of several non-standard categorical constructs in
+an order-enriched context: lax functors, lax natural transfor-
+mations, left relative adjunctions, lax morphisms between such
+adjunctions.
+The semantic framework of Maillard et al. [38] based
+on effect observations is relevant for various effectful con-
+texts. In our case, altough the obtained semantic judgment
+�θPr,St c0 ∼ c1 { w } can seem abstract at first, it can be shown
+logically equivalent to a more direct formulation, such as the
+one used by EasyCrypt (briefly reviewed in §6). While a direct
+ad-hoc definition of the model is comparatively simpler to
+implement, our categorical approach aims to provide more
+modularity. Indeed, as pointed out earlier, a model of a solely
+probabilistic program logic (§5.2) faithfully embeds into our
+12
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+final, stateful model, and we claim that the same configuration
+holds for a model of an assertion-only logic. Moreover, it
+should be possible to extend our stateful model with other
+effects using a similar range of algebraic techniques. However,
+as things stand now, incorporating new effects in our relational
+program logic and its associated semantics can only be done
+on a case by case basis.
+6 Related Work
+SSProve is the first verification framework for SSP, yet the
+formal verification of cryptographic proofs in different styles
+has been intensely investigated [6]. In this section we survey
+the closest related work in this space.
+CertiCrypt [10] is a foundational Coq framework for game-
+based crypto proofs. CertiCrypt does not support modular
+proofs and is no longer maintained, yet it is seminal work that
+has inspired many other tools in this space, such as EasyCrypt,
+FCF, etc. The logic we introduce in §4 is also inspired by the
+probabilistic relational Hoare logic at the core of CertiCrypt.
+FCF [44] is a more recent foundational Coq framework for
+crypto proofs that was used to verify the HMAC implementa-
+tions in OpenSSL [18] and mbedTLS [56]. In contrast to Cer-
+tiCrypt’s (and EasyCrypt’s) deep embedding of a probabilistic
+While language, FCF represents code with finite probabilities
+and non-termination using a monadic embedding, similar to
+the free monad we use for code in §3.1. The advantage of such
+an embedding is that code can be both easily manipulated as a
+syntactic object (e.g., to define package composition in §3.1)
+and easily lifted to a probability monad when needed (§3.2 and
+§5.2), all without leaving the internal language of Coq. This
+monadic representation of computational effects also paves the
+way towards a more modular treatment of programs exhibiting
+effects of different nature such as communications with an
+external process. We are not aware of any formalization of
+SSP on top of FCF, although it seems possible in principle.
+EasyCrypt [11, 13] is a proof assistant and verification tool
+specifically designed and built from scratch for game-based
+crypto proofs. This state-of-the-art tool has been used, for
+instance, to prove security for Amazon Web Services’ Key
+Management Service [3]. EasyCrypt’s good integration with
+automatic theorem provers (e.g., SMT solvers) is helpful for
+such large proofs, even if it does come at a cost in terms of
+trusted computing base.
+EasyCrypt also comes with an ML-style module system [7].
+EasyCrypt’s parameterized modules are, however, quite differ-
+ent from parameterized games in SSP (parameterized module
+instantiation in EasyCrypt has cloning semantics, i.e., each
+instance gets a separate copy of the module’s state). Moreover,
+EasyCrypt functors—which can to some extent be used to
+represent packages with imports—are not first class, so SSP-
+style laws cannot even be stated. While none of these is a
+showstopper, it leads to a quite different default style for
+writing modular proofs.
+In very recent work, Dupressoir et al. [28] show that with
+enough workarounds they can code up in EasyCrypt the SSP
+proof of Brzuska et al. [23] for the Cryptobox [19] KEM-
+DEM [27], and discuss the strengths and shortcomings of
+EasyCrypt for formalizing SSP-style proofs. Our KEM-DEM
+example has similar complexity, but moreover we focus on
+providing a general framework for SSP proofs, including
+definitions of SSP packages, their composition, and the cor-
+responding algebraic laws. SSProve also includes an assert
+operation, and a faithful representation of the SSP memory
+model, allowing to express SSP proofs more naturally.
+EasyUC [25] aims to address the lack of composability
+in game-based proofs by formalizing the Universal Com-
+posability (UC) framework [24] using EasyCrypt. EasyUC
+replaces the interactive Turing machines in UC with EasyCrypt
+modules. It was used to prove a secure messaging protocol
+composed of Diffie-Hellman and one-time pad. More recent
+work develops a DSL [26] on top of EasyUC for hiding
+away the boilerplate needed to mediate between procedure-
+based communication in EasyCrypt and co-routine-based com-
+munication in the UC framework. Barbosa et al. [7] add
+automatic complexity analysis to EasyCrypt and use it for
+another formalization of UC. SSP was in part inspired by
+the UC framework, but focuses on making game-based proofs
+more modular and scalable, without targeting simulation-
+based security or universal composability. A more precise
+comparison between SSP and UC proofs would be interesting.
+CryptHOL [16] is a foundational framework for game-
+based proofs that uses the theory of relational parametricity
+to achieve automation in the Isabelle/HOL proof assistant.
+It also makes use of the extensive mathematical libraries
+of Isabelle/HOL. More proof engineering and automation
+would be needed for SSProve to have a chance at matching
+CryptHOL’s formalization of ElGamal or PRF-based encryp-
+tion. CryptHOL [36] has been also used to formalize Con-
+structive Cryptography [39], another composable framework
+that inspired SSP, and the example of a one-time pad. While
+there is some similarity between their converters and SSP’s
+packages, to our knowledge a more precise comparison has
+not yet been undertaken.
+ILC [35] is a process calculus modeling some of the
+key ideas behind the UC framework, in particular its co-
+routine based communication mechanism, while completely
+abstracting away from interactive Turing machines. Their work
+has not yet been formalized in a proof assistant.
+IPDL [43] is another recent Coq framework for crypto
+proofs. Although their motivation is similar to SSP and their
+interaction sets are reminiscent of packages, the relation to
+other composable frameworks has not been worked out.
+Packages have been motivated by ML modules [48]. No
+specific theory for probabilistic programming languages with
+stateful modules seems to be available, but Sterling and
+Harper [52] provide a general module system. It would be
+interesting to specialize it to probabilistic stateful programs
+and compare it to packages.
+13
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+7 Future Work
+The high-level proofs done on paper in the miTLS project [20,
+21, 30] were the main inspiration for the SSP methodology
+and it would be an interesting challenge to scale SSProve
+to large machine-checked proofs in the future. This would
+for a start require more work on proof engineering and
+automation. The problem of verifying such large proofs all
+the way down to low-level efficient executable code is even
+more challenging, also given the extreme scale of a complete
+implementation for a protocol like TLS. Achieving this in
+Coq would probably require integrating with projects such as
+VST [4] or FiatCrypto [29].
+An alternative would be to port SSProve to F? [53], where
+at least functional correctness can be verified at that scale.
+Still many challenges would remain, including extending F?
+to probabilistic verification, internalizing F? modules, and ex-
+tending the SSP methodology to support type abstraction and
+procedures with specifications. In less ambitious recent work
+that is still unfinished, Kohbrok et al. [33] have implemented
+vanilla SSP packages in F? and attempted to automate state-
+separating proofs based on a library for partial setoids.
+In the shorter term, we plan to use our formalization of
+the KEM-DEM example from [23] to showcase the capacity
+of SSProve to combine high-level and low-level reasoning.
+KEM-DEM is more interesting than the PRF (§2.3) and
+ElGamal (§2.4) examples in several respects. KEM-DEM
+uses extensively high level SSP arguments, such as parallel
+composition, package identity, and interchange laws, which are
+not featured in the two examples of §2. Moreover, it also relies
+heavily on our probabilistic relational framework. While the
+PRF and ElGamal examples use a simple invariant (equality of
+heaps), KEM-DEM compares packages that work on different
+memory locations and, thus, some locations need to be ignored
+by the invariant. The KEM-DEM invariant also relates in a
+non-trivial way different locations of programs by making
+sure, for instance, that some stored value must correspond
+to the encryption of another stored value, with respect to a
+stored key. This has led us to develop tools for idiomatically
+reasoning about memory.
+We would also like to extend SSProve to extra side-effects
+such as non-termination and I/O and also to F?-style sub-
+effecting [53]. The effect-modular semantic model from §5
+should make this easier, and we hope to be able reuse the
+Interaction Trees framework [51, 55], and maybe also take
+inspiration from CryptHOL [16].
+Acknowledgments
+We are grateful to Arthur Azevedo de Amorim, Théo Laurent,
+Nikolaj Sidorenco, and Ramkumar Ramachandra for their
+technical support and for participating in stimulating discus-
+sions, and to the anonymous reviewers for their valuable feed-
+back. This work was in part supported by the European Re-
+search Council under ERC Starting Grant SECOMP (715753),
+by AFOSR grant Homotopy type theory and probabilistic com-
+putation (12595060), by the Concordium Blockchain Research
+Center at Aarhus University, and by Nomadic Labs via a
+grant on the Evolution, Semantics, and Engineering of the
+F* Verification System. Antoine Van Muylder holds a PhD
+Fellowship from the Research Foundation – Flanders (FWO).
+References
+[1] R. Affeldt, C. Cohen, M. Kerjean, A. Mahboubi,
+D. Rouhling, and K. Sakaguchi. Competing inheritance
+paths in dependent type theory: a case study in functional
+analysis. In IJCAR 2020 - International Joint Conference
+on Automated Reasoning, 2020.
+[2] R. Affeldt, C. Cohen, M. Kerjean, A. Mahboubi,
+D. Rouhling, K. Sakaguchi, and P.-Y. Strub. mathcomp-
+analysis. Analysis library compatible with Mathematical
+Components, 2021.
+[3] J. B. Almeida, M. Barbosa, G. Barthe, M. Campagna,
+E. Cohen, B. Grégoire, V. Pereira, B. Portela, P. Strub,
+and S. Tasiran. A machine-checked proof of security for
+AWS key management service. In CCS 2019. 2019.
+[4] A. W. Appel. Verified software toolchain - (invited talk).
+In ESOP. 2011.
+[5] P. Audebaud and C. Paulin-Mohring. Proofs of random-
+ized algorithms in Coq. In Mathematics of Program
+Construction. 2006.
+[6] M. Barbosa, G. Barthe, K. Bhargavan, B. Blanchet,
+C. Cremers, K. Liao, and B. Parno. Sok: Computer-
+aided cryptography. IACR Cryptol. ePrint Arch., 2019,
+2019.
+[7] M. Barbosa, G. Barthe, B. Grégoire, A. Koutsos, and P.-
+Y. Strub. Mechanized proofs of adversarial complexity
+and application to universal composability. Cryptology
+ePrint Archive, Report 2021/156, 2021.
+[8] R. Barnes, B. Beurdouche, J. Millican, E. Omara,
+K. Cohn-Gordon, and R. Robert. The messaging layer
+security (MLS) protocol. IETF Draft, 2020.
+[9] G. Barthe, B. Grégoire, and S. Zanella-Béguelin. Formal
+certification of code-based cryptographic proofs. POPL,
+2009.
+[10] G. Barthe, B. Grégoire, and S. Zanella Béguelin. Formal
+certification of code-based cryptographic proofs. In
+POPL, 2009.
+[11] G. Barthe, B. Grégoire, S. Heraud, and S. Zanella
+Béguelin. Computer-aided security proofs for the work-
+ing cryptographer. In CRYPTO. 2011.
+[12] G. Barthe, J. M. Crespo, B. Grégoire, C. Kunz,
+Y. Lakhnech, B. Schmidt, and S. Zanella Béguelin. Fully
+automated analysis of padding-based encryption in the
+computational model. In CCS’13. 2013.
+[13] G. Barthe, F. Dupressoir, B. Grégoire, C. Kunz,
+B. Schmidt, and P. Strub. EasyCrypt: A tutorial. In Foun-
+dations of Security Analysis and Design VII - FOSAD
+2012/2013 Tutorial Lectures. 2013.
+[14] G. Barthe, T. Espitau, B. Grégoire, J. Hsu, L. Stefanesco,
+and P. Strub. Relational reasoning via probabilistic
+coupling. In LPAR-20, 2015.
+[15] G. Barthe, B. Grégoire, and B. Schmidt. Automated
+proofs of pairing-based cryptography. In CCS’15. 2015.
+14
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply. 
+[16] D. A. Basin, A. Lochbihler, and S. R. Sefidgar.
+CryptHOL: Game-based proofs in higher-order logic. J.
+Cryptol., 33(2), 2020.
+[17] M. Bellare and P. Rogaway. Code-based game-playing
+proofs and the security of triple encryption. IACR
+Cryptol. ePrint Arch., page 331, 2004.
+[18] L. Beringer, A. Petcher, K. Q. Ye, and A. W. Appel.
+Verified correctness and security of OpenSSL HMAC.
+In 24th USENIX Security Symposium. 2015.
+[19] D. J. Bernstein. Cryptography in NaCl, 2009.
+[20] K. Bhargavan, C. Fournet, M. Kohlweiss, A. Pironti,
+P. Strub, and S. Zanella Béguelin. Proving the TLS
+handshake secure (as it is). In CRYPTO’14. 2014.
+[21] K. Bhargavan, A. Delignat-Lavaud, C. Fournet,
+M. Kohlweiss, J. Pan, J. Protzenko, A. Rastogi,
+N. Swamy, S. Zanella Béguelin, and J. K. Zinzindohoue.
+Implementing and proving the TLS 1.3 record layer.
+IEEE S&P, 2017.
+[22] B. Blanchet. A computationally sound mechanized
+prover for security protocols. In IEEE S&P. 2006.
+[23] C. Brzuska, A. Delignat-Lavaud, C. Fournet, K. Kohbrok,
+and M. Kohlweiss. State separation for code-based game-
+playing proofs. In ASIACRYPT. 2018.
+[24] R. Canetti. Universally composable security. J. ACM, 67
+(5), 2020.
+[25] R. Canetti, A. Stoughton, and M. Varia. EasyUC: Using
+EasyCrypt to mechanize proofs of universally compos-
+able security. In CSF. 2019.
+[26] R. Canetti, A. Kfoury, A. Stoughton, M. Varia,
+G. Tarakaram, and T. Petrovic. UC Domain Specific
+Language. unpublished, 2021.
+[27] R. Cramer and V. Shoup. Design and analysis of practical
+public-key encryption schemes secure against adaptive
+chosen ciphertext attack. SIAM J. Comput., 33(1), 2003.
+[28] F. Dupressoir, K. Kohbrok, and S. Oechsner. Bringing
+state-separating proofs to EasyCrypt - a security proof for
+Cryptobox. Cryptology ePrint Archive, Report 2021/326,
+2021.
+[29] A. Erbsen, J. Philipoom, J. Gross, R. Sloan, and A. Chli-
+pala. Simple high-level code for cryptographic arithmetic
+- with proofs, without compromises. IEEE S&P, 2019.
+[30] C. Fournet, M. Kohlweiss, and P. Strub. Modular code-
+based cryptographic verification. CCS. 2011.
+[31] M. Giry. A categorical approach to probability theory.
+Categorical Aspects of Topology and Analysis. 1982.
+[32] S. Halevi. A plausible approach to computer-aided
+cryptographic proofs. IACR Cryptol. ePrint Arch., page
+181, 2005.
+[33] K. Kohbrok, M. Kohlweiss, T. Ramananandro, and
+N. Swamy. Relational F* for state separating crypto-
+graphic proofs. F* wiki article, 2020.
+[34] S. Liang, P. Hudak, and M. P. Jones. Monad transformers
+and modular interpreters. POPL. 1995.
+[35] K. Liao, M. A. Hammer, and A. Miller. ILC: a calculus
+for composable, computational cryptography. In PLDI.
+2019.
+[36] A. Lochbihler, S. R. Sefidgar, D. A. Basin, and
+U. Maurer. Formalizing constructive cryptography using
+CryptHOL. In CSF. 2019.
+[37] A. Mahboubi and E. Tassi. Mathematical components.
+Online book, 2021.
+[38] K. Maillard, C. Hriţcu, E. Rivas, and A. V. Muylder. The
+next 700 relational program logics. Proc. ACM Program.
+Lang., 4(POPL), 2020.
+[39] U. Maurer. Constructive cryptography - A new paradigm
+for security definitions and proofs. In Theory of Security
+and Applications - Joint Workshop, TOSCA’11. 2011.
+[40] U. Maurer and R. Renner. Abstract cryptography. In
+Innovations in Computer Science - ICS’11. 2011.
+[41] R. Milner, J. Parrow, and D. Walker. A calculus of mobile
+processes, I. Inf. Comput., 100(1), 1992.
+[42] E. Moggi. Computational lambda-calculus and monads.
+LICS. 1989.
+[43] G. Morrisett, E. Shi, K. Sojakova, X. Fan, and J. Gancher.
+IPDL: A simple framework for formally verifying dis-
+tributed cryptographic protocols. Cryptology ePrint
+Archive, Report 2021/147, 2021.
+[44] A. Petcher and G. Morrisett. The foundational cryptog-
+raphy framework. POST . 2015.
+[45] G. D. Plotkin and J. Power. Algebraic operations and
+generic effects. Applied Categorical Structures, 11(1),
+2003.
+[46] G. D. Plotkin and M. Pretnar. Handlers of algebraic
+effects. ESOP. 2009.
+[47] E. Rescorla. The transport layer security (TLS) protocol
+version 1.3. IETF RFC 5246, 2018.
+[48] A. Rossberg, C. V. Russo, and D. Dreyer. F-ing modules.
+J. Funct. Program., 24(5), 2014.
+[49] M. Rosulek. The Joy of Cryptography. Online textbook,
+2021.
+[50] V. Shoup. Sequences of games: a tool for taming
+complexity in security proofs. IACR Cryptol. ePrint
+Arch., page 332, 2004.
+[51] L. Silver and S. Zdancewic. Dijkstra monads forever:
+termination-sensitive specifications for interaction trees.
+Proc. ACM Program. Lang., 5(POPL), 2021.
+[52] J. Sterling and R. Harper. Logical relations as
+types: Proof-relevant parametricity for program modules.
+CoRR, abs/2010.08599, 2020.
+[53] N. Swamy, C. Hriţcu, C. Keller, A. Rastogi, A. Delignat-
+Lavaud, S. Forest, K. Bhargavan, C. Fournet, P.-Y.
+Strub, M. Kohlweiss, J.-K. Zinzindohoué, and S. Zanella-
+Béguelin. Dependent types and multi-monadic effects in
+F*. POPL. 2016.
+[54] P. Wadler. Comprehending monads. In LFP’90. 1990.
+[55] L. Xia, Y. Zakowski, P. He, C. Hur, G. Malecha, B. C.
+Pierce, and S. Zdancewic. Interaction trees: representing
+recursive and impure programs in Coq. Proc. ACM
+Program. Lang., 4(POPL), 2020.
+[56] K. Q. Ye, M. Green, N. Sanguansin, L. Beringer,
+A. Petcher, and A. W. Appel. Verified correctness and
+security of mbedTLS HMAC-DRBG. In CCS’17. 2017.
+15
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:17:03 UTC from IEEE Xplore.  Restrictions apply.

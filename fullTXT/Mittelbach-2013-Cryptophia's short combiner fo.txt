@@ -1,0 +1,955 @@
+LNCS 7954 - Cryptophia’s Short Combiner for Collision-Resistant Hash Functions
+Cryptophia’s Short Combiner
+for Collision-Resistant Hash Functions
+Arno Mittelbach
+Darmstadt University of Technology, Germany
+www.cryptoplexity.de,
+arno.mittelbach@cased.de
+Abstract. A combiner for collision-resistant hash functions takes two
+functions as input and implements a hash function with the guarantee
+that it is collision-resistant if one of the functions is. It has been shown
+that such a combiner cannot have short output (Pietrzak, Crypto 2008);
+that is, its output length is lower bounded by roughly 2n if the ingoing
+functions output n-bit hash values. In this paper, we present two novel
+definitions for hash function combiners that allow to bypass the lower
+bound: the first is an extended semi-black-box definition. The second
+is a new game-based, fully black-box definition which allows to better
+analyze combiners in idealized settings such as the random-oracle model
+or indifferentiability framework (Maurer, Renner, and Holenstein, TCC
+2004). We then present a new combiner which is robust for pseudoran-
+dom functions (in the traditional sense), which does not increase the
+output length of its underlying functions and which is collision-resistant
+in the indifferentiability setting. Our combiner is particularly relevant
+in practical scenarios, where security proofs are often given in idealized
+models, and our combiner, in the same idealized model, yields strong
+security guarantees while remaining short.
+Keywords: hash functions, combiners, collision resistance, multi-
+property combiner.
+1 Introduction
+A Story. Once upon a time little Cryptess was walking through her favorite
+forest. As usual she was thinking about a hard problem and thus did not pay
+much attention on where she was going. It thus came that she suddenly found
+herself on a beautiful glade that she had never seen before. In its center she could
+make out what seemed to be a fairy flapping her wings in a welcoming pattern.
+Little Cryptess slowly approached the fairy and politely asked “Hello little one,
+who are you?” The fairy responded “I am the fairy Cryptophia and since you
+have found my magical glade, I grant you one wish.” Little Cryptess did not take
+long to come up with a wish: “Can you build me a hash-function combiner that
+while being robust for collision resistance does not increase the output length of
+the hash functions?” “Of course I can”, said the fairy. “Here it is. But beware,
+M. Jacobson et al. (Eds.): ACNS 2013, LNCS 7954, pp. 136–153, 2013.
+c© Springer-Verlag Berlin Heidelberg 2013
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 137
+it is a magical combiner. Given access to two hash functions H1 and H2 and a
+message M it returns H1(M) if and only if H1 is ‘more’ collision-resistant than
+H2. Else it returns H2(M)”. Cryptess thought for a moment and then replied
+“I am sorry Cryptohia, but your combiner is utterly useless. It is not robust for
+collision resistance after all. Assume I give it access to two uniformly random
+functions R1 and R2 and I am given an oracle that computes collisions for the
+combiner. As the oracle will only provide collisions for R1 no efficient reduction
+can compute collisions for R2. This, as you should know, violates the definition
+of robustness and thus your combiner is useless to me.” With this she turned
+around and went home.
+Hash-Function Combiners. Hash functions are an important cryptographic prim-
+itive but, as with many primitives, efficient constructions used in practice are
+based on heuristics [40,34,8]. As history has shown, with time, it is not unlikely
+that cryptanalysists find plausible attacks [45,43,42,44,19,3,14] and it is thus a
+natural question to ask whether we can hedge against the failure of an imple-
+mented hash function.
+A hash-function combiner is a construction which, given access to two or
+more hash functions, itself implements a hash function that, however, comes
+with certain guarantees. A combiner is called robust for some property π if it
+guarantees to satisfy property π provided that sufficiently many input functions
+do. The simplest version (and the one usually used in practice) is a combiner
+which takes two hash functions as input and hedges against the failure of one of
+them, i.e., it obeys π if either of the input functions does. This will also be the
+variant that we examine more closely in this paper. A practical example of the
+application of hash-function combiners are the original versions of the TLS and
+SSL protocols [24,20].
+Assume CH1,H2 is a hash-function combiner given access to two hash functions
+H1 and H2, then robustness for property π is usually defined via a reductionist
+approach. That is, the combiner is called robust for π if there exists a reduction
+P such that if P is given access to any (breaking-)oracle B that breaks π on the
+combiner with non-negligible probability, then PB,H1,H2 must in turn break π
+on both input hash functions (H1 and H2) with non-negligible probability.
+There are two folklore combiners for hash functions. The concatenation com-
+biner CH1,H2
+‖ (M) := H1(M)||H2(M) is, amongst others, robust for collision
+resistance (it should be difficult to find two distinct messages that hash to
+the same value). It is easy to see that a collision on the combiner directly
+yields collisions for both input functions. In other words, for a message pair
+(M,M ′) with M �= M ′ it holds that CH1,H2(M) = CH1,H2(M ′) if and only if
+H1(M) = H1(M
+′) and H2(M) = H2(M
+′). The concatenation combiner is, how-
+ever, not robust for pseudorandomness (no efficient distinguisher that is only
+given black-box access should be able to distinguish between the hash function
+and a randomly chosen function with the same domain and codomain). On the
+other hand, the exclusive-or combiner CH1,H2
+⊕ (M) := H1(M) ⊕ H2(M) which
+computes the bitwise exclusive-or on the outputs of the two hash functions is ro-
+bust for pseudorandomness if instantiated with two independent hash functions.
+138 A. Mittelbach
+However, it is not robust for collision resistance, nor even collision-resistant pre-
+serving. Hash-function combiners that are robust for multiple properties, in par-
+ticular for collision resistance and pseudorandomness together, have been studied
+by Fischlin et al. [21,22].
+Short Combiners. If we assume that H1 and H2 take on values in {0, 1}n then
+the concatenation combiner doubles the output length, whereas the exclusive-or
+combiner does not. Furthermore, it is a common property that all combiners
+robust for collision resistance share: their output length is in the order of the
+sum of the output lengths of the input hash functions.
+This observation lead to the question whether short hash-function combiners
+(combiners with an output length significantly shorter than that of the concate-
+nation combiner) that are robust for collision resistance exist [12]. It has been
+shown that this is not the case, i.e., there exists a lower bound on the output
+length for combiners that are robust for collision resistance as well as for related
+properties [12,13,36,37,30] where the lower bound is roughly the output length
+achieved by the concatenation combiner.1
+Cryptophia’s Magical Combiner. Cryptess rejected Cryptophia’s magical com-
+biner on the grounds that it is not robust for collision resistance. Indeed, she
+was right, as the combiner only evaluates one of the two functions a collision
+on the combiner cannot possibly yield information about collisions for the other
+function. On the other hand, the robustness definition is usually only given
+for black-box combiners, i.e., combiners that only get black-box access to the
+hash functions; Cryptophia’s magical combiner is, however, clearly not black-
+box. Nevertheless, what this shows is that the robustness definition requires the
+combiner, in some sense, to be stronger than both input hash functions which
+in turn leads to the lower bound on the output-length of combiners for collision
+resistance. This, however, goes against the intuition of what a combiner should
+capture: it should be at least as strong as the stronger of the two functions, but
+not necessarily stronger.
+Contributions and Outline. In this paper we examine the current definition of
+robust combiners and the reason why it is necessary for combiners that are
+robust for collision resistance to satisfy a lower bound on their output-length
+(Section 3). In Section 3.2, we extend the definition (in a semi black-box way) in
+order to better capture the intuition: a combiner does only need to be as strong
+as the strongest input function and not necessarily stronger. We then present
+a new game-based definition for combiners (Section 3.3) which also allows to
+bypass the lower bounds while still being fully black-box. This second notion
+1 A recent framework by Baecher et al. [4] allows to precisely characterize reductions
+(and thus separation results) in terms of the level of black-boxness used by the con-
+struction and the reduction. In terms of the impossibility result for short combiners
+it can be shown that the ruled-out reductions are of the type NNN meaning that it
+holds even if the construction or the accompanying security reduction were using
+non-black-box techniques. See the full-version of this work [31] for further details.
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 139
+is tailored to analyze combiners in idealized models such as the random oracle
+model (ROM; [7]) or the indifferentiability framework introduced by Maurer,
+Renner and Holenstein [28,17] giving guarantees of the form: the combiner has
+property π if one of the input functions is ideal even if the other function is
+completely under the control of the adversary and possibly even based on the
+first function. We go on to present a new construction for a combiner which we
+analyze in this new model (Section 4). The combiner does not increase the output
+length of its ingoing functions while guaranteeing collision resistance (and related
+properties) provided that one of the two input functions is indifferentiable from
+a random oracle (assuming ideal compression functions). Finally, we show that
+our combiner is robust for pseudorandomness under the “traditional” definition
+of robustness without needing to assume independence (as is the case for the
+“standard” xor-combiner). This yields the first multi-property combiner with
+short output length, which is robust for pseudorandomness and which gives
+additional guarantees about collision resistance and related properties such as
+pre-image resistance or target collision resistance.
+2 Preliminaries
+Lower-case letters, such as n ∈ N, usually represent natural numbers and by 1n
+we denote the unary representation of n. Upper-case letters in standard typeface,
+like M , stand for bit-strings which we usually call messages. By {0, 1}n we
+denote the set of all bit-strings M of length |M | = n, while {0, 1}∗ denotes
+the set of all bit-strings. For bit-strings X,Y ∈ {0, 1}∗ we denote with X ||Y
+their concatenation and with X ⊕ Y the bit-wise exclusive-or (XOR) operation.
+If X is a set then by M ← X we mean that M is chosen uniformly from X .
+If X is a distribution then M ← X denotes that M is chosen according to the
+distribution.
+If A is an algorithm (often also called adversary) that has black-box access
+to one or more oracles O1, ...,Oz we denote this by adding them in superscript,
+i.e., AO1,...,Oz . By X ← A(M) we denote that algorithm A on input M outputs
+value X . Throughout this paper we assume 1n to be a security parameter and we
+call an algorithm efficient if it runs in polynomial time in the security parameter.
+If X is a random variable, Pr[X = x] denotes the probability that X takes
+on value x. By H∞ (X) we denote the min-entropy of variable X , defined as
+H∞ (X) := min
+x∈Supp(X)
+log(1/Pr[X = x])
+where the probability is over X . The (average) conditional min-entropy of ran-
+dom variable X conditioned on variable Z is defined (in the style of [1]) as
+H̃∞ (X |Z) := min
+A
+log(1/Pr[X = A(Z)])
+where the probability is over X and Z and the random coins of A (which has
+no efficiency bounds).
+140 A. Mittelbach
+2.1 Hash Functions and their Properties
+Formally, a hash functionH is defined as a family of functions together with a key
+generation algorithm HKGen that picks one of the functions to be used. That
+is, a hash function (family) is a pair of efficient algorithms H = (HKGen, H)
+where HKGen(1n) is a probabilistic algorithm that takes as input the security
+parameter 1n and outputs a key k, while deterministic algorithm Hk(M) :=
+H(k,M) takes a key k and message M ∈ {0, 1}∗ as input and outputs a hash
+value Hk(M) ∈ {0, 1}n. Note that we will drop the subscript and simply write
+H(M) whenever the key is clear from context.
+Collision Resistance and Related Properties. A hash function H is called
+collision-resistant (cr) if no efficient adversary can find two distinct messages
+(M,M ′) such that Hk(M) = Hk(M
+′). More formally, a hash function is called
+collision-resistant, if for any efficient adversary A there exists a negligible func-
+tion negl such that:
+Advcr
+H(A) := Pr
+[
+k← HKGen(1n);
+(M,M ′)← A(k) :
+M �= M ′ ∧
+Hk(M) = Hk(M
+′)
+]
+≤ negl(n)
+where the probability is over the choice of key and A’s internal coin tosses.
+Two closely related properties are second pre-image resistance (spr) and target
+collision resistance (tcr) (see [41] for an overview of several variants of these
+notions). Here the adversary’s task is not to find an arbitrary collision but a
+specific one, in case of second pre-image resistance the target message is sampled
+according to a distributionM whereas for target collision resistance the target
+message is specified by a first-round adversary.2
+Finally, we consider another variant of second pre-image resistance called pre-
+image resistance (also often referred to as one-wayness). In the pre-image resis-
+tance experiment a message M is again chosen according to some distribution
+M. Given only the resulting hash value Hk(M) (and not message M) and key
+k, the adversary’s task is to find a corresponding pre-image M ′, i.e., a message
+M ′ such that Hk(M) = Hk(M
+′).
+Pseudorandomness and Message Authentication Codes. Besides colli-
+sion resistance and its variants, hash functions are often assumed to be pseu-
+dorandom (or a pseudorandom function; prf) or secure message authentication
+codes. Here the adversary is not given access to the hash function’s key but only
+to a black-box implementing the hash function, i.e., the key is kept private at all
+times. A hash function H is called pseudorandom if no efficient adversary can
+tell whether it is given black-box access to the hash function H or to a random
+2 Note that target collision resistant hash functions are also known as universal one-
+way hash functions [33].
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 141
+function f with the same domain and range. More formally, for any efficient
+adversary A there exists a negligible function negl such that:
+Advprf
+A (A) := ∣∣Prk [AHk(1n) = 1
+]− Prf
+[Af (1n) = 1
+]∣∣ ≤ negl(n)
+The probability is over the adversary’s random coins and the choice of key in
+the first part and the choice of function in the second, respectively.
+A hash function is called a secure message authentication code (mac) if no
+adversary given only black-box access to a hash oracle can find a message and
+corresponding hash value (without querying the oracle on the corresponding
+message) with noticeable probability. The probability is over the choice of key k
+and the adversary’s internal coin tosses.
+Random Oracles and Indifferentiability. Many security proofs are given in
+the random oracle model (ROM; [7]) where hash functions are modeled as ideal,
+i.e., as truly random functions (e.g., [16,5,6,11]). While random oracles have no
+structure at all hash functions, on the other hand, are usually built from a fixed-
+length compression function and some iteration scheme defining how arbitrarily
+long messages are hashed [29,18,40,27,8].
+The indifferentiability notion introduced by Maurer, Renner and Holenstein
+in [28] can be seen as a generalization of indistinguishability that allows to better
+analyze constructions—such as hash functions—where internal state is publicly
+available. Coron et al. [17] applied the notion to hash functions and proved sev-
+eral hash constructions to be indifferentiable from a random oracle. The com-
+position theorem for indifferentiability allows to reduce the security of a scheme
+in the random oracle model to the security of the compression function, in case
+the random oracle is implemented by a hash construction that is indifferentiable
+from a random oracle. As a compression function is a much more graspable object
+than a random oracle, indifferentiability has become an accepted design crite-
+rion for hash functions; indeed, many candidates to the SHA-3 competition [35],
+including the winner Keccak [8] enjoy proofs of indifferentiability [15,2,32,9,10].
+3 A Novel Definition of Combiners for Hash Functions
+3.1 Black-Box Combiners for Hash Functions
+Combiners for hash functions are traditionally defined in the following fashion
+(see, for example, [12,37] for a version of this definition for collision resistance):
+a hash-function combiner robust for property π (e.g., collision resistance) is a
+construction that given black-box access to two hash functions H1 andH2 imple-
+ments a hash function which obeys property π as long asH1 orH2 obeys property
+π. Formally, a hash-function combiner C := (CKGen, C,P), robust for property
+π, is a triple of efficient algorithms, where CKGen(1n,HKGen1,HKGen2)
+generates keys for hash functions H1 and H2 and possibly some additional key
+kC for the combiner. Algorithm C is an efficient deterministic algorithm that on
+input keys kH1 , kH2 , kC and M ∈ {0, 1}∗ returns a hash value CkH1 ,kH2 ,kC
+(M)
+142 A. Mittelbach
+in target domain {0, 1}n. We will usually simply write CH1,H2(M). Algorithm
+P is a security reduction, i.e., P is a probabilistic polynomial-time oracle Turing
+machine that given access to a (breaking-)oracle B that breaks property π on
+the combiner (for example, samples collisions) breaks property π on both hash
+functions H1 and H2. Note that B may be inefficient.
+The classical combiner for collision resistance (and related properties) is the
+concatenation combiner defined as
+CH1,H2
+|| (M) := H1(M)||H2(M) .
+Obviously, any collision on the combiner C|| directly yields collisions for hash
+functions H1 and H2. The same applies for second pre-image resistance, target
+collision resistance and pre-image resistance. This combiner is, however, trivially
+not robust for pseudorandomness. The traditional combiner for pseudorandom-
+ness is the exclusive-or combiner
+CH1,H2
+⊕ (M) := H1(M)⊕H2(M)
+although one has to make the additional assumption that the two functions are
+independent. Under this assumption the combiner is robust for pseudorandom-
+ness, message authentication codes and indifferentiability [23,26]. Without this
+additional assumption it is, however, not even pseudorandomness preserving.
+Take two (keyed) random oracles H1, H2 : {0, 1}∗ → {0, 1}n where H2 is defined
+as H2 := H1⊕1n. Individually, these two functions are information-theoretically
+indistinguishable from random functions. The XOR-combiner would, however,
+implement the constant 1n-function. The exclusive-or combiner is also not ro-
+bust for collision resistance, even assuming independent functions, as a collision
+on the combiner does not require collisions under both input functions.
+Short Combiners for Collision Resistance. A crucial difference between
+the two classical combiners (apart from being robust for different properties) is
+that the concatenation combiner doubles the output length, i.e., if the two input
+hash functions have range {0, 1}n, then the concatenation combiner outputs
+hash values in {0, 1}2n while the exclusive-or combiner only outputs bit-strings
+of length n. A natural question to ask is: can we do better? That is, does a
+secure combiner for collision resistance, which has a significantly shorter output
+length than the concatenation combiner, exist? This question was first posed by
+Boneh and Boyen in [12] and has since been answered negatively [12,13,36,37]:
+combiners, robust for collision resistance, with significantly shorter output length
+than the concatenation combiner do not exist. Recently, a similar result was
+proved for second pre-image resistance, target collision resistance and pre-image
+resistance [30].
+Let us quickly sketch the proof idea for collision-resistance. Assume we have a
+combiner for two hash functions with range {0, 1}n. If the combiner compresses
+its output to below 2n bits, then by the pigeonhole principle, there must exist
+collisions that result from compression rather than from collisions on the origi-
+nal hash functions. This allows to show the existence of an adversary which only
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 143
+samples such collisions that result from compression (note that the breaking
+oracle does not need to be efficient and can, thus, search for such a collision).
+Naturally, these collisions do not help any security reduction P in finding colli-
+sions on the input hash functions. For example, assume the input hash functions
+are random oracles: then, a collision on the combiner which solely results from
+compression does not provide any help in finding a collision for one of the random
+oracles. This allows to show that no security reduction can exist if the combiner
+compresses. Hence, combiners with short output-length do not exist.
+3.2 Extending the Traditional Definition
+In the introduction we saw that Cryptophia’s magical combiner is not robust
+for collision resistance under the traditional definition of robustness. In the fol-
+lowing we extend the traditional definition of combiners for collision-resistant
+hash functions such that it also captures the “magical” combiner. To this end,
+we need to relax the requirements on the security reduction P while ensuring
+that, in doing so, we won’t label any insecure combiners “secure”. The idea is
+to call a combiner robust for some property π if the advantage of any efficient
+adversary against the combiner is upper-bounded by the maximal advantage of
+any efficient adversary against any of the two input hash functions. That is, the
+combiner needs to be at least as strong as the better of the two functions, but
+not necessarily stronger.
+To formalize the idea, we need a notion of the maximum advantage of any
+adversary against some property π.
+Definition 1. Let t ∈ N be a natural number and n be a security parameter.
+The maximum t-advantage AdvMaxt
+π against property π on hash function H is
+defined as the maximum advantage of any adversary running in time t against
+property π on hash function H:
+AdvMaxt
+π(H, 1n) := max
+A
+AdvπA(H, 1n) s.t. A runs in time t
+We now present an extension to the current black-box definition of robust com-
+biners for hash functions. We extend the original definition such that all robust
+combiners remain robust under the new definition but we relax the requirements
+on the security reduction such that the combiner does not need to be stronger
+than any of the input functions.
+Definition 2 (extension). Let n be a security parameter. Let C := (CKGen, C)
+be a combiner for hash functions H1 and H2 as defined earlier. Let π be a prop-
+erty on hash functions. We say C is a robust combiner for property π if C is
+robust under the original definition, or if for all t ∈ N:
+AdvMaxt
+π(C, 1n) ≤ min
+(
+AdvMaxt
+π(H1, 1
+n),AdvMaxt
+π(H2, 1
+n)
+)
+Note that any combiner that is robust for some property π under the traditional
+definition is also robust under our new definition. The introduced loophole, how-
+ever, allows a combiner to be robust even if no security reduction P exists. In this
+144 A. Mittelbach
+case, the combiner must guarantee that the advantage for any adversary running
+in time t against property π on either H1 or H2 denotes an upper-bound on the
+advantage of any adversary running in time t against the combiner.
+Discussion. The extended definition captures the security of the “magical” (non
+black-box) combiner. However, being a semi-black-box notion, it seems difficult
+to design an actual (non-magical) combiner exploiting the loophole offered by
+this notion. In the following section we build upon the ideas developed so far and
+present a fully black-box model which also allows to circumvent the lower bound
+on the output length. For this, we strengthen the assumption on the “input
+functions” requesting that one of the functions is ideal. Knowing that one of the
+functions is ideal then allows us to model that the combiner should be as strong
+as the ideal function, while it can “ignore” the second function.
+3.3 Secure Combiners in Idealized Models
+In this section we use a different and more practical approach to bypass the lower
+bound. We present a novel game-based security notion for black-box combiners
+that is tailored to be used in the idealized random oracle setting. Being black-
+box makes it easy to design combiners for this new notion and assuming, to a
+certain extend, idealized functions allows us to bypass the lower bound. In short,
+a combiner proven secure in our new notion provides the guarantee that it has
+a certain property as long as one of the two functions is ideal even in case the
+other function is highly dependent upon the first; this is modeled by giving the
+adversary full control over the second function.
+Ideally Secure CombinerCA
+HR
+A , st←− A1(1
+n)
+R, k←− sample RO and keys3
+return AR,HR
+A
+2 (st, k) breaks π for
+combiner CR,HR
+A or CHR
+A ,R
+Fig. 1. Security of Combiners in Idealized Settings
+We say that a combiner C is
+ideally secure for some property
+π if no adversary can win the
+ideally secure combiner game
+(see Figure 1). For this we
+consider a two-stage adversary
+A = (A1,A2), where A1 out-
+puts some state st and a de-
+scription of an efficient function
+that can contain special oracle
+gates to call a random oracle. Then a random oracle R and a key k for the com-
+biner are sampled. We say the adversary wins the game if A2 breaks property
+π on combiner C initialized with the random oracle and the function output by
+A1: that is, A2 breaks property π on either combiner CR,HR
+A or on combiner
+CHR
+A ,R (note the different order of oracles).
+3 In the Ideally Secure Combiner game (and in following security games) the random
+oracle is sampled such that its domain and range matches allowed hash functions
+and the keys are sampled using the key generation algorithm of combiner C.
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 145
+Definition 3. A combiner C is called ideally secure for property π if no efficient
+adversary A = (A1,A2) can win the Ideally Secure Combiner game (Figure 1)
+with non-negligible advantage.
+The security guarantees given in this model are that the combiner has property π
+as long as one of the two functions is a random oracle. Furthermore, security may
+be reduced to the security of compression functions, when analyzing the security
+in the indifferentiability model [28]. We find this notion particularly useful from
+a practical point of view as many security proofs are only given in the random
+oracle model (to name a few [16,5,6,11]) and a combiner proven secure under
+our new notion allows us to hedge against the failure of the instantiation of the
+random oracle in the corresponding scheme. Furthermore, while our new notion
+makes stronger assumptions about the ingoing hash functions it allows to bypass
+the restrictions given by the traditional definition. As these stronger assumptions
+are, however, frequently needed in security proofs for practical constructions,
+we do not loose anything by also applying the very same assumptions in the
+examinations of combiners to be used in these schemes. On the other hand,
+there is lots to gain.
+Further note that our new notion is far from trivial to fulfill although we
+know that one of the two functions is ideal to begin with. Take the exclusive-or
+combiner (compare Section 3.1) as an example. If one of the functions can depend
+on the other, most, if not all properties are easily breakable. Let, for example,
+adversary A1 output function HRA (M) := R(M). In this setting the exclusive-or
+combiner would implement the constant zero function C⊕(M) = R(M)⊕R(M)
+which is, of course, not collision-resistant or pseudorandom.
+Remark 1. Recently, Ristenpart et al. [39] gave the somewhat surprising result
+that the indifferentiability composition theorem does not hold in general but
+only in what they call single-stage settings. A game is called single-stage if we
+can assume a single global adversary. Note that this applies to all but one of
+the security games considered in this paper (see Figures 1 and 2), as we usually
+allow adversaries to pass on their current state without any restrictions. For the
+exception, Lemma 2, it can be shown that it falls into the class of secure-1-pass-
+games in the terminology of [25]. The authors in [25] study multi-stage games
+for which indifferentiability (with certain additions) suffices to allow composi-
+tion. For games falling into their class of secure-1-pass-games no additions are
+needed and thus plain indifferentiability is sufficient to allow composition. The
+idea, why access to the underlying compression function does not yield any ad-
+vantage is that all “interesting” random oracle evaluations (notably, R(m⊕ k3),
+cf. Figure 3) have a block-length of exactly 1. Thus, length extension attacks
+via the computation of inner compression function evaluations do not yield any
+advantage over directly computing the full hash value.
+4 A Short Multi-property Combiner for Hash Functions
+In this section we present a new black-box combiner for two hash functions that
+does not increase the output length. The combiner is robust for pseudorandom-
+146 A. Mittelbach
+ness (under the traditional definition of robust combiners) without needing to
+assume independence of the input functions (cf. Section 3.1). Further, it is ide-
+ally secure (cf. Definition 3) for collision resistance, second pre-image resistance,
+target collision resistance and pre-image resistance, that is, it holds these prop-
+erties if one of the hash functions is instantiated with a random oracle or if
+one of the functions is indifferentiable from a random oracle (assuming an ideal
+compression function, also see remark at end of last the section).
+Our construction is based on the exclusive-or combiner where each message
+block is preprocessed. To ease on notation, we will not explicitly model the key
+generation stage for hash functions but implicitly assume that the functions are
+chosen from a family of functions (i.e., the key is implicit in the hash function).
+Construction 1. Let H1, H2 : {0, 1}∗ → {0, 1}n be two hash functions and
+m1|| . . . ||m� := M ||pad(M) be a message from the joint domain of both hash
+functions padded to a multiple of the block length n. The combiner is given by
+CH1,H2(M) := GH1,H2
+1 (M)⊕GH1,H2
+2 (M)
+where G1 and G2 are stateless and deterministic constructions given by
+GH1,H2
+1 (M) := H1
+(
+m̃1
+1‖ . . . ‖ m̃1
+�
+)
+GH1,H2
+2 (M) := H2
+(
+m̃2
+1 ‖ . . . ‖ m̃2
+�
+)
+with preprocessed blocks
+m̃1
+j := H2(1 ‖ mj ⊕ k1)⊕mj ⊕ k2 ⊕H1(1 ‖ mj ⊕ k3)
+m̃2
+j := H1(0 ‖ mj ⊕ k4)⊕mj ⊕ k5 ⊕H2(0 ‖ mj ⊕ k6)
+for j := 1, . . . , � and for independently chosen keys ki ∈ {0, 1}n for i = 1, ..., 6.
+Let us examine the combiner more closely before proving its security. First notice
+that the combiner is symmetric, that is, it makes no difference if functionsH1 and
+H2 are interchanged. Function G1(M) can be thought of as simply calling hash
+function H1 on some preprocessed input. If the original input m1|| . . . ||m� :=
+M ||pad(M) consisted of � blocks, then the preprocessed input also consists of �
+blocks. Each block mi is preprocessed independently and becomes
+H2(1 ‖ mi ⊕ k1)⊕mi ⊕ k2 ⊕H1(1 ‖ mi ⊕ k3) .
+The idea behind this construction is that the outer most hash function in G1
+(i.e., H1(·)) cannot, given its input, guess (or rather compute) the input that
+is going into the outer most hash function in G2, i.e., H2(·). This will become
+more evident when we prove security for various properties. Furthermore, note
+that we achieve domain separation between the calls to functions within G1 and
+G2 (i.e., calls to H1 and H2 are prefixed by 1 for G1 and by 0 for G2).
+Finally, we want to note that the combiner can be efficiently implemented.
+If we take as measure the number of hash block evaluations then the combiner
+increases the number of evaluations by a factor of 3. However, in contrast to
+other multi-property combiners [21,22] it is completely parallelizable as each
+block is preprocessed independently of others.
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 147
+FindPreImageA
+R, k1, . . . k6 ←− sample RO and keys
+H
+R
+A , st,X ←− A1(1
+n
+)
+τ ←− X
+M ←− AR,HR
+A
+2 (st, CR,HRA (τ), k1, . . . , k6)
+return (CR,HR
+A (M) = CR,HR
+A (τ))
+FindCollisionA
+R, k1, . . . k6 ←− sample RO and keys
+H
+R
+A , st ←− A1(1
+n
+)
+(M,M ′)←− AR,HRA
+2 (st, k1, . . . , k6)
+return (CR,HRA (M) = CR,HRA (M ′))
+Fig. 2. Security Games
+4.1 Security Analysis
+We will first show that the combiner is pre-image resistant if one of its input
+functions is a random oracle. Remember that the basic XOR-combiner is not
+necessarily pre-image resistant even if instantiated with two random oracles (see
+Sections 3.1 and 3.3). We give the security experiments necessary for the follow-
+ing proofs in Figure 2.
+Proposition 1. Construction 1 is ideally secure for pre-image resistance (ow).
+That is, for any efficient adversary A which outputs efficiently sampleable dis-
+tributions X with super-logarithmic min-entropy (H∞ (X ) ∈ ω(n)) it holds that
+its advantage in the FindPreImage game is bound by
+AdvFindPreImage
+A (1n) ≤ qA · 2−H∞(X )
+where qA denotes an upper-bound on the number of combiner evaluations.
+We prove Proposition 1 via an intermediate result about the preprocessed mes-
+sage blocks m̃b
+j (cf. Construction 1). These we regard as “preprocessing func-
+tions” of the form {0, 1}n → {0, 1}n with oracle access to hash functions H1
+and H2, parameterized by keys k1, k2, k3, taking message blocks m ∈ {0, 1}n
+as input and outputting a preprocessed message block; we write m̃H1,H2
+k1,k2,k3
+(m).
+We show that these pre-processed message blocks are, in fact, random variables
+with min-entropy n bits over the choice of random oracle and keys k1, k2, k3. By
+applying the union bound, we can then argue that if an efficient adversary with
+access to the random oracle and keys k1, . . . , k3 can choose message m it can at
+most reduce the entropy to n −O (logn) bits, where the logarithmic reduction
+is bound by the number of random oracle evaluations.
+Lemma 1. The preprocessed blocks m̃H1,H2
+k1,k2,k3
+(·) in Construction 1 are random
+variables with min-entropy n; that is, if Hb := R for b ∈ {1, 2} is a random
+oracle, then it holds for all message blocks m ∈ {0, 1}n and functions H2−b+1
+with restrictions as in Construction 1 that
+H̃∞
+(
+m̃H1,H2
+k1,k2,k3
+(m)|m, k1, k2, k3
+)
+= n (1)
+where the probability is over the choice of random oracle R and keys k1, . . . , k3.
+148 A. Mittelbach
+DistR,k1,k2,k3
+A (m)
+m′ ←− AR(1n,m⊕ k3)
+return R(m⊕ k1)⊕m⊕ k2 ⊕m′
+Fig. 3. Adv. Controlled Distribution
+To prove Lemma 1 we consider
+the following distribution (see Fig-
+ure 3). The distribution is parameter-
+ized by an (efficient) algorithm A, a
+random oracle from the function space
+{0, 1}∗ → {0, 1}n and uniformly and
+independently chosen keys k1, k2, k3 from {0, 1}n. To compute the mapping for
+message m, adversary A receives value m⊕ k3 and outputs a message m′. Value
+R(m⊕ k1)⊕m⊕ k2 ⊕m′ is returned as sample.
+Proof (of Lemma 1). In the adversarial distribution (Figure 3), the adversary can
+be regarded as the adversarially created function HRA (·) in Construction 1. Thus,
+we have that the min-entropy of the adversarial distribution (instantiated with
+any efficient adversary A) is an upper bound for the min-entropy of m̃H1,H2
+k1,k2,k3
+:
+H̃∞
+(
+m̃H1,H2
+k1,k2,k3
+(m)|m, k1, k2, k3
+)
+≥ H̃∞
+(
+DistR,k1,k2k3
+A (m)|m, k1, k2, k3
+)
+As the keys are chosen uniformly at random from {0, 1}n and in particular
+independently of the random oracle, we know that for every message m value
+R(m⊕ k1) is uniformly distributed and thus:
+H̃∞ (R(m⊕ k1)⊕m⊕ k2|m, k1, k2, k3) = n
+To estimate the min-entropy of distribution DistR,k1,k2k3
+A (·) we thus need to
+analyze the effect of value m′ as output by adversary A on input m ⊕ k3. In
+order to output m′ such that the min-entropy of
+H̃∞ (R(m⊕ k1)⊕m⊕ k2 ⊕m′|m, k1, k2, k3) (2)
+is less than n bits, adversary A itself must have sufficient information on R(m⊕
+k1) ⊕ m ⊕ k2 given its sole input m ⊕ k3. To model, that A has access to the
+random oracle, we add its list of queries to the conditions. Let qry(AR(m⊕ k3))
+denote the query-answer pairs of A to the random oracle on input m⊕ k3. Note
+that this is a random variable over the coins of A and the random oracle R.
+Then, we can formalize the uncertainty of A about value R(m⊕ k1)⊕m⊕ k2 by
+H̃∞
+(R(m⊕ k1)⊕m⊕ k2|m⊕ k3, qry(AR(m⊕ k3))
+)
+(3)
+It is easily seen that this denotes an upper bound for
+H̃∞
+(R(m⊕ k1)⊕ k2|m, qry(AR(m))
+)
+(4)
+where we removed the distortion of m by k3 on the conditions, which in turn
+allows us to remove messagem from the conditioned side. Note that values k2 and
+R(m⊕k1) are uniformly distributed and independent (k2 is chosen independently
+ofR and similarlym and k1 are chosen independently ofR). Thus we can analyze
+the two terms going into the exclusive-or operation individually; that is,
+H̃∞
+(
+k2 ⊕R(m⊕ k1)|m, qry(AR(m))
+) ≥
+max
+(
+H̃∞
+(
+k2|m, qry(AR(m))
+)
+, H̃∞
+(R(m⊕ k1)|m, qry(AR(m))
+))
+(5)
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 149
+As m is independent of keys k1 and k2 we have that both terms in the max-
+operation have n bits of entropy and thus
+H̃∞
+(
+k2 ⊕R(m⊕ k1)|m, qry(AR(m))
+)
+= n. (6)
+Thus, adversary A cannot output m′ such that the entropy in (2) is reduced. ��
+By an application of the union bound it follows that for any message m that
+is generated by an efficient adversary AH1,H2(k1, k2, k3) which is given the keys
+and that has oracle access to the hash functions, the min-entropy of m̃H1,H2
+k1,k2,k3
+(m)
+is at most reduced by logarithmically (in n) many bits (see full version [31] for
+details).
+Lemma 2. Let the setup be as in Lemma 1. Then, for all efficient adversaries
+A it holds that
+H̃∞
+(
+m̃H1,H2
+k1,k2,k3
+(m)|m← AH1,H2(1n, k1, k2, k3), k1, k2, k3
+)
+≥ n−O(log q) (7)
+where q is an upper bound on random oracle evaluations by H2−b+1 and adver-
+sary A. The probability is over the choice of keys k1, k2, k3, random oracle R and
+A’s internal coin tosses.
+Remark 2. We have examined Lemma 1 in the random oracle model using the
+information theoretic min-entropy notion. We can also analyze it in the privately
+keyed standard model assuming a pseudorandom function instead of a random
+oracle. For this we need to switch to a computational version of entropy such as
+HILL entropy (see [38] for an introduction). The proof works analogously.
+We now prove Proposition 1 by showing that the advantage of any adversary in
+winning the FindPreImage game is bounded by qA · 2−H∞(X ) where qA is the
+number of combiner evaluations. Let us first examine the FindPreImage game.
+In a first step, a random oracleR is sampled from the space of all functions of the
+form {0, 1}∗ → {0, 1}n together with keys k1, . . . , k6. Adversary A1 is then given
+the security parameter and it outputs a target distribution X , some state st, and
+a description of a hash function HRA which can contain special gates to evaluate
+random oracle R (note that A1 does not get access to R while constructing
+HRA and that distribution X must have super-logarithmic min-entropy given
+state st). In a next step a target message τ is sampled from distribution X .
+Then, adversary A2 is given keys k1, . . . , k6 and and hash value CR,HR
+A (τ) and
+is given oracle access to R and HRA . It wins if it outputs a message M which,
+under the combiner, yields value CR,HR
+A (τ), i.e.: CR,HR
+A (M) = CR,HR
+A (τ).
+Proof (Proposition 1). Let us examine the preprocessed message blocks going
+into G
+R,HR
+A
+2 (cf. Construction 1) for some message m1, . . . ,m� := M‖PAD(M).
+Each block is of the form
+R(0 ‖ mi ⊕ k4)⊕mi ⊕ k5 ⊕HRA (0 ‖ mi ⊕ k6) (8)
+150 A. Mittelbach
+By Lemma 2 we can assume each of these blocks to be a random variable with
+min-entropy n bits (note that the factor log(q) of Lemma 2 is implicit in the
+number of random oracle queries by the adversary) and thus the combined blocks
+(via concatenation) to be a random variable of also at least n bits. The same
+necessarily holds for for the blocks going into G
+R,HR
+A
+1 . Furthermore, by achieving
+domain separation for the random oracle calls (prefixing the input with 0 and
+1, respectively) within G
+R,HR
+A
+1 (·) and G
+R,HR
+A
+2 (·), we can assume the random
+variables for blocks of G1 to be independent of those for blocks of G2.
+If Un and U ′n are independent random variables from the message space to
+{0, 1}n with min-entropy n bits, then we can write the combiner CR,HR
+A as
+CR,HR
+A (M) := R(Un(M))⊕HRA (U
+′
+n(M))
+Hence, the probability for any message M to be mapped to CR,HR
+A (τ) under
+the combiner is 2−n. As one possible pre-image (namely τ) is contained in the
+support of distribution X , the best strategy for an adversary is to sample mes-
+sages from X , which allows us to upper bound the advantage of an adversary
+winning in the FindPreImage game by
+AdvFindPreImage
+A (1n) ≤ qA · 2−H∞(X )
+where qA denotes the number of combiner queries by adversary A2. ��
+For second pre-image and target collision resistance it suffices to slightly change
+the FindPreImage game to adapt it to the specifics in the examined property.
+Collision resistance is examined using the FindCollision game (see Figure 2).
+We show that the advantage of any efficient adversary is bound by q2A · 2−(n+1)
+where qA denotes the number of combiner evaluations. In short we show that
+as the inputs to the outer hash functions in G1 and G2 have entropy at least
+n − O (log q) bits, the problem of finding collisions can be rewritten as finding
+collisions for
+R(Un(M))⊕R(Un(M
+′)) = HRA (U
+′
+n(M))⊕HRA (U
+′
+n(M))
+where Un and U ′n are again independent random variables mapping from {0, 1}∗
+to {0, 1}n and having n bits of min-entropy (again the logarithmic factor is
+hidden in the number of Un evaluations by the adversary). We refer to the full
+version [31] for details.
+4.2 Pseudorandomness
+Finally, we show that our combiner is robust for pseudorandomness and ideally
+secure for message authentication codes. For pseudorandomness we can directly
+show robustness in the standard model (that is, without assuming a random
+oracle). We want to stress that, in contrast to the exclusive-or combiner, we do
+not need to assume that the two ingoing functions H1 and H2 are independent
+(cf. Section 3.1).
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 151
+Proposition 2. The combiner given in construction 1 is robust for pseudoran-
+domness.
+Proof (sketch). We have already argued that we can analyze Lemma 1 and
+Lemma 2 also in the standard model, using computational analogues of entropy
+(see remark following Lemma 2). Thus, assuming that H1 is pseudorandom,
+Lemma 2 yields that the input to GH1,H2
+1 (M) := H1(M̃) has sufficiently high
+computational min-entropy and hence G1 is pseudorandom. Due to the symmet-
+ric design of the combiner, this also yields that GH1,H2
+2 is pseudorandom if H2 is
+pseudorandom. Note, that due to the domain separation, the inputs to the outer
+hash evaluations in G1 and G2 are independent and thus the further analysis
+can be reduced to the analysis of the exclusive-or combiner which we know to
+be robust for pseudorandom functions assuming independent inputs. ��
+Acknowledgments. I thank the anonymous reviewers for their valuable com-
+ments. This work was supported by CASED (www.cased.de).
+References
+1. Alwen, J., Dodis, Y., Wichs, D.: Leakage-resilient public-key cryptography in the
+bounded-retrieval model. In: Halevi, S. (ed.) CRYPTO 2009. LNCS, vol. 5677, pp.
+36–54. Springer, Heidelberg (2009)
+2. Andreeva, E., Mennink, B., Preneel, B.: On the indifferentiability of the Grøstl
+hash function. In: Garay, J.A., De Prisco, R. (eds.) SCN 2010. LNCS, vol. 6280,
+pp. 88–105. Springer, Heidelberg (2010)
+3. Aoki, K., Sasaki, Y.: Meet-in-the-middle preimage attacks against reduced SHA-
+0 and SHA-1. In: Halevi, S. (ed.) CRYPTO 2009. LNCS, vol. 5677, pp. 70–89.
+Springer, Heidelberg (2009)
+4. Baecher, P., Brzuska, C., Fischlin, M.: Notions of black-box reductions, revisited.
+Cryptology ePrint Archive, Report 2013/101 (2013), http://eprint.iacr.org/
+5. Bellare, M., Boldyreva, A., O’Neill, A.: Deterministic and efficiently searchable
+encryption. In: Menezes, A. (ed.) CRYPTO 2007. LNCS, vol. 4622, pp. 535–552.
+Springer, Heidelberg (2007)
+6. Bellare, M., Brakerski, Z., Naor, M., Ristenpart, T., Segev, G., Shacham, H., Yilek,
+S.: Hedged public-key encryption: How to protect against bad randomness. In:
+Matsui, M. (ed.) ASIACRYPT 2009. LNCS, vol. 5912, pp. 232–249. Springer, Hei-
+delberg (2009)
+7. Bellare, M., Rogaway, P.: Random oracles are practical: A paradigm for designing
+efficient protocols. In: Ashby, V. (ed.) ACM CCS 1993, pp. 62–73. ACM Press
+(November 1993)
+8. Bertoni, G., Daemen, J., Peeters, M., Assche, G.V.: The keccak SHA-3 submission.
+Submission to NIST (Round 3) (2011),
+http://keccak.noekeon.org/Keccak-submission-3.pdf
+9. Bertoni, G., Daemen, J., Peeters, M., Van Assche, G.: On the indifferentiabil-
+ity of the sponge construction. In: Smart, N.P. (ed.) EUROCRYPT 2008. LNCS,
+vol. 4965, pp. 181–197. Springer, Heidelberg (2008)
+http://eprint.iacr.org/
+http://keccak.noekeon.org/Keccak-submission-3.pdf
+152 A. Mittelbach
+10. Bhattacharyya, R., Mandal, A., Nandi, M.: Indifferentiability characterization of
+hash functions and optimal bounds of popular domain extensions. In: Roy, B.,
+Sendrier, N. (eds.) INDOCRYPT 2009. LNCS, vol. 5922, pp. 199–218. Springer,
+Heidelberg (2009)
+11. Boldyreva, A., Cash, D., Fischlin, M., Warinschi, B.: Foundations of non-malleable
+hash and one-way functions. In: Matsui, M. (ed.) ASIACRYPT 2009. LNCS,
+vol. 5912, pp. 524–541. Springer, Heidelberg (2009)
+12. Boneh, D., Boyen, X.: On the impossibility of efficiently combining collision re-
+sistant hash functions. In: Dwork, C. (ed.) CRYPTO 2006. LNCS, vol. 4117, pp.
+570–583. Springer, Heidelberg (2006)
+13. Canetti, R., Rivest, R., Sudan, M., Trevisan, L., Vadhan, S.P., Wee, H.M.: Ampli-
+fying collision resistance: A complexity-theoretic treatment. In: Menezes, A. (ed.)
+CRYPTO 2007. LNCS, vol. 4622, pp. 264–283. Springer, Heidelberg (2007)
+14. De Cannière, C., Rechberger, C.: Preimages for reduced SHA-0 and SHA-1. In:
+Wagner, D. (ed.) CRYPTO 2008. LNCS, vol. 5157, pp. 179–202. Springer, Heidel-
+berg (2008)
+15. Chang, D., Nandi, M., Yung, M.: Indifferentiability of the hash algorithm BLAKE.
+Cryptology ePrint Archive, Report 2011/623 (2011), http://eprint.iacr.org/
+16. Chevallier-Mames, B., Phan, D.H., Pointcheval, D.: Optimal asymmetric encryp-
+tion and signature paddings. In: Ioannidis, J., Keromytis, A.D., Yung, M. (eds.)
+ACNS 2005. LNCS, vol. 3531, pp. 254–268. Springer, Heidelberg (2005)
+17. Coron, J.-S., Dodis, Y., Malinaud, C., Puniya, P.: Merkle-damg̊ard revisited: How
+to construct a hash function. In: Shoup, V. (ed.) CRYPTO 2005. LNCS, vol. 3621,
+pp. 430–448. Springer, Heidelberg (2005)
+18. Damg̊ard, I.: A design principle for hash functions. In: Brassard, G. (ed.) CRYPTO
+1989. LNCS, vol. 435, pp. 416–427. Springer, Heidelberg (1990)
+19. De Cannière, C., Rechberger, C.: Finding SHA-1 characteristics: General results
+and applications. In: Lai, X., Chen, K. (eds.) ASIACRYPT 2006. LNCS, vol. 4284,
+pp. 1–20. Springer, Heidelberg (2006)
+20. Dierks, T., Rescorla, E.: The Transport Layer Security (TLS) Pro-
+tocol Version 1.2. RFC 5246 (Proposed Standard) (August 2008),
+http://www.ietf.org/rfc/rfc5246.txt, updated by RFCs 5746, 5878, 6176
+21. Fischlin, M., Lehmann, A.: Multi-property preserving combiners for hash functions.
+In: Canetti, R. (ed.) TCC 2008. LNCS, vol. 4948, pp. 375–392. Springer, Heidelberg
+(2008)
+22. Fischlin, M., Lehmann, A., Pietrzak, K.: Robust multi-property combiners for hash
+functions revisited. In: Aceto, L., Damg̊ard, I., Goldberg, L.A., Halldórsson, M.M.,
+Ingólfsdóttir, A., Walukiewicz, I. (eds.) ICALP 2008, Part II. LNCS, vol. 5126, pp.
+655–666. Springer, Heidelberg (2008)
+23. Fischlin, M., Lehmann, A., Wagner, D.: Hash function combiners in TLS and
+SSL. In: Pieprzyk, J. (ed.) CT-RSA 2010. LNCS, vol. 5985, pp. 268–283. Springer,
+Heidelberg (2010)
+24. Freier, A., Karlton, P., Kocher, P.: The Secure Sockets Layer (SSL) Protocol Ver-
+sion 3.0. RFC 6101 (Historic) (August 2011),
+http://www.ietf.org/rfc/rfc6101.txt
+25. In Submission: Salvaging indifferentiability in a multi-stage setting (2013)
+26. Lehmann, A.: On the Security of Hash Function Combiners. Ph.D. thesis, TU
+Darmstadt (März 2010), http://tuprints.ulb.tu-darmstadt.de/2094/
+27. Liskov, M.: Constructing an ideal hash function from weak ideal compression func-
+tions. In: Biham, E., Youssef, A.M. (eds.) SAC 2006. LNCS, vol. 4356, pp. 358–375.
+Springer, Heidelberg (2007)
+http://eprint.iacr.org/
+http://www.ietf.org/rfc/rfc5246.txt
+http://www.ietf.org/rfc/rfc6101.txt
+http://tuprints.ulb.tu-darmstadt.de/2094/
+Cryptophia’s Short Combiner for Collision-Resistant Hash Functions 153
+28. Maurer, U., Renner, R., Holenstein, C.: Indifferentiability, impossibility results on
+reductions, and applications to the random oracle methodology. In: Naor, M. (ed.)
+TCC 2004. LNCS, vol. 2951, pp. 21–39. Springer, Heidelberg (2004)
+29. Merkle, R.C.: One way hash functions and DES. In: Brassard, G. (ed.) CRYPTO
+1989. LNCS, vol. 435, pp. 428–446. Springer, Heidelberg (1990)
+30. Mittelbach, A.: Hash combiners for second pre-image resistance, target collision
+resistance and pre-image resistance have long output. In: Visconti, I., De Prisco,
+R. (eds.) SCN 2012. LNCS, vol. 7485, pp. 522–539. Springer, Heidelberg (2012)
+31. Mittelbach, A.: Cryptophia’s short combiner for collision-resistant hash functions.
+Cryptology ePrint Archive, Report 2013/210 (2013), http://eprint.iacr.org/
+32. Moody, D., Paul, S., Smith-Tone, D.: Improved indifferentiability security
+bound for the JH mode. Cryptology ePrint Archive, Report 2012/278 (2012),
+http://eprint.iacr.org/
+33. Naor, M., Yung, M.: Universal one-way hash functions and their cryptographic
+applications. In: 21st ACM STOC, pp. 33–43. ACM Press (May 1989)
+34. National Institute of Standards and Technology: FIPS 180-3, Secure Hash Stan-
+dard, Federal Information Processing Standard (FIPS), Publication 180-3. Tech.
+rep., Department of Commerce (August 2008)
+35. NIST: NIST SHA-3 Competition,
+http://csrc.nist.gov/groups/ST/hash/sha-3/index.html
+36. Pietrzak, K.: Non-trivial black-box combiners for collision-resistant hash-functions
+don’t exist. In: Naor, M. (ed.) EUROCRYPT 2007. LNCS, vol. 4515, pp. 23–33.
+Springer, Heidelberg (2007)
+37. Pietrzak, K.: Compression from collisions, or why CRHF combiners have a long out-
+put. In: Wagner, D. (ed.) CRYPTO 2008. LNCS, vol. 5157, pp. 413–432. Springer,
+Heidelberg (2008)
+38. Reyzin, L.: Some notions of entropy for cryptography (2011),
+http://www.cs.bu.edu/~reyzin/papers/entropy-survey.pdf
+39. Ristenpart, T., Shacham, H., Shrimpton, T.: Careful with composition: Limitations
+of the indifferentiability framework. In: Paterson, K.G. (ed.) EUROCRYPT 2011.
+LNCS, vol. 6632, pp. 487–506. Springer, Heidelberg (2011)
+40. Rivest, R.: The MD5 Message-Digest Algorithm. RFC 1321 (Informational) (April
+1992), http://www.ietf.org/rfc/rfc1321.txt, updated by RFC 6151
+41. Rogaway, P., Shrimpton, T.: Cryptographic hash-function basics: Definitions, im-
+plications, and separations for preimage resistance, second-preimage resistance, and
+collision resistance. In: Roy, B., Meier, W. (eds.) FSE 2004. LNCS, vol. 3017, pp.
+371–388. Springer, Heidelberg (2004)
+42. Sasaki, Y., Aoki, K.: Finding preimages in full MD5 faster than exhaustive search.
+In: Joux, A. (ed.) EUROCRYPT 2009. LNCS, vol. 5479, pp. 134–152. Springer,
+Heidelberg (2009)
+43. Stevens, M., Sotirov, A., Appelbaum, J., Lenstra, A., Molnar, D., Osvik, D.A.,
+de Weger, B.: Short chosen-prefix collisions for MD5 and the creation of a rogue
+CA certificate. In: Halevi, S. (ed.) CRYPTO 2009. LNCS, vol. 5677, pp. 55–69.
+Springer, Heidelberg (2009)
+44. Wang, X., Yin, Y.L., Yu, H.: Finding collisions in the full SHA-1. In: Shoup, V.
+(ed.) CRYPTO 2005. LNCS, vol. 3621, pp. 17–36. Springer, Heidelberg (2005)
+45. Wang, X., Yu, H.: How to break MD5 and other hash functions. In: Cramer, R.
+(ed.) EUROCRYPT 2005. LNCS, vol. 3494, pp. 19–35. Springer, Heidelberg (2005)
+http://eprint.iacr.org/
+http://eprint.iacr.org/
+http://csrc.nist.gov/groups/ST/hash/sha-3/index.html
+http://www.cs.bu.edu/~reyzin/papers/entropy-survey.pdf
+http://www.ietf.org/rfc/rfc1321.txt
+	Cryptophia’s Short Combinerfor Collision-Resistant Hash Functions
+	1 Introduction
+	2 Preliminaries
+	2.1 Hash Functions and their Properties
+	3 A Novel Definition of Combiners for Hash Functions
+	3.1 Black-Box Combiners for Hash Functions
+	3.2 Extending the Traditional Definition
+	3.3 Secure Combiners in Idealized Models
+	4 A Short Multi-property Combiner for Hash Functions
+	4.1 Security Analysis
+	4.2 Pseudorandomness
+	References

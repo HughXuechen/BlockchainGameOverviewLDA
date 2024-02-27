@@ -1,0 +1,1955 @@
+Stronger Security for Reusable Garbled Circuits,
+General Definitions and Attacks
+Shweta Agrawal(B)
+IIT Madras, Chennai, India
+shweta@iitm.ac.in
+Abstract. We construct a functional encryption scheme for circuits
+which simultaneously achieves and improves upon the security of the
+current best known, and incomparable, constructions from standard
+assumptions: reusable garbled circuits by Goldwasser, Kalai, Popa,
+Vaikuntanathan and Zeldovich (STOC 2013) [GKP+13] and predi-
+cate encryption for circuits by Gorbunov, Vaikuntanathan and Wee
+(CRYPTO 2015) [GVW15]. Our scheme is secure based on the learn-
+ing with errors (LWE) assumption. Our construction implies:
+1. A new construction for reusable garbled circuits that achieves
+stronger security than the only known prior construction [GKP+13].
+2. A new construction for bounded collusion functional encryption with
+substantial efficiency benefits: our public parameters and ciphertext
+size incur an additive growth of O(Q2), where Q is the number of
+permissible queries (We note that due to a lower bound [AGVW13],
+the ciphertext size must necessarily grow with Q). Additionally, the
+ciphertext of our scheme is succinct, in that it does not depend
+on the size of the circuit. By contrast, the prior best construction
+[GKP+13,GVW12] incurred a multiplicative blowup of O(Q4) in
+both the public parameters and ciphertext size. However, our scheme
+is secure in a weaker game than [GVW12].
+Additionally, we show that existing LWE based predicate encryption
+schemes [AFV11,GVW15] are completely insecure against a general func-
+tional encryption adversary (i.e. in the “strong attribute hiding” game).
+We demonstrate three different attacks, the strongest of which is applica-
+ble even to the inner product predicate encryption scheme [AFV11]. Our
+attacks are practical and allow the attacker to completely recover x from
+its encryption Enc(x) within a polynomial number of queries. This illus-
+trates that the barrier between predicate and functional encryption is not
+just a limitation of proof techniques. We believe these attacks shed signif-
+icant light on the barriers to achieving full fledged functional encryption
+from LWE, even for simple functionalities such as inner product zero
+testing [KSW08,AFV11].
+Along the way, we develop a new proof technique that permits the sim-
+ulator to program public parameters based on keys that will be requested
+in the future. This technique may be of independent interest.
+c© International Association for Cryptologic Research 2017
+J. Katz and H. Shacham (Eds.): CRYPTO 2017, Part I, LNCS 10401, pp. 3–35, 2017.
+DOI: 10.1007/978-3-319-63688-7 1
+4 S. Agrawal
+1 Introduction
+The last decade has witnessed important progress in the field of computing
+on encrypted data. Several sophisticated generalizations of encryption, such as
+Identity Based Encryption [BF01,Coc01,GPV08], Attribute Based Encryption
+[GPSW06,BSW07,GGH+13c,GVW13], Predicate Encryption [KSW08,AFV11,
+GVW15], Fully Homomorphic Encryption [Gen09,BV11,GSW13,BV14], Prop-
+erty Preserving Encryption [PR12] have burst onto the scene, significantly
+advancing the capabilities of modern cryptography.
+These generalizations aim to provide the capability of computing “blind-
+folded” – namely, given an encryption of some data a, an untrusted party should
+be able to perform computations on Enc(a) so that the resultant ciphertext
+may be decrypted meaningfully. The notion of fully homomorphic encryption
+permits arbitrary computation on encrypted data, but restricts decryption to be
+all-or-nothing, namely, the holder of the secret key may decrypt the resultant
+ciphertext to learn the result of the computation, but the same key also decrypts
+the original ciphertext revealing a. For applications that require restricted access
+to results of the computation, the notion of functional encryption (FE) is more
+suitable. In functional encryption, a secret key is associated with a function,
+typically represented as a circuit C, denoted by SKC and a ciphertext with
+some input a from the domain of C, denoted by CTa. Given SKC and CTa,
+the user may run the decryption procedure to learn the value C(a). Security of
+the system guarantees that nothing beyond C(a) can be learned from CTa and
+SKC . Functional encryption was formalized by Boneh et al. [BSW11] to unify and
+extend the notions of Identity Based Encryption, Attribute Based Encryption
+and Predicate Encryption, which had already appeared in the literature.
+There has been considerable progress in the last several years towards con-
+structing FE for advanced functionalities [BF01,Coc01,BW06,BW07,GPV08,
+CHKP10,ABB10,GPSW06,BSW07,KSW08,LOS+10,AFV11,Wat12,GVW13,
+GGH+13c,GGH+13b,GVW15]. For the most powerful notion of “full-fledged”
+functional encryption, that allows the evaluation of arbitrary efficiently-
+computable functions and is secure against general adversaries, the only known
+constructions rely on multilinear maps [GGHZ14] or indistinguishability obfus-
+cation (iO) [GGH+13b]. However, all known candidate multi-linear map con-
+structions [GGH13a,CLT13,GGH15] as well as some candidates of iO have been
+recently broken [CHL+15,CGH+15,HJ15,CJL,CFL+16,MSZ16].
+From standard assumptions, the best known constructions do support general
+functionalities, but achieve restricted notions of security. Currently, the state-of-
+the-art comprises two incomparable constructions:
+– The reusable garbled circuits construction of Goldwasser et al. [GTKP+13],
+which supports all polynomial sized Boolean circuits but restricts the attacker
+to only obtain a single secret key, for any circuit C of her choice. This construc-
+tion can be compiled with the bounded collusion FE construction of [GVW12]
+to obtain a scheme which supports q queries, for any a-priori bounded q, and
+with a ciphertext size that grows by a multiplicative factor of O(q4). Note
+Stronger Security for Reusable Garbled Circuits 5
+that the ciphertext size here does not depend on the size of the circuit C, and
+is thus succinct.
+– The recent predicate encryption (PE) for circuits construction of Gorbunov
+et al. [GVW15], which also supports all polynomial sized Boolean circuits but
+restricts the attacker to only acquire keys for circuits Ci such that Ci(a) = 0,
+when a is the vector of challenge attributes. He may not request any keys Cj
+such that Cj(a) = 1. We will refer to the former as 0-keys and the latter as
+1-keys. This restricted game of security is often referred to as weak attribute
+hiding in the literature.
+Both constructions natively achieve the restricted selective notion of security,
+which forces the attacker to output the challenge in the very first step of the
+game, before seeing the public parameters.
+Note that both constructions provide the functionality demanded by func-
+tional encryption, but fall short in security. Covering the distance from the
+restricted security definitions acheived by these constructions to full fledged func-
+tional encryption is a much sought-after goal, and one that must contend with
+several thorny technical issues. The former construction relies on the use of gar-
+bled circuits for decryption, which restricts the number of supported keys to
+1, or, using the additional machinery of [GVW12], to some a-priori bounded q.
+The use of garbled circuits is central to this construction, and surmounting the
+bounded key limitation appears to require entirely new techniques. On the other
+hand, the second construction does support an unbounded number of queries,
+but restricts them to belong to the 0-set. It is unclear how to support even a sin-
+gle 1-query in this case, due to various technical hurdles that arise from the proof
+techniques (more on this below). Whether these techniques may be extended to
+support the full-fledged security game of functional encryption is an important
+open question, and the one we study in this work.
+1.1 Our Contributions
+In this work, we provide a new construction for functional encryption which
+simultaneously achieves and improves upon the security of the current best
+known, and incomparable, constructions from standard assumptions [GKP+13,
+GVW15]. Our scheme is secure based on the learning with errors (LWE) assump-
+tion. Our construction implies:
+1. A new construction for reusable garbled circuits that achieves stronger secu-
+rity than the only prior construction by Goldwasser et al. (STOC 2013)
+[GKP+13]. In our construction, the attacker may additionally request an
+unbounded number of 0 keys in addition to the single arbitrary key allowed
+by the standard definition of reusable garbled circuits. Additionally, our con-
+struction achieves semi-adaptive security as against selective [GKP+13].
+2. A new construction for bounded collusion functional encryption where the
+adversary is restricted to making an a-priori fixed number of queries. The
+ciphertext of our scheme is succinct, in that it does not depend on the size
+6 S. Agrawal
+of the circuit. Our public parameters and ciphertext size incur an additive
+growth of O(Q2), where Q is the number of permissible queries. By con-
+trast, the prior best construction [GKP+13,GVW12] incurred a multiplica-
+tive blowup of O(Q4) in both the public parameters and ciphertext size.
+However, our construction is secure in a weaker game than best known
+[GKP+13,GVW12].
+Additionally, we show that existing LWE based predicate encryption schemes
+[AFV11,GVW15] are completely insecure against a general functional encryp-
+tion adversary (i.e. in the “strong attribute hiding” game). We demonstrate three
+different attacks, the strongest of which is applicable even to the inner product
+predicate encryption scheme [AFV11]. Our attacks are practical and allow the
+attacker to completely recover a from its encryption Enc(a) within a polynomial
+number of queries. This illustrates that the barrier between predicate and func-
+tional encryption is not just a limitation of proof techniques. We believe these
+attacks shed significant light on the barriers to achieving full fledged functional
+encryption for circuits from standard assumptions.
+Along the way, we develop a new proof technique that permits the simulator
+to program public parameters based on keys that will be requested in the future.
+This technique may be of independent interest.
+1.2 Our Techniques
+Our work builds upon the constructions of Goldwasser et al. [GTKP+13] and
+Gorbunov et al. [GVW15]. Both these systems begin with the idea that the pub-
+lic attributes in an attribute based encryption scheme (ABE) may be hidden, and
+yet remain amenable to computation, if they are encrypted using fully homomor-
+phic encryption. Recall that in an attribute based encryption scheme [GPSW06],
+a ciphertext is associated with a public attribute vector a and plaintext bit μ,
+and it hides μ, but not a.
+To hide a, one may encrypt it using FHE to obtain â, and treat this encryp-
+tion as the public attribute in an ABE system. Since an ABE scheme for cir-
+cuits [GVW13,BGG+14] allows for a key SKC to evaluate an arbitrary circuit
+C on the attribute, the decryptor may now homomorphically compute on â
+using the FHE evaluation circuit. Then, given a key corresponding to the circuit
+FHE.Eval(C, ·), the decryptor may run the ABE decryption procedure to learn
+the FHE encryption of C(a), namely ̂C(a).
+This is not yet enough, as the goal is for the decryptor to learn C(a) in the
+clear. To achieve this, FHE decryption must be performed on ̂C(a) in a manner
+that does not permit decryption of any ciphertext other than ̂C(a). The scheme
+of Goldwasser et al. [GTKP+13] resolves this difficulty by employing a single use
+garbled circuit for the FHE decryption function and using ABE to provide labels
+corresponding to input ̂C(a). This constrains FHE decryption, but restricts the
+resultant FE scheme to only be secure against a single key request. The scheme
+of Gorbunov et al. [GVW15] resolves this difficulty by making use of two nicely
+matching asymmetries:
+Stronger Security for Reusable Garbled Circuits 7
+1. The asymmetry in computation. To compute C(a) using the above method,
+the bulk of the computation is to be performed on FHE ciphertext, namely
+FHE.Eval(C, â), where â can be public. The remainder of the computation,
+namely running the FHE decryption circuit on ̂C(a), is a relatively lightweight
+circuit.
+2. The asymmetry in attribute hiding in the ABE scheme of [BGG+14]. There is
+an inherent asymmetry in the homomorphic multiplication procedure of the
+ABE scheme [BGG+14], so that computing a product of two ciphertexts wth
+attributes a1 and a2 respectively, only necessitates revealing one attribute
+(say a1) while the other (a2) can remain hidden (for addition, both a1 and
+a2 may remain hidden). This property is leveraged by [GVW15] to construct
+partially hiding predicate (or attribute) encryption (PHPE), which allows
+computation of an inner product of a public attribute vector corresponding
+to FHE.Eval(C, â) and a private attribute vector, corresponding to the FHE
+secret key. Since inner product loosely approximates FHE decryption, this
+allows the decryptor to obtain a plaintext value corresponding to C(a) as
+desired.
+While the predicate encryption scheme [GVW15] can handle an unbounded
+number of 0-queries from the adversary, it runs into at least three difficulties
+when faced with a 1-query:
+1. The proof of security in the PHPE scheme uses a trapdoor puncturing tech-
+nique [ABB10] in the simulation, so that the simulator has a trapdoor to
+sample keys for 0-queries but this trapdoor vanishes for 1-queries, disabling
+the simulator.
+2. Given a PHPE ciphertext CTâ with public attributes â, key homomorphism
+[BGG+14,GVW15] enables the evaluation of a circuit C on the PHPE cipher-
+text resulting in a PHPE ciphertext CTC( â ) with attributes C( â ). By con-
+struction, this resultant ciphertext is an LWE sample with an error term
+which is fixed and public linear combination of the error terms used to con-
+struct CTâ. This error is learned by the adversary upon decryption, which
+creates leakage that cannot be simulated. Indeed, this leakage, when suffi-
+cient, can completely break LWE security and allow the adversary to learn a
+in the clear (see Sect. 3 for details).
+3. Recall that the FHE decryption operation is a lightweight operation con-
+ducted using PHPE with the FHE secret key as the private attribute vector.
+While FHE decryption is lightweight, it is still not lightweight enough to
+be performed in its entirety while maintaining the privacy of the FHE secret.
+FHE decryption is an inner product followed by a threshold function, of which
+only the inner product can be performed securely by PHPE. The authors
+overcome this hurdle by making use of the “lazy OR” trick, which roughly
+allows the decryptor to learn not the threshold inner product, but the pure
+inner product, which leaks sensitive information about the noise used while
+encrypting a. Again, this leakage cannot be simulated, and when sufficiently
+high, can lead to complete recovery of the FHE secret key.
+8 S. Agrawal
+Attacks. Interestingly, all of the above difficulties in proving security translate
+to polynomial time attacks that lead to complete message recovery in a game
+where 1-keys are permitted. Our first and strongest attack is related to the first
+difficulty, and is effective even against the inner product predicate encryption
+scheme of Agrawal et al. [AFV11]. Recall that the inner product zero test func-
+tionality of [AFV11] permits the decryptor to test whether the inner product of a
+vector x ∈ Z
+�
+p in the ciphertext and vector v ∈ Z
+�
+p in the key is zero or non-zero.
+We demonstrate that by requesting keys for linearly dependent functions, the
+attacker can construct a short basis for a matrix F (say) which is related to the
+LWE matrices used in the challenge ciphertext. By manipulating the challenge
+ciphertext, the attacker may recover an LWE sample of the form FTs+noise. This
+LWE sample unresistingly reveals all its secrets given a trapdoor for F, which
+in turn allow the attacker to recover the entire message x from the challenge
+ciphertext.
+We believe this attack sheds significant light on the barriers to obtaining full
+fledged functional encryption even for a simple functionality such as inner prod-
+uct zero testing [KSW08,AFV11]. Note that full security has been achieved for
+a functionality that computes the inner product of two vectors x,v ∈ Z
+�
+p given
+CT(x) and SK(v), but it appears quite challenging to extend these techniques
+for the case of inner product zero testing. Intuitively, this is because the inner
+product zero test functionality is non-linear: 0 keys reveal almost nothing about
+x while 1 keys reveal much more. This is in contrast to the inner product com-
+putation functionality, in which all function queries, whether type 0 or type 1,
+reveal proportionate information about x. Constructing functional encryption
+with full fledged security even for the simple functionality of [KSW08,AFV11]
+from lattice based assumptions appears to require fundamental new techniques.
+Our second attack is against the Partially Hiding Predicate Encryption sys-
+tem for circuits [GVW15] and stems from the second difficulty above. This attack
+exploits the fact that the decryptor, given a 1-key, learns a public linear function
+of the error terms used in encryption. By requesting sufficient 1-keys, the attacker
+can solve this linear system to recover the errors used in encryption, which lead
+to recovery of the predicate a even when functionality reveals much less.
+Our third attack is against the Predicate Encryption (PE) system for circuits
+[GVW15]. As discussed in the third difficulty above, the PE decryption key,
+which wishes to provide the decryptor with a threshold inner product value,
+instead can only provide the exact inner product value, leaving the decryptor to
+compute the threshold herself. This leads to an attacker learning linear equations
+in the errors used to construct the FHE encryption â, which, when sufficiently
+many, let her recover the FHE secret, which in turn lets her recover a.
+We emphasize that our attacks are entirely practical and also apply to
+the weaker indistinguishability based security game of functional encryption
+[BSW11] but do not work in the “weak attribute hiding” security game consid-
+ered by [AFV11,GVW15]. This suggests that using predicate encryption systems
+in scenarios where even a small number of arbitrary users collude is insecure in
+practice.
+Stronger Security for Reusable Garbled Circuits 9
+“Very-Selective” (1,poly)-Functional Encryption. We provide a construction
+that overcomes the above vulnerabilities for the case of a single arbitrary key,
+whether 1 or 0, and continues to support an unbounded number of 0-keys. By
+restricting the attacker to any single query, this yields an alternate construction
+for reusable garbled circuits [GTKP+13]. We summarize the main ideas here.
+For clarity of exposition, we omit many details; we refer the reader to Sects. 4,
+5 and 6 for the formal construction and proof.
+Our starting point is the predicate encryption scheme of [GVW15], which
+we will hereby refer to as (0,poly)-FE, as it supports zero 1-queries and any
+polynomial number of 0-queries. The construction for (0,poly)-FE makes use of
+two components as described above, namely, (0,poly)-partially hiding predicate
+encryption (PHPE) and fully homomorphic encryption (FHE). Our construction
+for (1,poly)-FE follows the same high level template as [GVW15], and as our
+first step, we require (1,poly)-PHPE. Note that the (0,poly)-PHPE scheme does
+allow the key generator to release an unbounded number of both 0 and 1 queries,
+but as mentioned above, the proof of security breaks down if the adversary
+requests a 1-key. This is because the secret key corresponding to a circuit C is a
+low norm matrix K satisfying an equation of the following form:
+[
+A | AC
+]
+K = P mod q
+where the matrices A,P are fixed and public, and the matrix AC is computed
+by executing a homomorphic evaluation procedure [BGG+14,GVW15] corre-
+sponding to the circuit C on some public matrices. In the real system, the key
+generator has a trapdoor for A, which allows it to sample K using known tech-
+niques [CHKP10,ABB10]. In the simulation, the matrix AC has a special form,
+namely AC = [ARC −C(a) ·G] for some low norm matrix RC and fixed public
+matrix G. The simulator has a trapdoor for G which enables it to sample the
+required K also using known techniques but only when C(a) �= 0 [ABB10]. When
+C(a) = 0, G vanishes along with its trapdoor, and the simulator has no method
+by which to sample K1.
+To overcome this, we note that if the circuit C is known before the public key
+is generated, the simulator can instead sample K first and set P to satisfy the
+above equation. This is a standard trick in LWE based systems [GPV08,Pei13],
+and yields the same distribution of the pair (K,P) as in the real world. This
+allows us to take a step forward2, but the adversary’s view remains distinguish-
+able from the real world, because decryption leaks correlated noise which is
+1 The careful reader may observe that the simulator is disabled when C(a) = 0,
+not when C(a) = 1, though we have claimed that [AFV11,GVW15] can support 0-
+queries and not 1 queries. This is because, traditional functional encryption literature
+defines decryption to be permitted when the function value is 1, and defines the
+function value to be 1 when C(a) = 0. We follow this flip to be consistent with prior
+work.
+2 This is presently a weak security game which we term as very-selective where the
+circuit C as well as the challenge message is announced before the parameters are
+generated. This restriction will be removed subsequently.
+10 S. Agrawal
+un-simulatable, as discussed in difficulty #2 above. To overcome this, we must
+choose the noise in the challenge ciphertext with care so that the noise yielded by
+the decryption equation is statistically close to fresh and independently chosen
+noise. Put together, these tricks enable us to build a (1,poly)-PHPE.
+However, (1,poly)-PHPE does not immediately yield (1,poly)-FE due to dif-
+ficulty #3 above, namely, leakage on FHE noise. To handle this, we modify the
+circuit for which the PHPE key is provided so that the FHE ciphertext ̂C(a)
+is flooded with large noise before the inner product with the FHE secret key is
+computed. Now, though the attacker learns the exact noise in the evaluated FHE
+ciphertext ̂C(a) as before, this noise is independent of the noise used to generate
+â and no longer leaks any sensitive information. Note that care is required in
+executing the noise flooding step, since correctness demands that the FHE mod-
+ulus be of polynomial size and the noise to be added may be super-polynomial.
+To ensure this, we flood the FHE ciphertext before the FHE “modulus reduc-
+tion” step. Now, we have at our disposal a (1,poly)-FE scheme, albeit one that
+is secure according to a very restricted definition of security, which requires the
+attacker to commit to both the challenge messages and the single arbitrary func-
+tion in the first step of the game. This “very selective” definition can be upgraded
+to semi-adaptive, as described next.
+Upgrading Very-Selective to Semi-Adaptive. We provide a method for compil-
+ing our function-selective secure PHPE construction to one that satisfies semi-
+adaptive security, in which the attacker may see the public parameters before
+revealing the challenge. Our transformation is generic – it applies to all con-
+structions that satisfy certain structural properties. In more detail, we require
+that: (1) the PHPE ciphertext CTa be decomposable into |a| components CTi,
+where CTi depends only on a[i], and (2) CTi is a fixed and public linear function
+of the message a[i] and randomness chosen for encryption.
+Concretely, consider the ciphertext in the (0,poly)-PHPE of [GVW15]. For
+i ∈ [�],
+CTi = ui =
+(
+Ai + a[i] · G)T
+s + noisei ∈ Z
+m
+q
+Clearly condition (1) is satisfied – the ith component of a influences only ui.
+Additionally, note that
+ui =
+〈
+[ AT
+i , 1, 1 ]; [ s, a[i] · GTs, noisei ]
+〉
+mod q
+Here, the first vector is a fixed public vector that is known to the key generator,
+while the second vector is made up of components all of which are known to the
+encryptor.
+Given these two conditions, we construct a semi-adaptive PHPE for the cir-
+cuit class C, denoted by SaPH, using two ingredients:
+Stronger Security for Reusable Garbled Circuits 11
+1. A single key fully secure3 functional encryption scheme, denoted by FuLin,
+for the inner product functionality defined as:
+F(V1,...,Vk)(a1, . . . ,ak) =
+∑
+i∈[k]
+Vi · ai mod q
+Such a scheme was recently constructed by Agrawal et al. [ALS16].
+2. A (1,poly) selectively secure PHPE scheme for the circuit class C, which we
+denote by VSelPH.
+Intuitively, the idea is to nest the selective PHPE system for C within an
+adaptive FE system for inner products, so that the latter is used to generate
+ciphertexts of the former on the fly. In more detail, the public parameters
+of SaPH are set as the public parameters of FuLin, the secret key corresponding
+to C, namely SaPH.SK(C) is the tuple
+(
+VSelPH.MPK, FuLin.SK( [ AT
+i , 1, 1 ] ),
+VSelPH.SK(C)
+)
+and the ciphertext is SaPH.CT = FuLin.CT
+(
+[ s, a[i] · GTs,
+noisei ]
+)
+. Now, the ciphertext FuLin.CT
+(
+[ s, a[i] · GTs, noisei ]
+)
+and secret key
+component FuLin.SK( [ AT
+i , 1, 1 ] ) may be decrypted to obtain the VSelPH
+ciphertext, which may be decrypted using VSelPH.SK(C). Some care is required
+in ascertaining that FuLin is only invoked for a single secret key, but this can
+be ensured by taking multiple copies of the FuLin scheme, and using the same
+randomness to generate multiple copies of the same key.
+The advantage to the above strategy is that the public parameters of the
+SaPH scheme are now set as the public parameters of the FuLin scheme, and the
+public parameters of the VSelPH scheme are moved into the secret keys of SaPH
+scheme. This enables the simulator of the SaPH scheme to provide the public
+parameters using the (adaptive/full) simulator for the FuLin scheme, and delay
+programming the PHPE public parameters until after the challenge is received, as
+required by the VSelPH simulator. Thus, very-selective security may be upgraded
+to semi-adaptive security for the circuit class C, by leveraging adaptive security
+of the simpler inner product functionality. For more details, please see Sect. 5.
+Generalising to Q Queries. To construct (Q,poly)-FE, we again begin by con-
+structing (Q,poly)-PHPE, which in turn is constructed from (1,poly)-PHPE.
+The (1,poly)-PHPE scheme has the following structure: it encodes the message
+b within an LWE sample β0 = PTs + noise + b. Given other components of the
+ciphertext, the decryptor is able to compute a ciphertext cEval and key generator
+provides as the key a short matrix K, where
+cEval = [ A | AC ]Ts + noise, [ A | AC ] K = P mod q
+By computing KTcEval − β0 and rounding the result, the decryptor recovers b.
+3 Please see Appendix 2.3 for the definition of full security.
+12 S. Agrawal
+To generalize the above to handle Q queries, a natural approach would be
+to encode the message Q times, using Q distinct matrices P1, . . . ,PQ and have
+the ith key Ki be a short matrix satisfying [ A | ACi
+] Ki = Pi mod q. Then,
+the key generator can pick Pi for the ith key, and sample the corresponding
+Ki as the secret key. However, this straightforward idea would require the key
+generator to keep track of how many keys it has produced so far and would make
+the key generator stateful, which is undesirable.
+To get around this, we make use of a trick using cover free sets [GVW12]. The
+idea is to enable the key generator to generate a fresh matrix P∗
+i for the ith key in
+a stateless manner, as follows. We publish a set of matrices {P1, . . . ,Pk} in the
+public key, for some parameter k. The key generator chooses a random subset
+Δi ⊂ [k] s.t. |Δi| = v for some suitably chosen v, and computes P∗
+i =
+∑
+j∈Δi
+Pj .
+It then samples Ki so that
+[ A | ACi
+] Ki = P∗
+i mod q
+If we choose (v, k) as functions of the security parameter κ and number of
+queries Q in a way that the Q subsets Δ1, . . . ,ΔQ are cover free with high
+probability, then this ensures that the matrices P∗
+1, . . . ,P
+∗
+Q are independent and
+uniformly distributed, which will enable the simulator to sample the requisite
+keys. This idea can be converted to a secure scheme with only an additive blowup
+of O(Q2) in the public key and ciphertext size. However, security is proven in a
+game which is weaker than [GVW12] in which the attacker may not request the
+1-keys adaptively, but must announce them all at once after seeing the public
+parameters.
+This gives us a (Q,poly)-PHPE but constructing (Q,poly)-FE requires some
+more work. Instead of flooding the evaluated ciphertext with a single piece of
+noise, we must now encode at least Q pieces of noise, to flood the ciphertext for Q
+decryptions. Fortunately, this can be ensured by leveraging cover-free sets again,
+so that the decryptor is forced to add a random cover-free subset sum of noise
+terms to the ciphertext before decryption. This ensures that each decryption lets
+the decryptor learn a fresh noise term which wipes out any troublesome noise
+leakage. Details are in the full version [Agr16].
+Additional Related Work. We note that in an independent and concurrent work,
+Goyal et al. [GKW16] provide a generic method to compile selective security
+to semi-adaptive security for functional encryption schemes. We note that this
+result does not apply to our setting as-is, since our starting-point security defin-
+ition is even more restricted than selective. See Sect. 2.1 for more details. In
+another work, Brakerski and Vaikuntanathan [BV16] achieved semi-adaptive
+security for “Attribute Based Encryption” using specialized techniques – these
+also do not apply black box to our construction.
+Organization of the Paper. The paper is organized as follows. Preliminaries are
+provided in Sect. 2. In Sect. 3, we describe our three attacks using 1-keys against
+existing predicate encryption systems. In Sect. 4 we provide our construction
+Stronger Security for Reusable Garbled Circuits 13
+for (1,poly) partially hiding predicate encryption. This is upgraded to achieve
+semi-adaptive security in Sect. 5. In Sect. 6 we provide our (1,poly) FE scheme.
+The generalization to (q,poly) FE is provided in the full version of the paper
+[Agr16].
+2 Preliminaries
+In this section we provide the preliminaries required for our work. For definitions
+of lattices and the LWE problem, we refer the reader to the full version of the
+paper [Agr16].
+2.1 Functional Encryption
+In this section, we provide the definition of functional encryption.
+Definition 2.1. A functional encryption scheme FE for an input universe X ,
+a circuit universe C and a message space M, consists of four algorithms FE =
+(FE.Setup,FE.Keygen, FE.Enc,FE.Dec) defined as follows.
+– FE.Setup(1κ) is a p.p.t. algorithm takes as input the unary representation
+of the security parameter and outputs the master public and secret keys
+(PK,MSK).
+– FE.Keygen(MSK, C) is a p.p.t. algorithm that takes as input the master secret
+key MSK and a circuit C ∈ C and outputs a corresponding secret key SKC .
+– FE.Enc
+(
+PK, (a, μ)
+)
+is a p.p.t. algorithm that takes as input the master public
+key PK and an input message (a, μ) ∈ X × M and outputs a ciphertext CTa.
+– FE.Dec(SKC ,CTa) is a deterministic algorithm that takes as input the secret
+key SKC and a ciphertext CTa and outputs μ iff C(a) = 1, ⊥ otherwise.
+Note that our definition is a slightly modified, albeit equivalent version of the
+standard definition for FE [BSW11]. For compatibility with the definition of
+predicate encryption [GVW15], we define our functionality to incorporate a mes-
+sage bit μ which is revealed when C(a) = 1.
+Correctness. Next, we define correctness of the system.
+Definition 2.2 (Correctness). A functional encryption scheme FE is correct
+if for all C ∈ Cκ and all a ∈ Xκ,
+– If C(a) = 1
+Pr
+[ (PK,MSK) ← FE.Setup(1κ);
+FE.Dec
+(
+FE.Keygen(MSK, C),FE.Enc
+(
+PK, (a, μ)
+)
+)
+�= μ
+]
+= negl(κ)
+– If C(a) = 0
+Pr
+[ (PK,MSK) ← FE.Setup(1κ);
+FE.Dec
+(
+FE.Keygen(MSK, C),FE.Enc
+(
+PK, (a, μ)
+)
+)
+�= ⊥
+]
+= negl(κ)
+where the probability is taken over the coins of FE.Setup, FE.Keygen, and FE.Enc.
+14 S. Agrawal
+Security. Next, we define simulation based security for functional encryption.
+Note that simulation based security is impossible for functional encryption
+against an adversary that requests even a single key after seeing the challenge
+ciphertext [BSW11], or an unbounded number of keys before seeing the chal-
+lenge ciphertext [AGVW13]. However, against an adversary who only requests
+an a-priori bounded number of keys before seeing the challenge ciphertext, sim-
+ulation based security is possible but causes the ciphertext size to grow with the
+number of requested keys [AGVW13].
+For the application of reusable garbled circuits, it suffices to construct a func-
+tional encryption scheme that supports a single key request made before seeing
+the challenge ciphertext. We generalize this definition to subsume the notion
+of predicate encryption, where an attacker can make an unbounded number of
+function queries Ci so long as it holds that the function keys do not decrypt the
+challenge ciphertext CT(a, μ) to recover μ. Thus, it holds that Ci(a) = 0 for all
+requested Ci. We shall refer to such Ci as 0-keys, and any C such that C(a) = 1
+as a 1-key. In our definition, the adversary can request a single arbitrary (i.e.
+0 or 1) key followed by an unbounded polynomial number of 0-keys. We refer
+to this security notion as (1,poly) simulation security. The notion we achieve is
+semi-adaptive, in that the adversary must declare the challenge message after
+receiving the public key.
+Definition 2.3 ((1,poly)-SA-SIM Security). Let FE be a functional encryp-
+tion scheme for a Boolean circuit family C. For every p.p.t. adversary Adv and
+a stateful p.p.t. simulator Sim, consider the following two experiments:
+ExprealFE,Adv(1
+κ): ExpidealFE,Sim(1κ):
+1: (PK,MSK) ← FE.Setup(1κ)
+2: (a, μ, C∗, st) ← Adv(1κ,PK)
+3: Let b = μ
+4: CTa ← FE.Enc
+(
+PK,a, b
+)
+5: SKC∗ ← FE.Keygen(MSK, C∗)
+6: α ←AdvFE.Keygen(MSK,·)(CTa, SKC∗ , st)
+7: Output (a, μ, α)
+1: PK ← Sim(1κ)
+2: (a, μ, C∗, st) ← Adv(1κ,PK)
+3: Let b = μ if C∗(a) = 1, ⊥ otherwise.
+4: CTa ← Sim(1|a|, C∗, b)
+5: SKC∗ ← Sim()
+6: α ←AdvSim(CTa, SKC∗ , st)
+7: Output (a, μ, α)
+We say an adversary Adv is admissible if:
+1. For a single query C∗, it may hold that C∗(a) = 1 or C∗(a) = 0.
+2. For all other queries Ci �= C∗, it holds that Ci(a) = 0.
+In the ideal experiment, the simulator Sim is traditionally given access to an
+oracle U(a,μ)(·), which upon input C returns ⊥ if C(a) = 0 and μ if C(a) = 1.
+However, we note that our simulator does not require access to an oracle because
+an admissible adversary may only make a single 1 query C∗, which is provided
+explicitly to the simulator. Every other query Ci made by the adversary is a 0
+query, hence the simulator can compare each query Ci with C∗, and set Ci(a) = 0
+when the equality does not hold.
+Stronger Security for Reusable Garbled Circuits 15
+The functional encryption scheme FE is then said to be (1,poly)-SA-SIM-
+secure if there is an admissible stateful p.p.t. simulator Sim such that for every
+admissible p.p.t. adversary Adv, the following two distributions are computation-
+ally indistinguishable.
+{
+ExprealFE,Adv(1
+κ)
+}
+κ∈N
+c≈
+{
+ExpidealFE,Sim(1κ)
+}
+κ∈N
+For the (Q,poly) version of the above game, we merely replace each occur-
+rence of C∗ with a tuple C∗
+1 , . . . , C∗
+Q.
+2.2 Partially Hiding Predicate Encryption
+A Partially-Hiding Predicate Encryption scheme PHPE for a pair of input-
+universes X ,Y, a predicate universe C, a message space M, consists of four
+algorithms (PH.Setup,PH.Enc,PH.KeyGen,PH.Dec):
+PH.Setup(1κ,X ,Y, C,M) → (PH.PK,PH.MSK). The setup algorithm gets as
+input the security parameter κ and a description of (X ,Y, C,M) and outputs
+the public parameter PH.PK, and the master key PH.MSK.
+PH.Enc(PH.PK, (x,y), μ) → CTy. The encryption algorithm gets as input
+PH.PK, an attribute pair (x,y) ∈ X × Y and a message μ ∈ M. It out-
+puts a ciphertext CTy.
+PH.KeyGen(PH.MSK, C) → SKC . The key generation algorithm gets as input
+PH.MSK and a predicate C ∈ C. It outputs a secret key SKC .
+PH.Dec((SKC , C), (CT,y)) → μ∨⊥. The decryption algorithm gets as input the
+secret key SKC , a predicate C, and a ciphertext CTy and the public part y
+of the attribute vector. It outputs a message μ ∈ M or ⊥.
+Correctness. We require that for all (PH.PK,PH.MSK) ← PH.Setup(1κ,X ,Y,
+C,M), for all (x,y, C) ∈ X × Y × C and for all μ ∈ M,
+– For 1-queries, namely C(x,y) = 1,
+[
+PH.Dec
+(
+(SKC , C), (CTy,y)
+)
+= μ
+]
+≥ 1 − negl(κ)
+– For 0-queries, namely C(x,y) = 0,
+[
+PH.Dec
+(
+(SKC , C), (CTy,y)
+)
+= ⊥
+]
+≥ 1 − negl(κ)
+Semi Adaptive SIM Security. Below, we define the SA-SIM security exper-
+iment for partially hiding predicate encryption (PHPE) that supports a single
+1-query and an unbounded number of 0-queries. We denote such a scheme by
+(1,poly)-PHPE scheme. We note that the scheme of Gorbunov et al. [GVW15]
+is a (0,poly)-PHPE scheme.
+16 S. Agrawal
+Definition 2.4 ((1,poly)-SA-SIM Security). Let PHPE be a partially hiding
+predicate encryption scheme for a circuit family C. For every stateful p.p.t. adver-
+sary Adv and a stateful p.p.t. simulator Sim, consider the following two experi-
+ments:
+ExprealPHPE,Adv(1
+κ): ExpidealPHPE,Sim(1κ):
+1: (PH.PK,PH.MSK) ← PH.Setup(1κ)
+2: (x,y, C∗) ← Adv(PH.PK)
+3: SKC∗ ← PH.KeyGen
+(
+PH.MSK, C∗)
+4: μ ← AdvPH.KeyGen(PH.MSK,·)(SKC∗)
+5: Let b = μ.
+6: CTy ← PH.Enc
+(
+PH.PK, (x,y), b
+)
+7: α ←AdvPH.KeyGen(PH.MSK,·)(CTy)
+8: Output (x,y, μ, α)
+1: PH.PK ← Sim(1κ)
+2: (x,y, C∗) ← Adv(PH.PK)
+3: SKC∗ ← Sim(y, 1|x|, C∗);
+4: μ ← AdvSim(SKC∗)
+5: Let b = μ if C∗(x,y) = 1, ⊥ otherwise.
+6: CTy ← Sim (b)
+7: α ←AdvSim(CTy)
+8: Output (x,y, μ, α)
+We say an adversary Adv is admissible if:
+1. For the single query C∗, it may hold that C∗(x,y) = 1 or C∗(x,y) = 0.
+2. For all queries C �= C∗, it holds that C(x,y) = 0.
+In the ideal experiment, the simulator Sim is traditionally given access to
+an oracle U(x,y,μ)(·), which upon input C returns ⊥ if C(x,y) = 0 and μ if
+C(x,y) = 1. However, since in our case Sim is provided C∗ explicitly, and this
+is the only possible 1-query, the simulator can check whether Ci = C∗ for any
+query Ci, and if not, set Ci(x,y) = 0. Hence, to simplify notation, we omit the
+oracle in the ideal experiment above.
+The partially hiding predicate encryption scheme PHPE is said to be (1,poly)-
+attribute hiding if there exists a p.p.t. simulator Sim such that for every admis-
+sible p.p.t. adversary Adv, the following two distributions are computationally
+indistinguishable:
+{
+ExprealPHPE,Adv(1
+κ)
+}
+κ∈N
+c≈
+{
+ExpidealPHPE,Sim(1κ)
+}
+κ∈N
+Very Selective SIM Security. Next, we define a “very” selective variant of
+the above game, in which the adversary must announce the challenge messages
+as well as the challenge function C∗ in the very first step of the game.
+Definition 2.5 ((1,poly) VSel-SIM Security). Let PHPE be a partially hiding
+predicate encryption scheme for a circuit family C. For every p.p.t. adversary
+Adv and a stateful p.p.t. simulator Sim, consider the following two experiments:
+Stronger Security for Reusable Garbled Circuits 17
+ExprealPHPE,Adv(1
+κ): ExpidealPHPE,Sim(1κ):
+1: (x,y, C∗) ← Adv(PH.PK)
+2: (PH.PK,PH.MSK) ← PH.Setup(1κ)
+3: SKC∗ ← PH.KeyGen
+(
+PH.MSK, C∗)
+4: μ ← AdvPH.KeyGen(SKC∗)
+5: Let b = μ.
+6: CTy ← PH.Enc
+(
+PH.PK, (x,y), b
+)
+7: α ←AdvPH.KeyGen(PH.MSK,·)(CTy)
+8: Output (x,y, μ, α)
+1: (x,y, C∗) ← Adv(PH.PK)
+2: PH.PK ← Sim(1κ,y, 1|x|, C∗)
+3: SKC∗ ← Sim();
+4: μ ← AdvSim(SKC∗)
+5: Let b = μ if C∗(x,y) = 1, ⊥ otherwise.
+6: CTy ← Sim (b)
+7: α ←AdvSim(CTy)
+8: Output (x,y, μ, α)
+The admissibility of the adversary Adv, the notes about the simulator and the
+required indistinguishability of distributions are as in Definition 2.4.
+For the definition of (Q,poly)-PHPE, where an adversary may request Q
+decrypting queries, we merely replace each occurence of C∗ with a tuple
+C∗
+1 , . . . , C∗
+Q in both the games above.
+2.3 Full Security for Single Key Linear FE
+Definition 2.6 (FULL-SIM security). Let FE be a single key functional
+encryption scheme for a circuit family C. For every p.p.t. adversary Adv and
+a stateful p.p.t. simulator Sim, consider the following two experiments:
+ExprealFE,A(1κ): ExpidealFE,Sim(1κ):
+1: (PK,MSK) ← FE.Setup(1κ)
+2: (a, st) ←A
+FE.Keygen(MSK,·)
+1 (PK)
+3: CT ← FE.Enc(PK,a)
+4: α ← A2(CT, st)
+5: Output (a, α)
+1: PK ← Sim(1κ)
+2: (a, st) ← A
+Sim(·)
+1 (PK)
+3: CT ← Sim
+(
+C,C(a)
+)
+4: α ← A2(CT, st)
+5: Output (a, μ, α)
+The functional encryption scheme FE is then said to be FULL-SIM-secure if
+there is a stateful p.p.t. simulator Sim such that for every p.p.t. adversary A =
+(A1, A2), the following two distributions are computationally indistinguishable.
+{
+ExprealFE,A(1κ)
+}
+κ∈N
+c≈
+{
+ExpidealFE,Sim(1κ)
+}
+κ∈N
+2.4 Algorithms Used by Our Constructions
+The following algorithms will be used crucially in our construction and proof.
+Trapdoor Generation. Below, we discuss two kinds of trapdoors that our
+construction and proof will use.
+18 S. Agrawal
+Generating Random Lattices with Trapdoors. To begin, we provide an algorithm
+for generating a random lattice with a trapdoor.
+Theorem 2.7 [Ajt99,GPV08,MP12]. Let q, n,m be positive integers with
+q ≥ 2 and m ≥ 6n lg q. There is a probabilistic polynomial-time algorithm
+TrapGen(q, n,m) that with overwhelming probability (in n) outputs a pair (A ∈
+Z
+n×m
+q , T ∈ Z
+m×m) such that A is statistically close to uniform in Z
+n×m
+q and T
+is a basis for Λ⊥
+q ((A)) satisfying
+‖T‖GS ≤ O(
+√
+n log q ) and ‖T‖ ≤ O(n log q).
+The Primitive Matrix G and its Trapdoor. The matrix G ∈ Z
+n×m
+q is the “powers-
+of two” matrix (see [MP12,Pei13] for the definition). The matrix G has a public
+trapdoor TG such that ‖TG‖∞ = 2. Let G−1 : Z
+n×m
+q → Z
+n×m
+q denote a deter-
+ministic algorithm which outputs a short preimage Ã so that G ·Ã = A mod q.
+Three Ways of Generating a Distribution. Let F = [ A|AR + γ · G ]
+where A ← Z
+n×m
+q , R ← {−1, 1}m×m, G is the primitive matrix defined above
+and γ ∈ Zq is arbitrary (in particular, it can be 0). We are interested in the
+distribution (F,K,P) ∈ Z
+n×2m
+q × Z
+2m×m
+q × Z
+n×m
+q satisfying F K = P mod q.
+Given F, we provide three different ways of sampling (K,P) so that the same
+resultant distribution is obtained.
+1. The first method is to sample P ← Z
+n×m
+q randomly and use a trapdoor for the
+left matrix of F, namely A to sample a low norm K. We let B � AR+ γ ·G
+and p denote a column of P.
+Algorithm SampleLeft(A,B,TA,p, σ) [CHKP10,ABB10]:
+Inputs: a full rank matrix A in Z
+n×m
+q , a “short” basis TA of Λ⊥
+q (A),
+a matrix B in Z
+n×m
+q , a vector p ∈ Z
+n
+q , and a Gaussian parameter σ.
+(2.1)
+Output: The algorithm outputs a vector k ∈ Z
+2m in coset Λp
+q (F).
+Its distribution is analyzed in the following theorem.
+Theorem 2.8 ([ABB10, Theorem 17], [CHKP10, Lemma 3.2]). Let q >
+2, m > n and σ > ‖TA‖GS · ω(
+√
+log(2m)). Then SampleLeft(A,B,TA,p, σ)
+taking inputs as in (2.1), outputs a vector k ∈ Z
+2m distributed statistically close
+to DΛp
+q (F),σ where F := (A ‖ B).
+2. The second method is to again sample P ← Z
+n×m
+q and use a trapdoor for the
+right matrix G (when γ �= 0) to sample K.
+Algorithm SampleRight(A,G,R,TG,p, σ):
+Inputs: matrices A in Z
+n×k
+q and R in Z
+k×m, a full rank matrix G in
+Z
+n×m
+q , a “short” basis TG of Λ⊥
+q (G), a vector p ∈ Z
+n
+q , and a Gaussian
+parameter σ.
+(2.2)
+Output: The algorithm outputs a vector k ∈ Z
+2m in coset Λp
+q (F).
+Stronger Security for Reusable Garbled Circuits 19
+Often the matrix R given to the algorithm as input will be a random matrix
+in {1,−1}m×m. Let Sm be the m-sphere {x ∈ R
+m+1 : ‖x‖ = 1}. We define
+sR := ‖R‖ = supx∈Sm−1‖R · x‖.
+Theorem 2.9 ([ABB10, Theorem 19]). Let q > 2,m > n and σ > ‖TG‖GS ·
+sR · ω(
+√
+log m). Then SampleRight(A,G,R,TG,p, σ) taking inputs as in (2.2)
+outputs a vector k ∈ Z
+2m distributed statistically close to DΛp
+q (F),σ where F :=
+(A ‖ AR + γ · G).
+3. The final method is to sample K ← (DZ2m,σ
+)m and set P = F · K mod q.
+We note that this method works even if γ = 0. As argued by [GPV08, Lemma
+5.2], this produces the correct distribution.
+Lemma 2.10. Assume the columns of F generate Z
+n
+q and let σ ≥ ω(
+√
+n log q).
+Then, for k ← DZ2m,σ, the distribution of the vector p = F ·k mod q is statisti-
+cally close to uniform over Z
+n
+q . Furthermore, fix p ∈ Z
+n
+q and let t be an arbitrary
+solution s.t. F · t = p mod q. Then, the conditional distribution of k ← DZ2m,σ
+given F · k = p mod q is t + DΛ⊥(F),σ,−t, which is precisely DΛp
+q (F),σ.
+Public Key and Ciphertext Evaluation Algorithms. Our construction
+will make use of the public key and ciphertext evaluation algorithms from
+[BGG+14,GVW15]. Since these algorithms can be used as black boxes for our
+purposes, we only state their input/output behavior and properties. These algo-
+rithms were constructed by Boneh et al. [BGG+14] in the context of attribute
+based encryption, and extended by Gorbunov et al. [GVW15] to the setting of
+partially hiding predicate encryption. In this setting, the attributes are divided
+into a private component x and a public component y, and the functionality sup-
+ports computation of a lightweight inner product composed with a heavy circuit
+̂C. Formally, [GVW15] construct algorithms PHPE.EvalMPK and PHPE.EvalCT to
+support the following circuit family:
+̂C ◦ IP(x,y) = 〈x, ̂C(y)〉.
+They make crucial use of the fact that PHPE.EvalCT does not need x for its
+execution since the computation involving x is an inner product. To compute
+the inner product, the multiplication may be carried out keeping x private and
+letting ̂C(y) be public, and addition may be carried out keeping both attributes
+private. Additionally, the circuit ̂C operates entirely on public attributes y.
+In more detail, [GVW15, Sect. 3.2] demonstrate the existence of the following
+efficient algorithms:
+1. EvalMPK takes as input � + t matrices {Ai}, {Bj} ∈ Z
+n×m
+q and a circuit
+̂C ◦ IP ∈ C and outputs a matrix A
+̂C◦IP ∈ Z
+n×m
+q .
+2. EvalCT takes as input � + t matrices {Ai, }{Bj} ∈ Z
+n×m
+q , � + t vectors
+{ui}, {vj}, the public attribute y ∈ {0, 1}� and a circuit ̂C ◦ IP ∈ C, and
+outputs a vector u
+̂C◦IP ∈ Z
+m
+q .
+20 S. Agrawal
+3. EvalR takes as input � + t matrices {Ri}, {R′
+j} ∈ Z
+m×m
+q , the matrix A, the
+public attribute vector y ∈ {0, 1}� and a circuit ̂C ◦ IP ∈ C and outputs a
+matrix R
+̂C◦IP ∈ Z
+m×m
+q .
+such that the following properties hold:
+u
+̂C◦IP =
+(
+A
+̂C◦IP + ̂C ◦ IP(x,y) · G )T
+s + eEval (2.3)
+When
+Ai = A · Ri − y[i] · G
+Bi = A · R′
+i − x[i] · G
+Then A
+̂C◦IP = AR
+̂C◦IP − ̂C ◦ IP(x,y) · G (2.4)
+Additionally, we may bound the norms as:
+‖eEval‖∞ ≤ O(�n log q)O(d) · max
+i∈[�]
+{‖ui − (Ai + y[i] · G)Ts‖∞, . . .} (2.5)
+‖R
+̂C◦IP‖∞ ≤ O(�n log q)O(d) · max
+i∈[�]
+{‖R1‖∞, . . . , ‖R�‖∞, ‖R′
+1‖∞, . . . , ‖R′
+t‖∞}
+(2.6)
+2.5 Fully Homomorphic Encryption
+A leveled symmetric key fully homomorphic scheme is a tuple of P.P.T algorithms
+FHE.KeyGen, FHE.Enc, FHE.Eval and FHE.Dec:
+FHE.KeyGen(1κ, 1d, 1k) : This is a probabilistic algorithm that takes as input the
+security parameter, the depth bound for the circuit, the message length and
+outputs the secret key FHE.SK.
+FHE.Enc(FHE.SK, μ) : This is a probabilistic algorithm that takes as input the
+secret key and message and produces the ciphertext FHE.CT.
+FHE.Eval(C,FHE.CT): This is a deterministic algorithm that takes as input a
+Boolean circuit C : {0, 1}k → {0, 1} of depth at most d and outputs another
+ciphertext FHE.CT′.
+FHE.Dec(FHE.SK,FHE.CT): This is a deterministic algorithm that takes as input
+the secret key and a ciphertext and produces a bit.
+Correctness. Let FHE.SK ← FHE.KeyGen(1κ, 1d, 1k) and C be a circuit of depth
+d. Then we require that
+Pr
+[
+FHE.Dec
+(
+FHE.SK, FHE.Eval(C,FHE.Enc(FHE.SK, μ))
+)
+= C(μ)
+]
+= 1
+Security. Security is defined as the standard semantic security. Let A be an
+efficient, stateful adversary and d, k = poly(κ). The semantic security game is
+defined as follows.
+Stronger Security for Reusable Garbled Circuits 21
+1. FHE.SK ← FHE.Setup(1κ, 1d, 1k)
+2. (μ0, μ1) ← A(1κ, 1d, 1k)
+3. b ← {0, 1}
+4. FHE.CT ← FHE.Enc(FHE.SK, μb)
+5. b′ ← A(FHE.CT)
+We require that the advantage of A in the above game be negligible, namely
+|Pr(b′ = b) − 1/2| = negl(κ)
+Instantiating FHE from Learning with Errors. We make use of the following
+instantiation of FHE from LWE.
+Theorem 2.11 [BV11,BGV12,GSW13,BV14,AP14]. There is an FHE scheme
+based on the LWE assumption such that, as long as q ≥ O(κ2):
+1. FHE.SK ∈ Z
+t
+q for some t ∈ poly(κ).
+2. FHE.CT(μ) ∈ {0, 1}� where � = poly(κ, k, d, log q).
+3. FHE.Eval outputs a ciphertext FHE.CT′ ∈ {0, 1}�.
+4. There exists an algorithm FHE.Scale(q, p) which reduces the modulus of the
+FHE ciphertext from q to p.
+5. For any Boolean circuit of depth d, FHE.Eval(C, ·) is computed by a Boolean
+circuit of depth poly(d, κ, log q).
+6. FHE.Dec on input FHE.SK and FHE.CT′ outputs a bit b ∈ {0, 1}. If FHE.CT′
+is an encryption of 1, then
+∑
+i∈[t]
+FHE.SK[i] · FHE.CT′[i] ∈ [�p/2� − B, �p/2� + B]
+for some fixed B = poly(κ). If FHE.CT′ is an encryption of 0, then
+∑
+i∈[t]
+FHE.SK[i] · FHE.CT′[i] /∈ [�p/2� − B, �p/2� + B]
+7. Security relies on LWEΘ(t),q,χ.
+3 Insecurity of Predicate Encryption Schemes Against
+General Adversaries
+In this section, we demonstrate that known LWE based predicate encryption
+constructions [AFV11,GVW15] are insecure against an adversary that requests
+1-keys.
+22 S. Agrawal
+3.1 Attack #1 on [AFV11] Using 1-Keys.
+Warmup Attack. To begin, we show a warmup attack that results from an adver-
+sary requesting the same key multiple times. Since the key generation algorithm
+is stateless, requesting many keys for the same function results in fresh, inde-
+pendent keys, which may be combined to fully recover the message.
+An observant reader may notice that our warmup attack may be easily pre-
+vented by derandomizing key generation (using a PRF, say) so that multiple
+requests of the same circuit result in the same key. However, as we show in
+the full version [Agr16], the attack may be generalized to an adversary request-
+ing non-identical functions against which derandomization does not work; the
+warmup attack is only the simplest application of the technique.
+We now describe the attack in detail. The construction of [AFV11] is
+described here at a high level, for more details we refer the reader to the paper.
+Say the attacker requests many keys for the vector v such that 〈x,v〉 = 0.
+Let Av =
+∑
+viAi. Now by construction of keys in [AFV11], we have:
+[A |Av]
+[
+e0
+f0
+]
+= u (mod q) (3.1)
+[A |Av]
+[
+e1
+f1
+]
+= u (mod q) (3.2)
+This implies [A |Av]
+[
+e0 − e1
+f0 − f1
+]
+= 0 (mod q) (3.3)
+Thus, we have a short vector in the lattice Λ⊥
+q (A|Av). By making many queries
+for the same v, the attacker may recover a full trapdoor basis for Λ⊥
+q (A|Av).
+Now, note that the ciphertext contains ATs+ noise as well as
+(
+Ai +x[i]G
+)T
+s+
+noise. Since 〈x,v〉 = 0, we can follow the decryption procedure as:
+∑
+i
+vi
+(
+Ai + x[i]G
+)T
+s + noise
+=
+(
+Av + 〈x, v〉G )T
+s + noise
+= AT
+vs + noise since 〈x, v〉 = 0
+This in turn allows the attacker to recover
+[A |Av]Ts + noise
+for which he now has a trapdoor. Using the trapdoor, he can now recover the
+noise terms to get exact linear equations in the LWE secret s, completely break-
+ing LWE security. Note that by functionality, the attacker should only have been
+able to learn a single bit of information, namely 〈x, v〉 = 0.
+The reason this attack works given 1-keys, i.e. in the strong attribute hiding
+setting, is that a particular linear relation needs to be satisfied to enable decryp-
+tion, which, given a decrypting key, can be exploited to carry out the attack.
+Specifically, in the above attack, the decryption procedure allows the attacker to
+Stronger Security for Reusable Garbled Circuits 23
+recover [A |Av]Ts+noise which would not be possible if the decryption condition
+did not hold, i.e. given only 0-keys.
+The generalization of the above attack, as well as the second and third attack
+are provided in the full version of the paper [Agr16].
+4 (1, poly) Very Selective PHPE
+In this section, we show that the partially hiding predicate encryption system
+PHPE of [GVW15] satisfies a stronger definition than described in [GVW15],
+namely (1,poly)-VSel-SIM security (see Definition 2.5). We emphasize that in
+addition to a single query of any kind, PHPE supports an unbounded number
+of 0-queries, as in [GVW15].
+4.1 Construction
+The construction of our (1,poly)-PHPE scheme is the same as in [GVW15],
+except the setting of certain parameters described in the full version [Agr16].
+The main novelty is in the proof, which shows that in the restricted game of
+Definition 2.5, the attacker can obtain a key for any circuit of his choice. As in
+[GVW15], he can also obtain an unbounded number of 0 keys, resulting in a
+(1,poly)-PHPE scheme.
+For completeness, we describe the construction below.
+PH.Setup(1κ, 1t, 1�, 1d) : Given as input the security parameter κ, the length of
+the private and public attributes, t and � respectively, and the depth of the
+circuit family d, do the following:
+1. Choose random matrices
+Ai ∈ Z
+n×m
+q for i ∈ [�], Bi ∈ Z
+n×m
+q for i ∈ [t], P ∈ Z
+n×m
+q
+To simplify notation, we denote by {Ai} the set {Ai}i∈[�] and by {Bi}
+the set {Bi}i∈[t].
+2. Sample (A,T) ← TrapGen(1m, 1n, q).
+3. Let G ∈ Z
+n×m
+q be the powers of two matrix with public trapdoor TG.
+4. Output the public and master secret keys.
+PH.PK =
+({Ai}, {Bi},A,P
+)
+, PH.MSK = (PH.PK,T)
+PH.KeyGen(PH.MSK, ̂C ◦ IPγ) : Given as input the circuit and the master secret
+key, do the following:
+1. Let A
+̂C◦IP = EvalMPK
+({Ai}, {Bi}, ̂C ◦ IP
+)
+.
+2. Sample K such that
+[A| A
+̂C◦IP + γ · G] · K = P mod q
+using K ← SampleLeft(A,A
+̂C◦IP + γ · G,T,P, s). Here s is the standard
+deviation of the Gaussian being sampled (see [Agr16] for the parameters).
+24 S. Agrawal
+3. Output SK
+̂C◦IPγ
+= K.
+PH.Enc
+(
+PH.PK, (x,y), μ
+)
+: Given as input the master public key, the private
+attributes x, public attributes y and message μ, do the following:
+1. Sample s ← DZn,sB
+and error terms e ← DZm,sB
+and e′ ← DZm,sD
+.
+2. Let b = [0, . . . , 0, �q/2�μ]T ∈ Z
+m
+q . Set
+β0 = ATs + e, β1 = PTs + e′ + b
+3. For i ∈ [�], compute
+ui = (Ai + yi · G)Ts + RT
+ie
+where Ri ← {−1, 1}m×m.
+4. For i ∈ [t], compute
+vi = (Bi + xi · G)Ts + (R′
+i)
+Te
+where R′
+i ← {−1, 1}m×m.
+5. Output the ciphertext
+CTy =
+(
+y,β0,β1, {ui}, {vj}
+)
+for i ∈ [�], j ∈ [t].
+PH.Dec
+(
+SK
+̂C◦IPγ
+,CTy
+)
+: Given as input a secret key and a ciphertext, do the
+following:
+1. Compute
+u
+̂C◦IP = EvalCT
+({Ai,ui}, {Bj ,vj}, ̂C ◦ IP,y
+)
+2. Compute
+ν = β1 − KT
+(
+β0
+u
+̂C◦IP
+)
+3. Round each coordinate of ν and if
+[
+Round(ν[1]), . . . ,Round(ν[m−1])
+]
+= 0
+then set μ = Round(ν[m]).
+4. Output μ.
+In the full version [Agr16], we show that the scheme is correct.
+4.2 Proof of Security
+Next, we argue that the above construction is secure against an adversary who
+requests a single key of any kind and an unbounded number of 0-keys.
+Theorem 4.1. The partially hiding predicate encryption scheme described in
+Sect. 4.1 is secure according in the very-selective game defined in Definition 2.5.
+Proof. We define a p.p.t. simulator Sim and argue that its output is computa-
+tionally indistinguishable (under the LWE assumption) from the output of the
+real world. Let b = μ if ̂C∗ ◦ IPγ(x,y) = 1, ⊥ otherwise.
+Simulator. Sim(A
+̂C∗◦IP,y, 1|x|, b):
+Stronger Security for Reusable Garbled Circuits 25
+1. It generates all public parameters as in the real PH.Setup except P. To
+generate P, it computes A
+̂C∗◦IP = EvalMPK
+({Ai}, {Bi}, ̂C∗ ◦ IP
+)
+, samples
+K∗ ← (DZ2m,s
+)m and sets:
+P = [A | A
+̂C∗◦IP + γ · G] K∗ (4.1)
+2. It generates all keys using the real PH.KeyGen except the key for ̂C∗ ◦ IPγ ,
+which is set as K∗ sampled above.
+3. Sim.Enc
+(
+̂C∗◦IPγ ,y, 1|x|, b
+)
+: It takes as input the challenge circuit ̂C∗◦IPγ , the
+public attributes y, the size of the private attributes x, and the message b = μ
+if ̂C∗ ◦ IPγ(x,y) = 1, ⊥ otherwise. It constructs the challenge ciphertext as
+follows.
+– It samples β0,ui,vi independently and uniformly from Z
+m
+q . If b = ⊥, it
+samples β1 also randomly from Z
+m
+q .
+– If b = μ, it computes β1 to satisfy the decryption equation corresponding
+to ̂C∗ ◦ IPγ as follows.
+• Let u
+̂C∗◦IP = EvalCT
+({Ai,ui}, {Bi,vi}, ̂C∗ ◦ IP,y
+)
+.
+• Sample e′′ ← DZm,sD
+• Set β1 = (K∗)T
+(
+β0
+u
+̂C∗◦IP
+)
++e′′+b where b = [0 . . . , 0, �q/2�μ]T ∈ Z
+m
+q .
+– It outputs the challenge ciphertext
+CT∗ =
+(
+{ui}i∈[�], {vi}i∈[t],y,β0,β1
+)
+We argue that the output of the simulator is distributed indistinguishably
+from the real world. Intuitively, there are only two differences between the real
+world and simulated distribution. The first is that instead of choosing P first and
+sampling K∗ to satisfy Eq. 4.1, we now choose K∗ first and set P accordingly.
+This is a standard trick in LWE based systems (see the survey [Pei13], where
+this is trick 1), its first use that we are aware of appears in [GPV08].
+The second difference is in how the challenge ciphertext is generated. In our
+challenge ciphertext the elements (β0,ui,vi) are sampled uniformly at random
+while β1 which is computed using the elements (β0,ui,vi) and K∗ in order
+to satisfy the decryption equation for a 1 key. We note that β1 is the only
+ciphertext element that is generated differently from the challenge ciphertext
+in the simulator of [GVW15]. In the [GVW15] simulator, β1 is also sampled at
+random, whereas in our case, it is generated to satisfy the decryption equation
+involving CT∗ and SK( ̂C∗ ◦ IPγ) when ̂C∗ ◦ IPγ(x,y) = 1. Enforcing this relation
+is necessary, as it is dictated by the correctness of the system4.
+The formal proof is provided in the full version of the paper [Agr16].
+4 Note that the step of “programming” β1 forces the simulator to use its knowledge
+of y. On the other hand, the simulator in [GVW15] does not need to use y for
+simulation, implying that even y is hidden when the attacker does not request 1-
+keys. Since the real decryption procedure needs y in order to decrypt, this (in our
+opinion) further illustrates the weakness of the weak attribute hiding definition.
+26 S. Agrawal
+5 Upgrading Very Selective to Semi Adaptive Security
+for PHPE
+In this section, we show how to construct a (1,poly)-Partially Hiding Predicate
+Encryption scheme for circuit class C satisfying semi adaptive security according
+to Definition 2.4. Our construction, which we denote by SaPH, will make use of
+two ingredients:
+1. A single key5, FULL-SIM secure functional encryption scheme for the following
+functionality:
+F(V1,...,Vk)(a1, . . . ,ak) =
+∑
+i=1
+Vi · ai mod q
+where Vi ∈ Z
+m×m
+q and ai ∈ Z
+m
+q for i ∈ [k]. The parameters k, q,m are input
+to the setup algorithm. Such a scheme was recently constructed by [ALS16]6.
+We will denote this scheme by FuLin.
+2. A (1,poly) very selectively secure PHPE scheme for the circuit class C, as
+provided in Sect. 4. We will denote this scheme by VSelPH.
+Our construction is described below.
+SaPH.Setup(1κ, 1t, 1�, 1d): Given as input the circuit and the master secret key,
+do the following:
+1. For i ∈ [�], let (FuLin.PKi,FuLin.MSKi) ← FuLin.Setup
+(
+1κ, (Zm
+q )3
+)
+.
+2. For j ∈ [t], let (FuLin.PK′
+j ,FuLin.MSK′
+j) ← FuLin.Setup
+(
+1κ, (Zm
+q )3
+)
+.
+3. Let (FuLin.PK0,FuLin.MSK0) ← FuLin.Setup
+(
+1κ, (Zm
+q )2
+)
+.
+4. Let (FuLin.PK′
+0,FuLin.MSK′
+0) ← FuLin.Setup
+(
+1κ, (Zm
+q )3
+)
+.
+5. Let {PRG}s∈{0,1}κ be a family of PRGs with polynomial expansion. Sam-
+ple a PRG seed, denoted by seed.
+6. Output
+PH.PK =
+{
+FuLin.PK0, FuLin.PK′
+0, {FuLin.PKi}i∈[�], {FuLin.PK′
+j}j∈[t]
+}
+PH.MSK =
+{
+seed, FuLin.MSK0, FuLin.MSK′
+0, {FuLin.MSKi}i∈[�], {FuLin.MSK′
+j}j∈[t]
+}
+SaPH.Enc
+(
+PH.PK, (x,y), μ
+)
+: Given as input the master public key, the private
+attributes x, public attributes y and message μ, do the following:
+1. Sample s ← DZn,sB
+and error terms e ← DZm,sB
+and e′ ← DZm,sD
+.
+2. Let b = [0, . . . , 0, �q/2�μ]T ∈ Z
+m
+q .
+3. Sample Ri ← {−1, 1}m×m for i ∈ [�] and R′
+j ← {−1, 1}m×m for j ∈ [t].
+4. Set7
+5 More precisely, we require that the adversary may request the same single function
+any number of times, but multiple requests for the same function result in the same
+key.
+6 While the construction in [ALS16] has stateful KeyGen against a general adversary,
+we only need the single key version which is clearly stateless.
+7 Note that we are abusing notation slightly, since the message space of FuLin was set
+as Z
+m
+q but s ∈ Z
+n
+q . However, since n < m, we can pad it with zeroes to make it
+match. We do not explicitly state this for the sake of notational convenience.
+Stronger Security for Reusable Garbled Circuits 27
+β̂0 = FuLin.Enc
+(
+s, e
+)
+, ûi = FuLin.Enc
+(
+s, y[i] · GTs, RT
+ie
+)
+,
+β̂1 = FuLin.Enc
+(
+s, e′,b
+)
+, v̂j = FuLin.Enc
+(
+s, x[j] · GTs, R′T
+je
+)
+5. Output the ciphertext
+CTy =
+(
+y, β̂0, β̂1, {ûi}, {v̂j}
+)
+for i ∈ [�], j ∈ [t].
+SaPH.KeyGen(PH.MSK, ̂C ◦ IPγ) : Given as input the circuit and the master
+secret key, do the following:
+1. Use PRG(seed) to generate sufficient randomness rand for the
+VSelPH.Setup algorithm as well as {randi}, {rand′
+j}, rand0, rand′
+0 for the
+FuLin.KeyGen algorithms.
+2. Sample (VSelPH.MPK,VSelPH.MSK) ← VSelPH.Setup
+(
+1κ, 1t, 1�, 1d,
+rand
+)
+.
+Parse VSelPH.MPK =
+({Ai}, {Bj}, A, P
+)
+.
+3. Let8
+FuLin.SKi ← FuLin.KeyGen
+(
+FuLin.MSKi, (AT
+i , 1, 1), randi
+) ∀i ∈ [�]
+FuLin.SK′
+j ← FuLin.KeyGen
+(
+FuLin.MSK′
+j , (B
+T
+j , 1, 1), rand′
+j
+) ∀j ∈ [t]
+FuLin.SK0 ← FuLin.KeyGen
+(
+FuLin.MSK0, (AT, 1), rand0
+)
+FuLin.SK′
+0 ← FuLin.KeyGen
+(
+FuLin.MSK′
+0, (P
+T, 1, 1), rand′
+0
+)
+4. Let VSelPH.SK( ̂C ◦ IPγ) ← VSelPH.KeyGen
+(
+VSelPH.MSK, ̂C ◦ IPγ
+)
+.
+5. Output
+VSelPH.SK(Ĉ ◦ IPγ) =
+((
+VSelPH.MPK, VSelPH.SK(Ĉ ◦ IPγ)
+)
+,
+( {FuLin.SKi}, {FuLin.SK′
+j}, FuLin.SK0, FuLin.SK′
+0
+))
+SaPH.Dec
+(
+SK
+̂C◦IPγ
+,CTy
+)
+: Given as input a secret key and a ciphertext, do the
+following:
+1. Let
+β0 = FuLin.Dec(FuLin.SK0, β̂0), ui = FuLin.Dec(FuLin.SKi, ûi),
+β1 = FuLin.Dec(FuLin.SK′
+0, β̂1), vj = FuLin.Dec(FuLin.SK′
+j , v̂j)
+Let VSelPH.CT =
+(
+β0, β1, {ui}, {vj}, y
+)
+.
+2. Output μ ← VSelPH.Dec
+(
+VSelPH.MPK, VSelPH.CT,VSelPH.SK
+)
+.
+Correctness. Correctness may be argued using the correctness of FuLin and
+VSelPH.
+8 Here, 1 is used to denote the m × m identity matrix.
+28 S. Agrawal
+By correctness of FuLin, the tuple (β0, β1, {ui}, {vj}) produced in the
+first step of decryption is precisely the ciphertext of the VSelPH scheme. More
+formally, we get:
+ui = FuLin.Dec(FuLin.SKi, ûi) = (Ai + yi · G)Ts + RT
+ie
+vj = FuLin.Dec(FuLin.SK′
+j , v̂j) = (Bi + xi · G)Ts + (R′
+i)
+Te
+β0 = FuLin.Dec(FuLin.SK0, β̂0) = ATs + e
+β1 = FuLin.Dec(FuLin.SK′
+0, β̂1) = PTs + e′ + b
+Let VSelPH.CT =
+(
+β0, β1, {ui}, {vj}, y
+)
+. Then, by correctness of VSelPH,
+the following is correct
+μ = VSelPH.Dec
+(
+VSelPH.MPK, VSelPH.CT,VSelPH.SK
+)
+In the full version of the paper [Agr16], we prove the following theorem.
+Theorem 5.1. Assume that VSelPH satisfies VSel-SIM attribute hiding (Defin-
+ition 2.5) and that FuLin satisfies FULL-SIM security (Appendix 2.3). Then the
+scheme SaPH satisfies SA-SIM attribute hiding (Definition 2.4).
+6 (1, poly)-Functional Encryption
+In this section, we construct our (1,poly)-functional encryption scheme. The
+ciphertext of the construction is succinct, providing a unification of the results
+[GKP+13,GVW15]. Our construction of (1,poly)-functional encryption uses
+(1,poly)-partially hiding predicate encryption and fully homomorphic encryp-
+tion in a manner similar to [GVW15, Sect. 4].
+6.1 Construction
+We begin with an overview of the main ideas in the construction. Let us recall
+the (0,poly)-FE scheme constructed by [GVW15]. The scheme makes use of two
+ingredients, namely, a (0,poly)-PHPE scheme for circuits, and a fully homomor-
+phic encryption scheme for circuits. The ciphertext of (0,poly)-FE corresponding
+to an attribute a is a PHPE ciphertext corresponding to (â, t) where â is the
+FHE encryption of a, and corresponds to the public attributes in PHPE, while
+t is the FHE secret key and corresponds to the private attributes in PHPE.
+The secret key corresponding to circuit C in the (0,poly)-FE scheme is a set
+of PHPE secret keys { ̂C ◦ IPγ }γ∈[	p/2
+−B,	p/2
++B] where:
+̂C ◦ IPγ(x,y) = 1 if 〈x, ̂C(y)〉 = γ
+= 0 otherwise.
+The decryptor executes the homomorphic ciphertext evaluation procedure
+for circuit FHE.Eval(·, C) on the attributes â embedded in the PHPE cipher-
+text as in [BGG+14] to obtain a ciphertext corresponding to public attributes
+Stronger Security for Reusable Garbled Circuits 29
+̂C(a), where ̂C(a) is an FHE encryption of C(a). Now, when C(a) = 1, then by
+correctness of FHE, there exists a noise term γ ∈ [�p/2� − B, �p/2� + B] such
+that
+〈
+t, ̂C(a)
+〉
+= γ. The decryptor tries keys corresponding to all possible γ
+within the aforementioned range to ascertain whether ̂C ◦ IPγ(â, t) = 1. Note
+that this step makes it crucial that the FHE decryption range be polynomial
+in size. Fortunately, as noted by [GVW15], this can be ensured by the modu-
+lus reduction technique in FHE schemes [BGV12,GSW13,BV14], which allows
+a superpolynomial modulus to be scaled down to polynomial size.
+The first idea in building (1,poly)-FE is to replace the use of (0,poly)-PHPE
+in the above transformation by the (1,poly) PHPE constructed in Sect. 4. How-
+ever, as discussed in Attack #3, Sect. 3, such a straightforward adaptation leads
+to vulnerabilities. This is because decryption using a 1-key allows the decryptor
+to learn the exact inner product of the FHE ciphertext ̂C(a) and the FHE secret
+key t rather than the threshold inner product corresponding to FHE decryp-
+tion. This lets her obtain leakage on the noise terms used to construct â, which
+is problematic. We will denote the noise used in the construction of the FHE
+ciphertext â by Noise( â ).
+Overcoming Leakage on FHE Noise. For a single 1-key, there is a natural way
+out, via “noise flooding” or “noise smudging” [Gen09,GKPV10,AJLA+12]. To
+prevent leakage on Noise( â ), we may augment the FHE evaluation circuit with
+a “flooding” operation, which, after computing FHE.Eval(â, C) adds to it an
+encryption of 0 with large noise η to drown out the effects of Noise( â ). This
+idea is complicated by the fact that our construction of (1,poly)-FE must use
+an FHE scheme whose final modulus is polynomial in size, whereas η must be
+chosen to satisfy:
+Noise( FHE.Eval( â, C) ) + η
+s≈ η (6.1)
+so that it drowns the effects of Noise( â ). The above constraint may necessitate
+η, and hence the FHE modulus, to be superpolynomial in the security parameter.
+Fortunately, we can work around this difficulty by performing FHE modulus
+reduction after flooding. Then, η can be superpolynomial in the security para-
+meter to obliterate the dependency of the revealed noise on the initial noise,
+while letting the final FHE modulus still be polynomial. Another method is to
+use the “sanitization” operation [DS16], which will result in better parameters
+for this step – however, since it does not improve our overall parameters, we do
+not discuss this.
+Formally, we require a PHPE scheme for the circuit family CPHPE where
+̂C ◦ IP ∈ CPHPE is defined as follows. Let the private attributes x = t where
+t is the FHE secret, and public attributes y = (â,̂0), where ̂0 is an FHE encryp-
+tion of the bit 0, with large noise η. Then, define:
+30 S. Agrawal
+̂C(̂0, â) = FHE.Scaleq,p
+(
+FHE.Eval(â, C) + ̂0
+)
+̂C ◦ IP
+(
+t,̂0, â
+)
+=
+〈
+t, ̂C(̂0, â)
+〉
+mod p
+̂C ◦ IPγ
+(
+t,̂0, â
+)
+= 1 iff ̂C ◦ IP
+(
+t,̂0, â
+)
+= γ, 0 otherwise.
+Above, FHE.Eval is the FHE ciphertext evaluation algorithm, and FHE.Scale
+is the modulus reduction algorithm described in Sect. 2.5. Recall that
+FHE.Scaleq,p takes as input an FHE ciphertext that lives modulo q and reduces
+it to a ciphertext that lives modulo p. For the sake of brevity, we abuse notation
+and do not explicitly include the inputs (q, p) in the inputs to ̂C ◦ IP.
+Construction. We now proceed to describe the construction.
+FE.Setup(1κ, 1k, 1d): The setup algorithm takes the security parameter κ, the
+attribute length k and the function depth d and does the following:
+1. Choose the FHE modulus q in which FHE.Eval(·, ·) will be computed and
+the FHE modulus p ∈ poly(κ) in which decryption will be performed as
+per Sect. 2.5.
+2. Invoke the setup algorithm for the PHPE scheme for family CPHPE to get:
+(PH.PK,PH.MSK) ← PH.Setup(1κ, 1t, 1�, 1d′
+)
+where length of private attributes t = |FHE.SK|, length of public
+attributes � is the length of an FHE encryption of k+1 bits corresponding
+to the attributes a and 0, i.e. � = (k + 1) · |FHE.CT| and d′ is the bound
+on the augmented FHE evaluation circuit.
+3. Output (PK = PH.PK, MSK = PH.MSK).
+FE.Keygen(MSK, C) : The key generation algorithm takes as input the master
+secret key MSK and a circuit C. It does the following:
+1. Let R � [�p/2�−B, �p/2�+B]. Compute the circuit ̂C ◦ IPγ as described
+above for γ ∈ R.
+2. For γ ∈ R, compute
+PH.SK
+̂C◦IPγ
+← PH.KeyGen(PH.MSK, ̂C ◦ IPγ)
+3. Output the secret key as SKC = {PH.SK
+̂C◦IPγ
+}γ∈R.
+FE.Enc(PK,a, μ): The encryption algorithm does the following:
+1. Sample a fresh FHE secret key FHE.SK, and denote it by t.
+2. Compute an FHE encryption of a to get â = FHE.Enc( t,a ).
+3. Sample η to satisfy Eq. 6.1 and compute an FHE encryption of 0 with
+noise η as ̂0.
+4. Set public attributes y = (â,̂0) and private attributes x = t.
+5. Compute PH.CTâ,̂0 = PH.Enc
+(
+PH.PK, (x,y), μ
+)
+.
+6. Output CTa =
+(
+â,̂0,PH.CTâ,̂0
+)
+.
+FE.Dec(SKC ,CTa): Do the following:
+1. Parse SKC as the set {PH.SK
+̂C◦IPγ
+}γ∈R.
+2. For γ ∈ R, let τγ = PH.Dec
+(
+CTa,PH.SK
+̂C◦IPγ
+)
+. If there exists some
+value γ′ for which τγ′ �= ⊥, then output μ = τγ′ , else output ⊥.
+Stronger Security for Reusable Garbled Circuits 31
+Correctness. Correctness follows from correctness of PHPE and properties of
+FHE (see Sect. 2.5). Please see the full version [Agr16] for details.
+6.2 Proof of Security
+Next, we argue that the above scheme satisfies semi-adaptive security.
+Theorem 6.1. The (1,poly) functional encryption scheme described above is
+secure according to Definition 2.3.
+Proof. We construct a simulator FE.Sim as required by Definition 2.3 as follows.
+Simulator FE.Sim(1κ). The simulator is described as follows.
+1. It invokes PHPE.Sim(1κ) to obtain the public parameters and returns these.
+2. The FE adversary outputs (a, μ, C∗) upon which, FE.Sim obtains (1|a|, μ, C∗).
+It does the following:
+(a) It samples an FHE secret key FHE.SK and sets â = FHE.Enc(FHE.SK,0)
+and ̂0 = FHE.Enc(FHE.SK, 0).
+(b) It samples γq to satisfy Eq. 6.1. Let γ denote its scaled down version
+modulo p. It computes ̂C∗ ◦ IPγ as described above.
+(c) It invokes PHPE.Sim
+(
+(â,̂0), 1|FHE.SK|, ̂C∗ ◦ IPγ , μ
+)
+to obtain
+(
+PH.CT, PH.SK( ̂C∗ ◦ IPγ)
+)
+.
+(d) For ρ ∈ R\γ, it constructs ̂C∗ ◦ IPρ and sends these queries to PHPE.Sim.
+It receives PH.SK( ̂C∗ ◦ IPρ).
+(e) It outputs
+(
+PH.CT, {PH.SK( ̂C∗ ◦ IPρ)}ρ∈R
+)
+.
+3. When Adv makes any query C, FE.Sim transforms it into { ̂C ◦ IPρ}ρ∈R and
+sends this to PHPE.Sim. It returns the set of received keys to Adv. Note that
+these are 0-keys.
+4. When Adv outputs α, output the same.
+We argue that the simulator is correct in the full version of the paper [Agr16].
+We note that the above construction is shown secure in a game which allows
+a single arbitrary query and other 0 queries. Circuit privacy may be obtained
+by using symmetric key encryption SKE to hide the key and augmenting the
+function circuit with SKE decryption, exactly as in [GKP+13]. The details as
+well as the generalization to the bounded collusion setting is provided in the full
+version of the paper [Agr16].
+References
+[ABB10] Agrawal, S., Boneh, D., Boyen, X.: Efficient lattice (H)IBE in the
+standard model. In: Gilbert, H. (ed.) EUROCRYPT 2010. LNCS,
+vol. 6110, pp. 553–572. Springer, Heidelberg (2010). doi:10.1007/
+978-3-642-13190-5 28
+http://dx.doi.org/10.1007/978-3-642-13190-5_28
+http://dx.doi.org/10.1007/978-3-642-13190-5_28
+32 S. Agrawal
+[AFV11] Agrawal, S., Freeman, D.M., Vaikuntanathan, V.: Functional encryption
+for inner product predicates from learning with errors. In: Lee, D.H.,
+Wang, X. (eds.) ASIACRYPT 2011. LNCS, vol. 7073, pp. 21–40. Springer,
+Heidelberg (2011). doi:10.1007/978-3-642-25385-0 2
+[Agr16] Agrawal, S.: Stronger security for reusable garbled circuits, general defi-
+nitions and attacks. Eprint 2016/654 (2016)
+[AGVW13] Agrawal, S., Gorbunov, S., Vaikuntanathan, V., Wee, H.: Functional
+encryption: new perspectives and lower bounds. In: Canetti, R., Garay,
+J.A. (eds.) CRYPTO 2013. LNCS, vol. 8043, pp. 500–518. Springer,
+Heidelberg (2013). doi:10.1007/978-3-642-40084-1 28
+[AJLA+12] Asharov, G., Jain, A., López-Alt, A., Tromer, E., Vaikuntanathan, V.,
+Wichs, D.: Multiparty computation with low communication, computa-
+tion and interaction via threshold FHE. In: Pointcheval, D., Johansson,
+T. (eds.) EUROCRYPT 2012. LNCS, vol. 7237, pp. 483–501. Springer,
+Heidelberg (2012). doi:10.1007/978-3-642-29011-4 29
+[Ajt99] Ajtai, M.: Generating hard instances of the short basis problem. In: Wie-
+dermann, J., Emde Boas, P., Nielsen, M. (eds.) ICALP 1999. LNCS, vol.
+1644, pp. 1–9. Springer, Heidelberg (1999). doi:10.1007/3-540-48523-6 1
+[ALS16] Agrawal, S., Libert, B., Stehle, D.: Fully secure functional encryption for
+linear functions from standard assumptions. In: CRYPTO (2016)
+[AP14] Alperin-Sheriff, J., Peikert, C.: Faster bootstrapping with polynomial
+error. In: Garay, J.A., Gennaro, R. (eds.) CRYPTO 2014. LNCS,
+vol. 8616, pp. 297–314. Springer, Heidelberg (2014). doi:10.1007/
+978-3-662-44371-2 17
+[BF01] Boneh, D., Franklin, M.: Identity-based encryption from the weil pair-
+ing. In: Kilian, J. (ed.) CRYPTO 2001. LNCS, vol. 2139, pp. 213–229.
+Springer, Heidelberg (2001). doi:10.1007/3-540-44647-8 13
+[BGG+14] Boneh, D., Gentry, C., Gorbunov, S., Halevi, S., Nikolaenko, V., Segev,
+G., Vaikuntanathan, V., Vinayagamurthy, D.: Fully key-homomorphic
+encryption, arithmetic circuit ABE and compact garbled circuits.
+In: Nguyen, P.Q., Oswald, E. (eds.) EUROCRYPT 2014. LNCS,
+vol. 8441, pp. 533–556. Springer, Heidelberg (2014). doi:10.1007/
+978-3-642-55220-5 30
+[BGV12] Brakerski, Z., Gentry, C., Vaikuntanathan, V.: (Leveled) fully homomor-
+phic encryption without bootstrapping. In: ITCS (2012)
+[BSW07] Bethencourt, J., Sahai, A., Waters, B.: Ciphertext-policy attribute-based
+encryption. In: IEEE Symposium on Security and Privacy (2007)
+[BSW11] Boneh, D., Sahai, A., Waters, B.: Functional encryption: definitions and
+challenges. In: Ishai, Y. (ed.) TCC 2011. LNCS, vol. 6597, pp. 253–273.
+Springer, Heidelberg (2011). doi:10.1007/978-3-642-19571-6 16
+[BV11] Brakerski, Z., Vaikuntanathan, V.: Efficient fully homomorphic encryp-
+tion from (standard) LWE. In: FOCS (2011)
+[BV14] Brakerski, Z., Vaikuntanathan, V.: Lattice-based FHE as secure as PKE.
+In: ITCS (2014)
+[BV16] Brakerski, Z., Vaikuntanathan, V.: Circuit-ABE from LWE: unbounded
+attributes and semi-adaptive security. In: Robshaw, M., Katz, J. (eds.)
+CRYPTO 2016. LNCS, vol. 9816, pp. 363–384. Springer, Heidelberg
+(2016). doi:10.1007/978-3-662-53015-3 13
+[BW06] Boyen, X., Waters, B.: Anonymous hierarchical identity-based encryption
+(without random oracles). In: Dwork, C. (ed.) CRYPTO 2006. LNCS, vol.
+4117, pp. 290–307. Springer, Heidelberg (2006). doi:10.1007/11818175 17
+http://dx.doi.org/10.1007/978-3-642-25385-0_2
+http://dx.doi.org/10.1007/978-3-642-40084-1_28
+http://dx.doi.org/10.1007/978-3-642-29011-4_29
+http://dx.doi.org/10.1007/3-540-48523-6_1
+http://dx.doi.org/10.1007/978-3-662-44371-2_17
+http://dx.doi.org/10.1007/978-3-662-44371-2_17
+http://dx.doi.org/10.1007/3-540-44647-8_13
+http://dx.doi.org/10.1007/978-3-642-55220-5_30
+http://dx.doi.org/10.1007/978-3-642-55220-5_30
+http://dx.doi.org/10.1007/978-3-642-19571-6_16
+http://dx.doi.org/10.1007/978-3-662-53015-3_13
+http://dx.doi.org/10.1007/11818175_17
+Stronger Security for Reusable Garbled Circuits 33
+[BW07] Boneh, D., Waters, B.: Conjunctive, subset, and range queries on
+encrypted data. In: Vadhan, S.P. (ed.) TCC 2007. LNCS, vol. 4392, pp.
+535–554. Springer, Heidelberg (2007). doi:10.1007/978-3-540-70936-7 29
+[CFL+16] Cheon, J.H., Fouque, P.-A., Lee, C., Minaud, B., Ryu, H.: Cryptanalysis
+of the new CLT multilinear map over the integers. In: Fischlin, M., Coron,
+J.-S. (eds.) EUROCRYPT 2016. LNCS, vol. 9665, pp. 509–536. Springer,
+Heidelberg (2016). doi:10.1007/978-3-662-49890-3 20
+[CGH+15] Coron, J.-S., Gentry, C., Halevi, S., Lepoint, T., Maji, H.K., Miles, E.,
+Raykova, M., Sahai, A., Tibouchi, M.: Zeroizing without low-level zeroes:
+new MMAP attacks and their limitations. In: CRYPTO (2015)
+[CHKP10] Cash, D., Hofheinz, D., Kiltz, E., Peikert, C.: Bonsai trees, or how
+to delegate a lattice basis. In: Gilbert, H. (ed.) EUROCRYPT 2010.
+LNCS, vol. 6110, pp. 523–552. Springer, Heidelberg (2010). doi:10.1007/
+978-3-642-13190-5 27
+[CHL+15] Cheon, J.H., Han, K., Lee, C., Ryu, H., Stehlé, D.: Cryptanalysis of the
+multilinear map over the integers. In: Oswald, E., Fischlin, M. (eds.)
+EUROCRYPT 2015. LNCS, vol. 9056, pp. 3–12. Springer, Heidelberg
+(2015). doi:10.1007/978-3-662-46800-5 1
+[CJL] Cheon, J.H., Jeong, J., Lee, C.: An algorithm for NTRU problems and
+cryptanalysis of the GGH multilinear map without a low level encoding
+of zero. Eprint 2016/139
+[CLT13] Coron, J.-S., Lepoint, T., Tibouchi, M.: Practical multilinear maps
+over the integers. In: Canetti, R., Garay, J.A. (eds.) CRYPTO 2013.
+LNCS, vol. 8042, pp. 476–493. Springer, Heidelberg (2013). doi:10.1007/
+978-3-642-40041-4 26
+[Coc01] Cocks, C.: An identity based encryption scheme based on quadratic
+residues. In: Honary, B. (ed.) Cryptography and Coding 2001. LNCS,
+vol. 2260, pp. 360–363. Springer, Heidelberg (2001). doi:10.1007/
+3-540-45325-3 32
+[DS16] Ducas, L., Stehlé, D.: Sanitization of FHE ciphertexts. In: Fischlin, M.,
+Coron, J.-S. (eds.) EUROCRYPT 2016. LNCS, vol. 9665, pp. 294–310.
+Springer, Heidelberg (2016). doi:10.1007/978-3-662-49890-3 12
+[Gen09] Gentry, C.: Fully homomorphic encryption using ideal lattices. In: STOC,
+pp. 169–178 (2009)
+[GGH13a] Garg, S., Gentry, C., Halevi, S.: Candidate multilinear maps from ideal
+lattices. In: Johansson, T., Nguyen, P.Q. (eds.) EUROCRYPT 2013.
+LNCS, vol. 7881, pp. 1–17. Springer, Heidelberg (2013). doi:10.1007/
+978-3-642-38348-9 1
+[GGH+13b] Garg, S., Gentry, C., Halevi, S., Raykova, M., Sahai, A., Waters, B.:
+Candidate indistinguishability obfuscation and functional encryption for
+all circuits. In: FOCS (2013). http://eprint.iacr.org/
+[GGH+13c] Garg, S., Gentry, C., Halevi, S., Sahai, A., Waters, B.: Attribute-based
+encryption for circuits from multilinear maps. In: Canetti, R., Garay, J.A.
+(eds.) CRYPTO 2013. LNCS, vol. 8043, pp. 479–499. Springer, Heidelberg
+(2013). doi:10.1007/978-3-642-40084-1 27
+[GGH15] Gentry, C., Gorbunov, S., Halevi, S.: Graph-induced multilinear maps
+from lattices. In: Dodis, Y., Nielsen, J.B. (eds.) TCC 2015. LNCS,
+vol. 9015, pp. 498–527. Springer, Heidelberg (2015). doi:10.1007/
+978-3-662-46497-7 20
+http://dx.doi.org/10.1007/978-3-540-70936-7_29
+http://dx.doi.org/10.1007/978-3-662-49890-3_20
+http://dx.doi.org/10.1007/978-3-642-13190-5_27
+http://dx.doi.org/10.1007/978-3-642-13190-5_27
+http://dx.doi.org/10.1007/978-3-662-46800-5_1
+http://dx.doi.org/10.1007/978-3-642-40041-4_26
+http://dx.doi.org/10.1007/978-3-642-40041-4_26
+http://dx.doi.org/10.1007/3-540-45325-3_32
+http://dx.doi.org/10.1007/3-540-45325-3_32
+http://dx.doi.org/10.1007/978-3-662-49890-3_12
+http://dx.doi.org/10.1007/978-3-642-38348-9_1
+http://dx.doi.org/10.1007/978-3-642-38348-9_1
+http://eprint.iacr.org/
+http://dx.doi.org/10.1007/978-3-642-40084-1_27
+http://dx.doi.org/10.1007/978-3-662-46497-7_20
+http://dx.doi.org/10.1007/978-3-662-46497-7_20
+34 S. Agrawal
+[GGHZ14] Garg, S., Gentry, C., Halevi, S., Zhandry, M.: Fully secure functional
+encryption without obfuscation. In: IACR Cryptology ePrint Archive,
+vol. 2014, p. 666 (2014)
+[GKP+13] Goldwasser, S., Kalai, Y.T., Popa, R.A., Vaikuntanathan, V., Zeldovich,
+N.: Reusable garbled circuits and succinct functional encryption. In:
+STOC, pp. 555–564 (2013)
+[GKPV10] Goldwasser, S., Kalai, Y.T., Peikert, C., Vaikuntanathan, V.: Robustness
+of the learning with errors assumption. In: ITCS (2010)
+[GKW16] Goyal, R., Koppula, V., Waters, B.: Semi-adaptive security and bundling
+functionalities made generic and easy. In: Hirt, M., Smith, A. (eds.) TCC
+2016. LNCS, vol. 9986, pp. 361–388. Springer, Heidelberg (2016). doi:10.
+1007/978-3-662-53644-5 14
+[GPSW06] Goyal, V., Pandey, O., Sahai, A., Waters, B.: Attribute-based encryption
+for fine-grained access control of encrypted data. In: CCS (2006)
+[GPV08] Gentry, C., Peikert, C., Vaikuntanathan, V.: Trapdoors for hard lattices
+and new cryptographic constructions. In: STOC (2008)
+[GSW13] Gentry, C., Sahai, A., Waters, B.: Homomorphic encryption from learning
+with errors: conceptually-simpler, asymptotically-faster, attribute-based.
+In: Canetti, R., Garay, J.A. (eds.) CRYPTO 2013. LNCS, vol. 8042, pp.
+75–92. Springer, Heidelberg (2013). doi:10.1007/978-3-642-40041-4 5
+[GTKP+13] Goldwasser, S., Kalai, Y.T., Popa, R., Vaikuntanathan, V., Zeldovich,
+N.: Reusable garbled circuits and succinct functional encryption. In: Pro-
+ceedings of STOC (2013)
+[GVW12] Gorbunov, S., Vaikuntanathan, V., Wee, H.: Functional encryption
+with bounded collusions via multi-party computation. In: Safavi-Naini,
+R., Canetti, R. (eds.) CRYPTO 2012. LNCS, vol. 7417, pp. 162–179.
+Springer, Heidelberg (2012). doi:10.1007/978-3-642-32009-5 11
+[GVW13] Gorbunov, S., Vaikuntanathan, V., Wee, H.: Attribute based encryption
+for circuits. In: STOC (2013)
+[GVW15] Gorbunov, S., Vaikuntanathan, V., Wee, H.: Predicate encryption for
+circuits from LWE. In: Gennaro, R., Robshaw, M. (eds.) CRYPTO 2015.
+LNCS, vol. 9216, pp. 503–523. Springer, Heidelberg (2015). doi:10.1007/
+978-3-662-48000-7 25
+[HJ15] Hu, Y., Jia, H.: Cryptanalysis of GGH map. Cryptology ePrint Archive:
+Report 2015/301 (2015)
+[KSW08] Katz, J., Sahai, A., Waters, B.: Predicate encryption supporting dis-
+junctions, polynomial equations, and inner products. In: Smart, N. (ed.)
+EUROCRYPT 2008. LNCS, vol. 4965, pp. 146–162. Springer, Heidelberg
+(2008). doi:10.1007/978-3-540-78967-3 9
+[LOS+10] Lewko, A., Okamoto, T., Sahai, A., Takashima, K., Waters, B.: Fully
+secure functional encryption: attribute-based encryption and (hierarchi-
+cal) inner product encryption. In: Gilbert, H. (ed.) EUROCRYPT 2010.
+LNCS, vol. 6110, pp. 62–91. Springer, Heidelberg (2010). doi:10.1007/
+978-3-642-13190-5 4
+[MP12] Micciancio, D., Peikert, C.: Trapdoors for lattices: simpler, tighter, faster,
+smaller. In: Pointcheval, D., Johansson, T. (eds.) EUROCRYPT 2012.
+LNCS, vol. 7237, pp. 700–718. Springer, Heidelberg (2012). doi:10.1007/
+978-3-642-29011-4 41
+http://dx.doi.org/10.1007/978-3-662-53644-5_14
+http://dx.doi.org/10.1007/978-3-662-53644-5_14
+http://dx.doi.org/10.1007/978-3-642-40041-4_5
+http://dx.doi.org/10.1007/978-3-642-32009-5_11
+http://dx.doi.org/10.1007/978-3-662-48000-7_25
+http://dx.doi.org/10.1007/978-3-662-48000-7_25
+http://dx.doi.org/10.1007/978-3-540-78967-3_9
+http://dx.doi.org/10.1007/978-3-642-13190-5_4
+http://dx.doi.org/10.1007/978-3-642-13190-5_4
+http://dx.doi.org/10.1007/978-3-642-29011-4_41
+http://dx.doi.org/10.1007/978-3-642-29011-4_41
+Stronger Security for Reusable Garbled Circuits 35
+[MSZ16] Miles, E., Sahai, A., Zhandry, M.: Annihilation attacks for multilinear
+maps: cryptanalysis of indistinguishability obfuscation over GGH13. In:
+Robshaw, M., Katz, J. (eds.) CRYPTO 2016. LNCS, vol. 9815, pp. 629–
+658. Springer, Heidelberg (2016). doi:10.1007/978-3-662-53008-5 22
+[Pei13] Peikert, C.: Lattices.. to cryptography (2013). http://web.eecs.umich.
+edu/∼cpeikert/pubs/slides-visions.pdf
+[PR12] Pandey, O., Rouselakis, Y.: Property preserving symmetric encryp-
+tion. In: Pointcheval, D., Johansson, T. (eds.) EUROCRYPT 2012.
+LNCS, vol. 7237, pp. 375–391. Springer, Heidelberg (2012). doi:10.1007/
+978-3-642-29011-4 23
+[Wat12] Waters, B.: Functional encryption for regular languages. In: Safavi-Naini,
+R., Canetti, R. (eds.) CRYPTO 2012. LNCS, vol. 7417, pp. 218–235.
+Springer, Heidelberg (2012). doi:10.1007/978-3-642-32009-5 14
+http://dx.doi.org/10.1007/978-3-662-53008-5_22
+http://web.eecs.umich.edu/~cpeikert/pubs/slides-visions.pdf
+http://web.eecs.umich.edu/~cpeikert/pubs/slides-visions.pdf
+http://dx.doi.org/10.1007/978-3-642-29011-4_23
+http://dx.doi.org/10.1007/978-3-642-29011-4_23
+http://dx.doi.org/10.1007/978-3-642-32009-5_14
+	Stronger Security for Reusable Garbled Circuits, General Definitions and Attacks
+	1 Introduction
+	1.1 Our Contributions
+	1.2 Our Techniques
+	2 Preliminaries
+	2.1 Functional Encryption
+	2.2 Partially Hiding Predicate Encryption
+	2.3 Full Security for Single Key Linear FE
+	2.4 Algorithms Used by Our Constructions
+	2.5 Fully Homomorphic Encryption
+	3 Insecurity of Predicate Encryption Schemes Against General Adversaries
+	3.1 Attack #1 on  Using 1-Keys.
+	4 (1, `39`42`"613A``45`47`"603Apoly) Very Selective PHPE
+	4.1 Construction
+	4.2 Proof of Security
+	5 Upgrading Very Selective to Semi Adaptive Security for PHPE
+	6 (1,`39`42`"613A``45`47`"603Apoly)-Functional Encryption
+	6.1 Construction
+	6.2 Proof of Security
+	References

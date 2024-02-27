@@ -1,0 +1,1462 @@
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme
+Astrolabous: A Universally Composable
+Time-Lock Encryption Scheme
+Myrto Arapinis(B), Nikolaos Lamprou(B), and Thomas Zacharias(B)
+The University of Edinburgh, Edinburgh, UK
+n.lamprou@ed.ac.uk, {marapini,tzachari}@inf.ed.ac.uk
+Abstract. In this work, we study the Time-Lock Encryption (TLE)
+cryptographic primitive. The concept of TLE involves a party initiating
+the encryption of a message that one can only decrypt after a certain
+amount of time has elapsed. Following the Universal Composability (UC)
+paradigm introduced by Canetti [IEEE FOCS 2001], we formally abstract
+the concept of TLE into an ideal functionality. In addition, we provide a
+standalone definition for secure TLE schemes in a game-based style and
+we devise a hybrid protocol that relies on such a secure TLE scheme.
+We show that if the underlying TLE scheme satisfies the standalone
+game-based security definition, then our hybrid protocol UC realises the
+TLE functionality in the random oracle model. Finally, we present Astro-
+labous, a TLE construction that satisfies our security definition, leading
+to the first UC realization of the TLE functionality.
+Interestingly, it is hard to prove UC secure any of the TLE construction
+proposed in the literature. The reason behind this difficulty relates to the
+UC framework itself. Intuitively, to capture semantic security, no informa-
+tion should be leaked regarding the plaintext in the ideal world, thus the
+ciphertext should not contain any information relating to the message. On
+the other hand, all ciphertexts will eventually open, resulting in a trivial
+distinction of the real from the ideal world in the standard model. We over-
+come this limitation by extending any secure TLE construction adopting
+the techniques of Nielsen [CRYPTO 2002] in the random oracle model.
+Specifically, the description of the extended TLE algorithms includes calls
+to the random oracle, allowing our simulator to equivocate. This extension
+can be applied to any TLE algorithm that satisfies our standalone game-
+based security definition, and in particular to Astrolabous.
+Keywords: Time-lock encryption · Universal composability · Fairness
+1 Introduction
+The concept of encryption involves a party, the encryptor, who encrypts a mes-
+sage, and a designated party, the decryptor, who can retrieve that message. The
+decryptor can retrieve the message because she holds a piece of secret informa-
+tion which is called the secret key. There are two well known and studied types
+c© International Association for Cryptologic Research 2021
+M. Tibouchi and H. Wang (Eds.): ASIACRYPT 2021, LNCS 13091, pp. 398–426, 2021.
+https://doi.org/10.1007/978-3-030-92075-3_14
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-92075-3_14&domain=pdf
+https://doi.org/10.1007/978-3-030-92075-3_14
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 399
+of encryption schemes in the literature, namely symmetric encryption [34] and
+public key encryption [18].
+Another special type of encryption is called time-lock encryption (TLE). The
+concept of TLE involves a party that initiates the encryption of a message that
+can be decrypted only after a certain amount of time has elapsed.
+There are two main approaches to how TLE can be defined. In the first
+approach [14,38], a party, called the manager, releases the decryption keys at
+specific times in the future.
+In the second approach [36,37,43] a computational puzzle, which is a math-
+ematical problem, needs be solved so that the message can be revealed. We
+distinguish relativistic time constructions [37,43] designed so that a puzzle can
+be solved only after a certain amount of computations have been performed; and
+absolute time constructions [36] designed so that the solution of the puzzle can
+be delegated to external entities which try to solve the puzzle independently of
+the TLE protocol (e.g. Bitcoin miners in [36]), giving an essence of absolute
+time. In either case, the message can be decrypted only after a puzzle has been
+solved or its solution has been published. The solution of the puzzle is used as
+the secret key in the decryption algorithm so that the message can be revealed.
+In contrast to “standard” encryption, TLE differs in one but major point.
+The message can be retrieved without the encryptor having to reveal any secret
+information; the decrypting parties can actually construct the secret informa-
+tion themselves after some time. In standard encryption this is computationally
+infeasible.
+The number of applications TLE finds its own space are mostly related to a
+security requirement called fairness [27]. Informally, the fairness condition states
+that the initial decisions of a party are not affected by the way the protocol exe-
+cution progresses. There are many cryptographic protocols where fairness is vio-
+lated and TLE can find an application. For example, in e-voting and specifically
+in self-tallying election protocols (STE) [1,33], due to access to intermediate
+results some parties might change their mind and vote something different from
+their initial choice to favour another candidate (e.g., the winning one). Another
+example where fairness is important is in coin flipping protocols [16], where the
+party that initiates the coin flip decides to abort right after the other party
+reveals her coin, without revealing her share to the other party. Moreover, in
+secret sharing protocols [41], the party that reveals her share last holds a con-
+siderable advantage over the other parties. Similar is the case of Distributed Key
+Generation protocols (DKG) [23]. By utilizing TLE, we can tackle all of the
+aforementioned limitations.
+Unfortunately, all of the mentioned limitations cannot be solved with stan-
+dard encryption or a commitment scheme. For example, the self-tallying proto-
+cols in [28,33,40,44] do not satisfy the fairness condition as already mentioned
+by the authors. The limitation lies fundamentally in the way encryption works.
+Specifically, if we use encryption only the holder of the secret key can retrieve
+the hidden message. So either that key is a priori known, where fairness is vio-
+lated trivially as every party can decrypt the message, or not known, where the
+400 M. Arapinis et al.
+protocol cannot terminate as the message cannot be retrieved. Similar is the case
+if we use a commitment scheme. TLE comes to fill the gap and keep the best
+of both of situations mentioned, which means, semantic security [25,34] until
+some time, and then the possibility of decryption without any a priori secret
+information neither further interaction with the encryptor.
+The state-of-the-art of composable security framework in the literature is
+provided by the Universal Composability framework (UC) [12] introduced by
+Canetti, where security can be maintained even if many instances of the studied
+protocol are executed concurrently or the protocol is composed as a subroutine
+of a bigger protocol. Although there are formal treatments of TLE in the liter-
+ature [36], these mainly provide standalone models of security while our work
+aims to provide a composable treatment of the TLE primitive. The only other
+such attempt to our knowledge is a recently published paper [5] that we discuss
+in details in Sect. 2.1.
+In this work, we abstract the notion of TLE into an ideal functionality
+F leak,delay
+TLE , that captures the concept of TLE naturally. Moreover, we introduce
+a security definition exploring the one-wayness of TLE algorithms. We show
+that the one-way property of a TLE scheme is enough so that we have a UC
+realization of F leak,delay
+TLE after extending the TLE algorithm in the random oracle
+model. Although UC is the state-of-the- for arguing about security, sometimes
+standalone definitions are more usable and intuitive. Furthermore, many UC
+functionalities can only be realized in idealized models such as the RO model,
+suggesting that UC definitions may be “too strong” (e.g., unachievable). For
+this reason, we further provide a new TLE game based definition in IND-CPA
+security style. Last, we provide a novel TLE construction, named Astrolabous,
+and show that it satisfies both of our security definitions.
+Contributions. Our contributions can be summarised as follows:
+1. We present a UC definition of secure TLE via an ideal functionality F leak,delay
+TLE
+that captures naturally the concept of TLE as it provides the necessary secu-
+rity guarantees a TLE scheme should provide. Specifically, it captures seman-
+tic security as the encryption of a message is not correlated with the message
+itself. Instead, it is correlated only with the length of the message similarly
+to the standard encryption functionality in [12]. In addition, it captures cor-
+rectness [25,34], i.e., if F leak,delay
+TLE finds two different messages with the same
+ciphertext in its record, then it aborts. Finally, we note that in the literature,
+there are TLE constructions [36] where the adversary holds an advantage in
+comparison with the other parties and which might allow him to decrypt a
+message earlier than the intended time. To cater for such constructions, we
+parameterise F leak,delay
+TLE with a leakage function leak which specifies the exact
+advantage (in decryption time) of the adversary compared to the honest par-
+ties. Ideally, the leak function offers no advantage to the adversary. It is worth
+mentioning that TLE constructions in which the adversary holds an advan-
+tage in comparison with the honest parties in the decryption time, are still
+useful to study in the UC framework because the computational burden for
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 401
+solving the puzzle can be transferred to external entities of the protocol (e.g.,
+Bitcoin miners), making the decryption more client friendly [36].
+2. We define a hybrid TLE protocol and a standalone basic security definition
+in a game-based fashion. We show that if the pair of TLE algorithms that
+our protocol uses satisfies our basic security definition then we have a UC
+realization of F leak,delay
+TLE .
+Our TLE protocol does not use the vanilla version of a TLE algorithm (e.g.
+a TLE algorithm as defined in [36]). Instead, it relies on an extended one
+based on techniques introduced in [11,39] in the random oracle model. Our
+extension was necessary for the proof of UC realization. Specifically, in both
+real and ideal world, all the messages eventually can be decrypted by any
+party. To avoid trivial distinctions1, the simulator must be able to equivocate
+so that the ciphertext opens to the correct message. As a result, the simulator
+programs the random oracle so that the ciphertext opens to the target mes-
+sage, something that is not feasible with the vanilla version of a TLE scheme
+without the equivocation feature which our extension provides.
+In our hybrid protocol, we defined both a functionality wrapper Wq and an
+evaluation functionality Feval, to model the computation that is necessary for
+solving the time-lock puzzle. In our case, this computation is a random oracle
+query, thus Feval is the random oracle. Like in [3], the main function of a
+functionality wrapper is to restrict the access to Feval and thus to model the
+limited computational resources a party has at her disposal in each round. In
+our case, the limited amount of computation a party has in order to solve the
+time-lock puzzle through queries to Feval.
+Our basic security definition of TLE schemes consists of two properties,
+named Correctness and qSecurity. The Correctness property states that
+the decryption of an encrypted message m leads to the message m again
+with high probability, similar to the definition of correctness in the standard
+encryption’s case. We define the qSecurity property in a game-based style,
+between a challenger and an adversary where the latter tries to guess the
+challenged message with less than the required oracle queries. A TLE scheme
+satisfies the qSecurity property if the above happens with negligible prob-
+ability, capturing the fact that a message can only be decrypted when “the
+time comes”.
+3. We provide a novel construction, named Astrolabous, and we show that it
+satisfies our basic security definition, thus it supports the UC realisation of
+F leak,delay
+TLE (in the random oracle model). Astrolabous combines ideas from
+both the constructions in [43] and in [37]. Nevertheless, we did not use either
+of them for the following reasons. A critical drawback of [37] is that parts of
+the plaintext are revealed through the process of solving the time-lock puzzle,
+which is based on a hash evaluation, as the message is hidden in the puzzle
+itself. On the other hand, the construction in [43] encrypts a message with a
+symmetric encryption scheme [34] and then hides the encryption key into the
+1 Recall that in the ideal world, to capture semantic security, ciphertexts do not con-
+tain any information about the actual message except its length.
+402 M. Arapinis et al.
+time-lock puzzle which is based on repeated squaring. The first problem with
+the latter construction was that the procedure for solving the puzzle is deter-
+ministic (repeated squaring) and thus a party can bypass the functionality
+wrapper and solve any time-lock puzzle in a single round, in contrast with the
+construction in [37] where the procedure for solving the puzzle is randomized
+(hash evaluation which is modeled as random oracle). The second problem
+with the construction in [43] was that even if a party provides the solution of
+the puzzle but the puzzle issuer does not provide the trapdoor information
+that is used by the time the time-lock puzzle was created (in this case, the
+factorization of a composite number N) then, in order to verify the validity
+of the provided solution, all the verifying parties must resolve the time-lock
+puzzle. Thus, the optimal complexity scenario is hard to achieve. In contrast,
+the time-lock puzzle in [37] is easily verifiable without the need of any trap-
+door information from the puzzle issuer.
+These were our motivations for defining Astrolabous that tackles all of the
+above-mentioned limitations. Specifically, Astrolabous uses a symmetric key
+encryption scheme to hide the message like in [43] and then “hides” the sym-
+metric key in a time-lock puzzle similar to the one in [37].
+4. We introduce an additional stronger game-based definition, named IND-CPA-
+TLE, to capture semantic security of TLE schemes in the spirit of IND-
+CPA security. Our stronger definition may serve as a standard for analysing
+TLE schemes in the standalone setting. To demonstrate the usefulness of
+our stronger definition and constructions, we prove that Astrolabous and an
+enhanced version of the construction in [37] achieve IND-CPA-TLE security.
+2 Related Work
+TLE is a cryptographic primitive that allows a ciphertext to be decrypted only
+after a specific time period has elapsed. One way of achieving this is by “hiding”
+the decryption key in a puzzle [43] that can be solved after a set period of time.
+The reward for solving the puzzle is the decryption key. So the main purpose of
+the puzzle is to delay the party in opening the message before a specific amount
+of computation has been performed. In some proposals, decryption can further
+be performed without requiring knowledge of any secret information [36,43].
+Previously proposed constructions are based either on witness encryption [22]
+or symmetric encryption [34]. The authors of these works provide game-based
+definitions to argue about the security of their constructions. Unfortunately,
+game-based definitions do not capture the variety of adversarial behavior the
+UC framework [12] does. For example, in the ideal world the capabilities of the
+adversary are defined explicitly. So, proving that our real protocol and the ideal
+one are indistinguishable (UC realization) from the environment’s perspective, is
+like proving that whatever the adversary can do against the real protocol it can
+also do it in the ideal world. In contrast, in a game-based approach, we try to
+capture the capabilities of an adversary via an experiment without being certain
+if the experiment captures all the adversarial behaviours possible in the real
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 403
+protocol. Moreover, the task of transferring these definitions to the UC setting
+is quite challenging due to some incompatibilities between the two settings. More
+details can be found in Supporting Material B.1 of the extended version of this
+paper [2].
+A particular TLE construction proposed in [43] is based on a block cipher,
+e.g., Advanced Encryption System (AES) [17], and repeated squaring. Specifi-
+cally, first, a party encrypts a message m by using AES and a secret key sampled
+from a key space uniformly at random. Then the party chooses the time that
+finding the key should require and creates a “puzzle”. The ciphertext is the
+encrypted message with AES under the solution to the puzzle that serves as the
+key. No formal proof of the security of this scheme is however provided in [43].
+One drawback of this construction is that, to solve the puzzle, a party must
+be engaged in mathematical computations. The only way that these computa-
+tions could be avoided for the puzzles to be solved is the issuer of the puzzle
+to announce the solution along with the trapdoor information (optimal case
+scenario), which is the factorization of a composite number N . Without the pro-
+vision of the trapdoor information, even if a party announces the solution of the
+puzzle, the only way for verifying the solution is to solve the puzzle again.
+A similar TLE construction is that in [37]. Here, the time-lock puzzle is based
+on hash evaluations. Specifically, the solver of the puzzle is engaged in serial
+hash evaluations until solving the puzzle. Unlike [43], if some party presents the
+solution of the puzzle any other party can verify it efficiently by doing all the
+hash evaluations in parallel. A drawback of this construction is that parts of the
+plaintext are revealed before the full solution of the puzzle. There are also TLE
+proposals [14,15,38] that instead of relying on computational puzzles, assume
+a Trusted Third Party (TTP) responsible for announcing the decryption keys.
+Most of these constructions are based on Public Key Infrastructure (PKI). An
+obvious drawback then is the fact that we ground a big part of the security of
+the scheme in the TTP, which in turn leads to weaker threat models.
+There are other time-lock puzzle constructions [7,10] but none of them pro-
+vide composable security guarantees. A generalization of time-lock puzzles are
+Verifiable Delayed Functions (VDF) [9,42,46] with the only addition that they
+require the solution of the puzzle to be publicly verifiable without having to
+solve the puzzle, something that is desirable but not obligatory with time-lock
+puzzles. Again, the constructions in [9,42,46] are not analyzed in the UC frame-
+work and thus security cannot be guaranteed either when composed as part of
+bigger protocols or in parallel execution (e.g. in on-line network conditions).
+2.1 Comparison With [5] and [4]
+A concurrent and independent work closely related to ours was very recently pub-
+lished at EUROCRYPT 2021 [5], with a subsequent work seemingly in prepara-
+tion [4]. In particular, [5] proposes a composable treatment in the UC framework
+of time-lock puzzles whose security is captured by the ideal functionality Ftlp. It
+further proves how the scheme proposed by Rivest et al. in [43] can be used to
+404 M. Arapinis et al.
+UC realise Ftlp in both the random oracle and generic group models. Their reali-
+sation, as ours, relies on techniques for equivocation borrowed from [39] and [11].
+They further show that no time-lock puzzle is UC realizable outside the random
+oracle model. Finally, they show that time-lock puzzles can be used to ensure
+fairness in coin flipping protocols.
+The time-lock scheme proposed in [5] is not verifiable. This is addressed in
+the subsequent pre-print [4] where they adapt the scheme to include the trapdoor
+information along the message to be time-lock encrypted, rendering it verifiable.
+There are some key differences between these two works and ours, rendering
+the proposed treatments of time-lock primitives orthogonal. The premises and
+assumptions are intrinsically different and capture different concepts and security
+notions. We discuss these differences here and argue why our formal treatment
+of time-lock encryption, and our proposed TLE scheme, namely Astrolabous,
+are preferable in some respects and more suited to many scenarios.
+Apprehending Time with Computational Puzzles In [5] and [4], a reso-
+lutely different approach to ours is taken, when it comes to real time. In par-
+ticular, they introduce the global Gticker functionality to capture delays without
+referring to a global “wall clock”, and thus without referring to real time.
+We, on the other hand, insist on the importance of closely relating com-
+putational time and real time, and propose an alternative treatment in the
+global clock model (Gclock). Our approach is directly motivated by the semi-
+nal paper [43], in which R. L. Rivest, A. Shamir, and D. Wagner introduce the
+very concept of time-release cryptography to capture encryption schemes that
+ensure encrypted messages cannot be decrypted until a set amount of time has
+elapsed. The goal being to, as they put it, “send information into the future [...]
+by making CPU time and real time agree as closely as possible”.
+This is key to explaining why and how time-release cryptography is used in an
+increasing number of distributed applications, and in particular schemes hinged
+on computational puzzles, i.e. puzzles that can only be solved if certain compu-
+tations are performed continuously for at least a set amount of time. Indeed, the
+cryptographic protocols underlying these applications often rely on temporally
+disjoint phases. Time-release cryptographic primitives, as primitives apprehend-
+ing real time through computations, allow thus these temporally disjoint stages
+of the protocol to be enforced yet in an asynchronous manner.
+This is reflected in our protocol realising the proposed ideal TLE functional-
+ity F leak,delay
+TLE . Parties only read the time from the global clock Gclock to compute
+the amount of time the ciphertext needs to be protected for, and infer the corre-
+sponding puzzle difficulty. Decryption however requires continuous computations
+being performed until the set opening time is reached, and no read command
+being ever issued to Gclock. This protocol clearly demonstrates how time-lock
+puzzles apprehend real time through computations.
+In contrast, the protocol πtlp realising the ideal time lock-puzzle functionality
+Ftlp proposed in [5] does not instruct parties to continuously work towards solving
+received puzzles (the scheduling of each step for solving a puzzle is left to the
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 405
+environment). So the treatment proposed in [5] and [4] leaves it to the protocol
+using πtlp or Ftlp as a subroutine to correctly takes care of appropriately enforcing
+relative delays between key events.
+Ideal Functionality and Realisation F leak,delay
+TLE is more general than Ftlp.
+Ftlp only captures constructions that rely on computational-puzzles for “hiding”
+a message and not the general concept of TLE. Specifically, the puzzle solution
+is provided not after some time has elapsed but after some computations have
+been performed (similar to Proof of Work (PoW)). In contrast, our time-lock
+encryption functionality F leak,delay
+TLE does not. This is why our protocol instructs
+parties to continuously work towards solving received puzzles. For that reason
+the works in [4,5] fail to capture the connection between absolute time (Gclock
+model) and puzzle solving, something naturally expected when studying time-
+lock primitives. As such our functionality can cater for TLE schemes that do
+not rely on time-lock puzzles at all, such as the centralized solutions proposed
+in [14,38] where a TTP releases the solution in specific time-slots.
+Moreover, some constructions such as [36] allow the adversary an unavoid-
+able advantage in solving TLE puzzles (e.g., the adversary synchronizes faster
+than the honest parties in the Bitcoin network [3,21]). Ftlp does not capture
+such constructions. Our F leak,delay
+TLE functionality is parameterized with a leakage
+function, which specifies exactly the advantage of the adversary in each case.
+Turning now to the realisations of UC secure time-lock primitives, the realisa-
+tion of Ftlp proposed in [5] relies on stronger assumptions as it relies both on the
+random oracle model and the generic group model. In contrast, our realisation
+of F leak,delay
+TLE only relies on the random oracle model.
+On Public Verifiability While the time-lock encryption scheme proposed in [4]
+is publicly verifiable in the sense that given a puzzle, the verifying party does not
+need to solve the puzzle for themselves to verify that an announced solution for
+that puzzle is valid. This is not enough in some scenarios. For instance, consider
+the scenario with a dedicated server to be the puzzle solver and all other parties
+to be “lite” verifiers. This is very realistic given the computational requirements
+for solving puzzles. For efficiency, one would let a server solve the puzzles and
+only check that the solutions it provided are valid ones. Now in such a scenario
+parties i) would not trust the server, ii) would not trust the issuer of the puzzle
+either, but iii) are also not willing to solve the puzzle themselves.
+Now, in [4] public verifiability is achieved because the issuer of the puzzle con-
+catenates the message and the trapdoor information, which is the factorization
+of N . Given the trapdoor, one can efficiently verify that the announced solution
+to the puzzle is valid. However, the trapdoor announced (dishonest server) or
+the trapdoor included (dishonestly generated ciphertext) might not be valid for
+the puzzle. The only way to identify the dishonest party is to solve the puzzle
+for oneself and check it against the solution to the puzzle announced by the
+server. If they match, then the ciphertext was dishonestly generated, otherwise
+the server is dishonest.
+406 M. Arapinis et al.
+This is reflected in the public verifiability notion that Ftlp captures that is
+one sided: if an announced solution to a puzzle is valid, then the verification is
+successful. But if the verification fails, then some party has deviated from the
+protocol but it could either be the server or the issuer of the ciphertext.
+In contrast, the solution of our puzzle is publicly verifiable as it does not rely
+on any trapdoor information from the puzzle issuer being included in the cipher-
+text for fast verification. So dishonestly generated ciphertexts are not meaningful
+anymore, and only dishonest servers need to be considered. Now if the server
+announces an invalid solution to a given puzzle, it gets detected.
+Standalone Security Along with the composable definition of secure time
+lock encryption schemes provided by our ideal functionality F leak,delay
+TLE , we further
+provide two game-based definitions of security. A weaker one, capturing one-way
+hardness of a TLE scheme; and a stronger one that captures semantic security
+of a TLE scheme, in the spirit of IND-CPA security. We show that a TLE
+scheme that satisfies the weaker definition suffices for UC realising the F leak,delay
+TLE
+functionality through our protocol πTLE. The stronger game-based definition
+serves as a standard for the security analysis of TLE schemes in the stand-alone
+setting. To demonstrate the usefulness of our stronger definition, we show that
+Astrolabous and an enhanced version of Mahmoody et al.’s construction [37]
+satisfy the said security standard. This result further validates our UC treatment
+and in particular our ideal functionality of time-lock encryption schemes.
+2.2 Asymptotic vs Concrete Definitions
+Time-lock puzzles have also previously been studied in the game-based frame-
+work [8,19,30]. These prior works provide standalone definitions of security of
+time-lock puzzles in a concrete setting. Specifically, they consider adversaries
+that are allowed to perform a fixed number of computational steps with each
+step being arbitrarily parallelizable. In this way, they capture both the privacy
+guarantees a time-lock puzzle should satisfy (no information leaked before a cer-
+tain number of computations have been performed) and the resilience against
+parallel computation (the problem should not be parallelizable). They further
+introduce definitions that capture another important security property, namely
+non-malleability. Similar to public-key encryption, non-malleability for time-lock
+puzzles states that the adversary given a time-lock puzzle should not be able to
+generate another one in which the underlying solution is related without solving
+it first. While, our UC definition captures non-malleability, both our game-based
+definitions do not. This was out of the scope of this study and we leave it for
+future work.
+In contrast, our approach in both game-based definitions we have introduced
+is an asymptotic one, similarly to the definitions of Proof of Work primitives
+provided in [20,21]. This was necessary to bridge UC security which is in the
+asymptotic setting, with the game-based approach [11]. This was not something
+necessary for prior standalone game-based definitions as these do not argue about
+security in a composable framework like UC.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 407
+3 Preliminaries
+We use λ as the security parameter. We write negl(λ) to denote that a function
+is negligible in λ. When referring to a polynomial function we use the term p or
+px where x is an integer.
+3.1 Universal Composability
+The Universal Composability (UC) paradigm introduced by Canetti in [12] is the
+state-of-the-art cryptographic model for arguing about the security of protocols
+when run under concurrent sessions. More details about the UC framework can
+be found in Supporting Material A of the extended version of this paper.
+Setup functionalities. In the UC literature, hybrid functionalities do not only
+play the role of abstracting some UC-secure real-world subroutine (e.g. a secure
+channel), but also formalize possible setup assumptions that are required to
+prove security when this is not done (and in many cases even impossible to
+achieve) in the “standard model”. For example, this type of setup functionalities
+may capture the concept of a trusted source of randomness, a clock, or a Public
+Key Infrastructure (PKI ). Moreover, these setup functionalities can be global,
+i.e. they act as shared states across multiple protocol instances and they can be
+accessed by other functionalities and even the environment that is external to the
+current session (recall that standard ideal functionalities do not directly interact
+with the environment). The extension of the UC framework in the presence of
+global setups has been introduced by Canetti et al. in [13]. In Supporting Mate-
+rial A.1 of the extended version of this paper. we present the setup functionalities
+that we consider across this work. Namely, the Global clock (GC) Gclock [3,31],
+the Random Oracle (RO) FRO [39] and the Broadcast (BC) FBC [29,32] func-
+tionalities.
+4 Definition of F leak,delay
+TLE
+We provide our UC treatment of TLE in the Gclock model by defining the func-
+tionality FTLE, following the approach of [12]. The functionality is described in
+Fig. 1, and at a high level operates as follows. The functionality is parameterized
+by a delay variable delay. This variable shows the time that a ciphertext needs to
+be created. There are settings where the ciphertetext generation needs some time,
+in some cases this time is very small or zero (delay = 0) or noticeable (delay = 1).
+The simulator S initially provides FTLE with the set of corrupted parties. Each
+time an encryption query issued by an honest party is handed to FTLE, the func-
+tionality forwards the request to S without any information about the actual
+message except the size of the message and the party’s identity. The simulator
+returns the token back to FTLE which replies with the message Encrypting to
+the dummy party. This illustrates both the fact that the ciphertext does not
+contain any information about the message and that encryption might require
+some time to be completed. The environment can access the ciphertexts that
+408 M. Arapinis et al.
+this party has generated so far by issuing the command Retrieve, where FTLE
+returns all the ciphertexts that are created by that party back to it. It is worth
+mentioning, that the time labelling that is used in the encryption command
+refers to an absolute time rather than relative. On the other hand, the construc-
+tion that we propose for realising FTLE is relativistic. That is why, as we see in
+detail in Sect. 5, the algorithm accepts the difference between the current time
+Cl and the time labelling τ as an input. In this way, the algorithm computes the
+difficulty for the puzzle such that the message can be decrypted when time τ has
+been reached. In addition, FTLE handles the decryption queries in the usual way,
+unless it finds two messages recorded along the same ciphertext, in which case it
+outputs ⊥. This enforces that the encryption/decryption algorithms used by S
+should satisfy Correctness. In addition, if FTLE finds the requested ciphertext in
+its database, the recorded time is smaller than the current one (which means that
+the ciphertext can be decrypted), but the party that requested the decryption
+of that ciphertext provided an invalid time labelling (labelling smaller than the
+one recorded in FTLE’s database), it returns the message Invalid Time to that
+party. In the case where the encryption/decryption queries are issued by cor-
+rupted parties, FTLE responds according to the instructions of S. When a party
+receives a decryption request from Z, except from the ciphertext c, it receives
+as input a time labelling τ . Ideally, τ is the time when c can be decrypted. Of
+course, the labelling τ can also be different to the decryption time of c. Never-
+theless, this does not affect the soundness of FTLE. Without the labelling, FTLE
+or the engaging party in the real protocol would have to find the decryption time
+of c which is registered either in the functionality’s database (ideal case) or in
+the party’s list of received ciphertexts (real case) and then compare it with the
+current time Cl.
+When a party P advances Gclock, the simulator S is informed. Then, S can
+generate ciphertexts for each tag2 received from FTLE from P and send them
+to FTLE issuing the Update command. Later, FTLE will return these to P .
+This illustrates the fact that after some time ciphertexts are created. In TLE
+constructions where the encryption and decryption time is equal, S will force
+a delay on the ciphertext generation equal to the number of rounds that the
+ciphertext needs to be decrypted. Thus, the way we model FTLE allows us to
+capture a broader spectrum of TLE constructions (not necessarily efficient) in
+the context of the Global Clock (GC) model.
+Naturally, after some time, ciphertexts are eventually opened and every party,
+including S, can retrieve the underlying plaintext. For that task, we include the
+command Leakage. In the vanilla case, S can retrieve all the messages that
+can be opened by the current time Cl. However, there are cases where S can
+retrieve messages before their time comes. This advantage of S can be specified
+by the function leak. This function accepts as input an integer (e.g., the current
+2 The simulator gives back the ciphertext as this is the case in most encryption func-
+tionalities [11,12]. Now, because we allow the simulator to delay the delivery of
+messages, the simulator needs a handle for updating the functionality’s database.
+Here the tag comes into play and works as a receipt for that call.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 409
+time Cl) and outputs a progressive integer (e.g., the time that the adversary can
+decrypt ciphertexts, which is the same or greater than Cl). For more details see
+Supporting Material C.1 of the extended version of this paper.
+The time-lock encryption functionality F leak,delay
+TLE .
+It initializes the list of recorded messages/ciphertexts Lrec as empty and defines the
+tag space TAG.
+Upon receiving (sid,Corrupt,Pcorr) from S , it records the corrupted set Pcorr.
+Upon receiving (sid,Enc, m, τ ) from P Pcorr, it reads the time Cl and does:
+1. If τ < 0, it returns (sid,Enc, m, τ, ⊥) to P .
+2. It picks tag $← TAG and it inserts the tuple (m,Null, τ, tag,Cl, P ) → Lrec.
+3. It sends (sid,Enc, τ, tag,Cl, 0|m|, P ) to S . Upon receiving the token back from
+S it returns (sid,Encrypting) to P .
+Upon receiving (sid,Update, {(cj , tagj)}p(λ)
+j=1 ) from S , for all cj = Null it updates
+each tuple (mj ,Null, τj , tagj ,Clj , P ) to (mj , cj , τj , tagj ,Clj , P )
+Upon receiving (sid,Retrieve) from P , it reads the time Cl from Gclock and it
+returns (sid,Encrypted, {(m, c = Null, τ )}∀(m,c,τ,·,Cl ,P )∈Lrec:Cl−Cl ≥delay) to P .
+Upon receiving (sid,Dec, c, τ ) from P Pcorr:
+1. If τ < 0, it returns (sid,Dec, c, τ, ⊥) to P . Else, it reads the time Cl from Gclock
+and:
+(a) If Cl < τ , it sends (sid,Dec, c, τ,More Time) to P .
+(b) If Cl ≥ τ , then
+– If there are two tuples (m1, c, τ1, ·, ·, ·), (m2, c, τ2, ·, ·, ·) in Lrec such
+that m1 = m2 and c = Null where τ ≥ max{τ1, τ2}, it returns to P
+(sid,Dec, c, τ, ⊥).
+– If no tuple (·, c, ·, ·, ·, ·) is recorded in Lrec, it sends (sid,Dec, c, τ ) to S
+and returns to P whatever it receives from S .
+– If there is a unique tuple (m, c, τdec, ·, ·, ·) in Lrec, then if τ ≥ τdec, it
+returns (sid, Dec, c, τ , m) to P . Else, if Cl < τdec, it returns (sid, Dec,
+c, τ , More Time) to P . Else, if Cl ≥ τdec > τ , it returns (sid, Dec, c, τ ,
+Invalid Time) to P .
+Upon receiving (sid,Leakage) from S , it reads the time Cl from Gclock and
+returns (sid,Leakage, {(m, c, τ )}∀(m,c,τ≤leak(Cl),·,·,·)∈Lrec) to S .
+Whatever message it receives from P ∈ Pcorr, it forwards it to S and vice versa.
+Fig. 1. Functionality F leak,delay
+TLE parameterized by λ, a leakage function leak, a delay
+variable delay ,interacting with simulator S, parties in P, and global clock Gclock.
+410 M. Arapinis et al.
+5 Realization of F leak,delay
+TLE via Time-Lock Puzzles
+In this section, we present the realization of FTLE via a protocol that uses a pair
+of encryption/decryption algorithms that satisfy a specific security notion that
+we formally define in Definition 1. We prove that our construction which is based
+on [37] and [43] is secure with respect to the required security notion.
+The general idea of a time-lock puzzle scheme is that the parties have
+restricted access to a specific computation in any given period of time for solving
+a puzzle. In [43]’s case that computation is repeated squaring, and in [37] the
+computation is sequential hash evaluations. Of course, the underlying assump-
+tion here is that there is no “better” way to solve that puzzle except for sequen-
+tially applying the specific computation. Some of the most prominent proposed
+time-lock constructions are based on such assumption [3,36,37,43].
+In the UC framework, to construct a time-lock protocol we need to abstract
+such computations through an oracle FOeval
+. The reasoning behind this modelling
+is simple. In the UC framework, all the parties are allowed to run polynomial
+time with respect to the protocol’s parameter. As a result, it is impossible to
+impose on a party the restriction that in a specific period of time they can
+only execute a constant number of computations. This is why we abstract such
+computations as a functionality/oracle and wrap the oracle with a functionality
+wrapper that restricts the access to the oracle. The approach is similar to the
+one proposed in [3], for modelling Proof of Work in the Bitcoin protocol.
+In the following paragraphs, we present the evaluation oracle FOeval
+, the func-
+tionality wrapper Wq(FOeval
+) and the protocol ΠTLE. We provide a security def-
+inition that captures both correctness and one-wayness of TLE constructions.
+The latter is illustrated via an experiment in a game-based style described in
+Fig. 5. We prove that ΠTLE UC realises FTLE given that the underlying TLE
+construction satisfies our security definition. Having at hand a UC realisation
+and given that our ideal functionality FTLE captures accurately the concept of
+what we expect from a TLE scheme, this validates the definition of security of
+TLE algorithms.
+In the following section, we propose a new TLE construction and prove it
+satisfies our security definition, completing our construction argument. Finally,
+we provide a stand-alone security definition in the same spirit as IND-CPA
+security, named IND-CPA-TLE, which is captured via an experiment. We prove
+that Astrolabous satisfies this as well.
+Our security definition that captures the one-wayness of a TLE construction
+was enough for having a UC realization. Although one-wayness as a property
+is very weak when arguing about the security of an encryption scheme, in our
+case was enough as we do not use the actual construction but we extend it in
+the random oracle model. On the other hand, such definition in the stand alone
+model is weak. That was the reason of why we introduced IND-CPA-TLE.
+The evaluation functionality FOeval
+The evaluation functionality captures the
+computation that is needed for a time-lock puzzle to be solved by the designated
+parties. An explanatory example can be found bellow.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 411
+Initially, the functionality FOeval
+, as described in Fig. 2, creates the list Leval
+for keeping a record of the queries received so far. Then, upon receiving a query
+from a party in P, FOeval
+checks if this query has been issued before. If this is
+the case, it returns the recorded pair. If not, then for the query x it samples the
+value y from the distribution Dx and returns to that party the pair (x, y).
+The distribution Dx in cases such as in [3,36,37] is a random value over a
+specific domain. Thus, FOeval
+is the random oracle in these cases. More precisely,
+Dx = U{0, 2n − 1} where U is the uniform distribution and [0, 2n − 1] is its
+domain, in our example the domain of the random oracle. In that case, the
+parametrization of D with x is unnecessary. On the other hand, if we study
+other time-lock puzzles such as the one in [43], where the computation to solve
+a puzzle is the repeated squaring, the parametrization of D with x becomes
+necessary. More intuition for D can be found in Supporting Material C.2 of the
+extended version of this paper.
+Example 1. Adapting the relative time-lock puzzle of [37] to our modelling app-
+roach, the evaluation functionality is instantiated by the random oracle. Let us
+consider that the solution of the puzzle is the value r. The creator of the puzzle
+P chooses the desired difficulty of the puzzle, τ . Then, P splits the puzzle r into
+qτ equal pieces r0, . . . , rqτ such that r = r0|| . . . ||rqτ . Here, q is the maximum
+number of evaluation queries that the party can make to the oracle in one round.
+Remember that the essence of round can be defined with respect to the func-
+tionality Gclock. Next, P makes one call to the random oracle functionality with
+the values (r0, . . . , rqτ−1) and receives back (yr0 , . . . , yrqτ−1). Note that this call
+is counted as one. Finally, P creates the puzzle (r0, yr0 ⊕ r1, . . . , yrqτ−1 ⊕ rqτ ) for
+the secret r. Now, if some party P ∗ wants to solve the puzzle, it needs to send the
+query r0 to the random oracle functionality. Upon receiving the value yr0 back
+from the random oracle functionality, P ∗ computes r1 = yr0 ⊕ (yr0 ⊕ r1). Next,
+it repeats the procedure with the value r1. Note that, the maximum number
+of evaluation queries to the functionality oracle in one round is q and thus the
+puzzle to be solved needs τ rounds. It is worth mentioning that for capturing the
+limited access to the functionality in the UC framework, a functionality wrapper
+needs to be defined as it is described in a dedicated Paragraph below.
+The evaluation functionality FOeval(D,P).
+Initializes an empty evaluation query list Leval.
+� Upon receiving (sid,Evaluate, x) from a party P ∈ P, it does:
+1. It checks if (x, y) ∈ Leval for some y. If no such entry exists, it samples y
+from the distribution Dx and inserts the pair (x, y) to Leval. Then, it returns
+(sid,Evaluated, x, y) to P . Else, it returns the recorded pair.
+Fig. 2. Functionality FOeval parameterized by λ, a family of distributions D = {Dx|x ∈
+X} and a set of parties P.
+412 M. Arapinis et al.
+Functionality wrapper Wq(FOeval , Gclock,P).
+� Upon receiving (sid,Corrupt,Pcorr) from S, it records the corrupted set Pcorr.
+� Upon receiving (sid,Evaluate, (x1, . . . , xj)) from P ∈ P \Pcorr it reads the time
+Cl from Gclock and does:
+1. If there is not a list LP it creates one, initially as empty. Then it does:
+(a) For every k in {1, . . . , j}, it forwards the message (sid,Evaluate, xk) to
+FOeval .
+(b) When it receives back all oracle queries, it inserts the tuple-(Cl, 1) ∈ LP .
+(c) It returns (sid,Evaluate, ((x1, y1), . . . , (xj , yj))) to P .
+2. Else if there is a tuple-(Cl, jc) ∈ LP with jc < q, then it changes the tuple to
+(Cl, jc + 1), and repeats the above steps 1a,1c.
+3. Else if there is a tuple-(Cl∗, jc) ∈ LP such that Cl∗ < Cl, it updates the tuple
+as (Cl, 1), and repeats the above steps 1a,1b,1c.
+� Upon receiving (sid,Evaluate, (x1, . . . , xj)) from P ∈ Pcorr it reads the time Cl
+from Gclock and repeats steps 1,3 except that it maintains the same list, named Lcorr,
+for all the corrupted parties.
+Fig. 3. The Functionality wrapper Wq(FOeval) parameterized by λ, a number of queries
+q, functionality FOeval , Gclock and parties in P.
+The functionality wrapper Wq(FOeval
+) Our wrapper is defined along the lines
+of [3]. The functionality wrapper is an ideal functionality parameterized by
+another ideal functionality, mediating the access to the latter functionality only
+possible through the wrapper. Moreover, the wrapper restricts the access to the
+parameter functionality allowing parties to access it only a certain number of
+times per round. Here, the notion of round is defined with respect to the Gclock
+functionality defined in Fig. 3. In a nutshell, the wrapper models in the UC set-
+ting the limited resources a party has at their disposal for solving the underlying
+puzzle. Because in UC every party is a PPT ITM, the same holds for the adver-
+sary. So, the adversary can interact with any functionality polynomially many
+times in each round. There are several protocols that hinge their security on the
+limited computational capabilities of the participants [3,21]. Next, follows the
+description of Wq(FOeval
+). The description of Wq(FOeval
+) and insightful comments
+behind its design can be found in Supporting Material C.4 of the extended ver-
+sion of this paper. In the rest of this work we use the abbreviation Wq(FOeval
+)
+instead of Wq(FOeval
+,Gclock,P) when it is obvious from the context.
+The protocol ΠTLE We are now ready to present the protocol ΠTLE which is
+proved in later Sections that it UC realises the FTLE functionality. The protocol
+consists of the functionality wrapper Wq(FOeval
+) as described in Fig. 3, the global
+clock Gclock, the random oracle FRO, the broadcast functionality FBC and a set
+of parties P (the descriptions can be found in Supporting Material A.1 of the
+extended version of this paper).
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 413
+Example 2. Recall Example 1 and assume the time-lock puzzle c = (r0, y0 ⊕
+r1, . . . , yrqτdec−1 ⊕ rqτdec). If the function wit con is given less than qτdec oracle
+responses (e.g. (y0, . . . , yqτdec−3)) for the puzzle c, it returns ⊥ else it returns
+wdec = (r0, y0, . . . , yrqτdec−1 , c). Note that here, the ciphertext and the puzzle
+coincide as there is no actual encryption of a message. Thus, fpuzzle is simply the
+identity function.
+Necessity of extending the TLE algorithms: In order to realise FTLE with some
+TLE construction we need to extend a given TLE algorithm in the random
+oracle model (FRO). Recall that in FTLE all the ciphertexts eventually open.
+To capture semantic security, the ciphertext contains no information about the
+actual message, in contrast to the real protocol that contains the encryption of
+the actual message. So, for the simulator to simulate this difference when the
+messages are opened, S must be able to equivocate the opening of the ciphertext,
+else the environment Z can trivially distinguish the real from the ideal execution
+of the protocol. When we say that S equivocates the opening of the ciphertext,
+it means that S can open a ciphertext to whatever plaintext message needs to
+be opened. Equivocation has also been used for other cryptographic primitives,
+such as bit commitments, where the simulator can equivocate because it knows
+the trapdoor information related to the common reference string (CRS) [35].
+This is actually fundamental, unless we restrict the environment’s running time.
+But then we lose the composition theorem.
+Our extension, that can be applied to any TLE construction, offers the feature
+of equivocation but at the expense of assuming the random oracle model. More
+information and insightful comments can be found in Supporting Material C.5
+of the extended version of this paper.
+Description of protocol ΠTLE: Each party P maintains the list of recorded mes-
+sages/ciphertexts LP
+rec, in which the requested messages for encryption by Z are
+stored along with the ciphertext of that message (initially stored as Null), a
+random identifier of the message tag, the time τ that the message should open,
+the time Cl that it is recorded for the first time and a flag which shows if that
+message has been broadcast or not to the other parties. When a party receives
+the broadcast ciphertext, she extracts the underlying puzzle with the function
+fpuzzle from that ciphertext and stores it along with its difficulty τdec, the set of
+oracle queries/responses issued to the oracle FOeval
+so that puzzle to be solved
+with the help of the preparation function state, the time Cl that this tuple was
+last time updated, a counter j that shows how many queries are issued for that
+puzzle this turn and a counter jt that shows the total number of queries issued
+for that puzzle.
+If party accepts encryption requests by Z, she returns the message Encryp-
+ting, delaying the encryption for one round. When a party either receives
+a clock advancement command or decryption, she performs the procedure
+414 M. Arapinis et al.
+Table 1. Functions and list each party holds in ΠTLE.
+Functions/Lists Description
+P,N,Q,R,C,M,W The space of time-lock puzzles, integers, oracle
+queries and responses to/from FOeval , ciphertexts,
+plaintexts and witnesses
+eFOeval
+: M × N × Q/R → C The encryption algorithm takes as input the
+plaintext, the puzzle difficulty and the pair of oracle
+queries/responses so that the puzzle can be created
+dFOeval
+: C × W → M The decryption algorithm takes as input the
+ciphertext and the secret key
+fstate : P × N × Q/R → Q It prepares the next oracle query to FOeval .
+Specifically, it accepts a puzzle, the number of
+queries that need to be prepared and all the
+previous queries and responses from the oracle
+fpuzzle : C → P It extracts the time-puzzle from a ciphertext
+puz cr : M × N → Q The puzzle creation function takes as input the
+plaintext and the desired difficulty and creates the
+oracle queries so that a puzzle for that plaintext of
+that difficulty can be created
+wit con : Q/R × N × P → W The witness construction function that returns the
+solution of the puzzle or the witness if that is
+possible
+LP
+rec The list of the generated ciphertexts
+LP
+puzzle The list of the recorded oracle queries for puzzle
+solving
+(z, τ, {(statez
+k, yk)}jt
+k=0, jc, jt) The tuple contains a puzzle z, the difficulty of the
+puzzle τ , the pairs of oracle queries/responses to
+solve puzzle z, the current number jc of oracle
+queries in that round and the total number of
+oracle queries jt
+PuzzleEncryption, in which the party issues all her q oracle queries both for solv-
+ing and encrypting the pending messages for that round. More details on the
+description of ΠTLE can be found in Supporting Material C.6 of the extended
+version of this paper.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 415
+ΠTLE(Wq(FOeval), eFOeval
+, dFOeval
+, fstate,wit con, fpuzzle, puz cr, Gclock, FRO, FBC,P).
+Each party maintains the list of recorded messages/ciphertexts LP
+rec and the list of
+the recorded oracle queries for puzzle solving LP
+puzzle, initially as empty, a tag space
+TAG and the algorithms (eFOeval
+, dFOeval
+) . Moreover, she follows the procedure
+described below:
+Puzzle:
+1. Preparing queries for puzzle creation: She collects all tuples
+{(mj ,Null, τj , tagj ,Clj , 0) ∈ LP
+rec}p1(λ)
+j=1 for Clj = Cl. She picks {rj
+1
+$←
+{0, 1}p∗(λ)}p1(λ)
+j=1 . For each j she computes puz cr(rj
+1, τj − (Cl+1)) → {xk}p2(λ)
+k=1 .
+2. Puzzle solving: For (jl = 0, jl < q, jl++) she collects all {statezn
+jt
+}p3(λ)
+n=1 , such
+that (zn, τdec, {(statezn
+k , yk)}jt
+k=0,Cl, 0, jt) ∈ LP
+puzzle (see command 5 for initial-
+ization).
+(a) Parallelize puzzle creation queries and puzzle solve: If jl = 0, she
+sends (sid,Evaluate, {statezn
+jt
+}p3(λ)
+n=1 ∪{xk}p2(λ)
+k=1 ) to Wq(FOeval) and receives
+back (sid,Evaluate, {(statezn
+jt
+, y∗
+jt)}p3(λ)
+n=1 ∪ {(xk, yk)}p2(λ)
+k=1 ). Else she sends
+(sid,Evaluate, {statezn
+jt
+}p3(λ)
+n=1 ) to Wq(FOeval).
+(b) Parallelize puzzle creation queries and puzzle solve: If jl = 0, she
+sends (sid,Evaluate, {statezn
+jt
+}p3(λ)
+n=1 ∪{xk}p2(λ)
+k=1 ) to Wq(FOeval) and receives
+back (sid,Evaluate, {(statezn
+jt
+, y∗
+jt)}p3(λ)
+n=1 ∪ {(xk, yk)}p2(λ)
+k=1 ). Else she sends
+(sid,Evaluate, {statezn
+jt
+}p3(λ)
+n=1 ) to Wq(FOeval).
+(c) Update the record: In each case, she updates each tuple as
+(zn, τdec, {(statezn
+k , yk)}jt+1
+k=0 ,Cl, jl + +, jt + +) where statezn
+jt+1 =
+fstate(zn, jt, {(statezn
+k , yk)}jt
+k=0), yjt+1 = Null and yjt ← y∗
+jt . In case that
+jl = q, she changes the Cl in the tuple to Cl+ 1 and jl = 0.
+Encryption:
+1. Time-lock encryption: She computes {cj
+1 ← eFOeval
+(rj
+1, {(xk, yk)}p2(λ)
+k=1 , τj −(Cl+
+1))}p1(λ)
+j=1 .
+2. Extended encryption: For each rj
+1, she sends (sid,Query, rj
+1) to FRO. Upon re-
+ceiving (sid,Random Oracle, rj
+1, h
+j) from FRO, P sends (sid,Query, rj
+1||mj)
+to FRO. Upon receiving (sid,Random Oracle, rj
+1||mj , c
+j
+3) from FRO, she com-
+putes cj ← (cj
+1, h⊕m, cj
+3) and updates the tuple (mj , cj , τj , tagj ,Clj , 0) → LP
+rec.
+� Upon receiving (sid,Enc, m, τ) from Z, P reads the time Cl from Gclock and if
+τ < 0 she returns (sid,Enc, m, τ, ⊥) to Z. Else, it does:
+1. She picks tag $← TAG and she inserts the tuple (m,Null, τ, tag,Cl, 0) → LP
+rec.
+2. She returns (sid,Encrypting) to Z.
+� Upon receiving (sid,Advance Clock) from Z, P reads the time
+Cl from Gclock. She executes both Puzzle and Encryption procedure.
+Then, she sends (sid,Broadcast, {(cj , τj)}p1(λ)
+j=1 ) to FBC. Upon receiv-
+ing (sid,Broadcasted, {(cj , τj)}p1(λ)
+j=1 ) from FBC, for each j she updates
+each tuple (mj ,Null, τj , tagj ,Clj , 0) to (mj , cj , τj , tagj ,Clj , 1) and sends
+(sid,Advance Clock) to Gclock.
+� Upon receiving (sid,Retrieve) from Z, P reads the time Cl from Gclock and
+returns (sid,Encrypted, {(mj , cj , τj) : (mj , cj , τj , ·,Clj , 1) ∈ LP
+rec : Cl − Clj ≥ 1})
+to Z.
+� Upon receiving (sid,Broadcast, {(cj , τj)}p1(λ)
+j=1 ) from FBC where cj = (cj
+1, c
+j
+2, c
+j
+3),
+P reads the time Cl from Gclock and does for every j:
+1. She computes statefpuzzle(c
+j
+1)
+0 ← fstate(fpuzzle(cj
+1), 0,Null).
+2. She creates the tuple-(fpuzzle(cj
+1), τdec, {(statefpuzzle(c
+j
+1)
+0 ,Null)},Cl, 0, 0) and stores
+it in LP
+puzzle.
+� Upon receiving (sid,Dec, c := (c1, c2, c3), τdec) from Z, P reads the time Cl from
+Gclock. Then she does:
+1. If τdec < 0, she returns (sid,Dec, c, τdec, ⊥) to Z.
+2. If Cl < τdec, she returns (sid,Dec, c, τdec,More Time).
+3. She searches for a tuple (fpuzzle(c1), τ, {(statefpuzzle(c1)k , yk)}jt
+k=0,Cl, q, jt) in LP
+puzzle.
+If τdec < τ ≤ Cl then she returns (sid,Dec, c, τdec, Invalid time) to Z.
+4. She computes wτdec ← wit con({(statefpuzzle(c1)k , yk)}jt
+k=0, τdec, fpuzzle(c1)).
+5. She runs x ← dFOeval
+(c1, wτdec) and she sends (sid,Query, x) to
+FRO. Upon receiving (sid,Random Oracle, x, h) from FRO, she computes
+m ← h ⊕ c2. She sends (sid,Query, x||m) to FRO. Upon receiving
+(sid,Random Oracle, x||m, c∗
+3) from FRO: If c3 
+= c∗
+3, she returns to Z
+(sid,Dec, c, τdec, ⊥). Else, she returns to Z (sid,Dec, c, τdec, m).
+6. If such tuple does not exist then she returns (sid,Dec, c, τdec, ⊥) to Z.
+Fig. 4. The Protocol ΠTLE in the presence of a functionality wrapper Wq, an evaluation
+functionality FOeval , a random oracle FRO, a broadcast functionality FBC, a global clock
+Gclock, where eFOeval
+, dFOeval
+, fstate, wit con and fpuzzle are hard-coded in each party in P.
+416 M. Arapinis et al.
+5.1 Security Definitions of (Computational-Puzzle-Based)
+Time-Lock Encryption
+In this Subsection we turn to standalone security and focus only on TLE schemes
+based on computational puzzles. We identify minimal standalone requirements
+sufficient for a computational-puzzles-based construction to provide a UC real-
+ization of our FTLE functionality. We specify these minimal requirements, namely
+Correctness and qSecurity, in the game-base style. In Sect. 6, we define IND-CPA
+security for (computational-puzzle-based) TLE schemes.
+Intuitively, the Correctness property states that the decryption of the cipher-
+text with underlying plaintext m results in the message m itself with high
+probability provided that the underlying time-lock puzzle has been solved. The
+qSecurity property is described in a game-based style via the experiment in Fig. 5
+and states that an adversary can win the experiment only with a very small
+probability. Specifically, the experiment captures the one-way security of a TLE
+scheme as in the concept of one-way functions security [25,26]. Although indis-
+tinguishability, like in IND-CPA security [25,34], is stronger than the hardness
+The experiment EXPTLE(B, Oeval, eOeval , dOeval , fstate, fpuzzle, q)
+Initialization Phase.
+� Ch is initialized with eOeval , dOeval and sends them to B. In addition it creates a
+local time counter Clexp.
+Learning Phase.
+� When B issues the query (Evaluate, x) to Oeval through the Ch, he gets back
+(Evaluate, x, y).
+� B can request the encryption of a message m ∈ Mλ with time label τdec by send-
+ing (Enc, m, τdec) to Ch.
+� When Ch receives a (Enc, m, τdec) request from B, it runs the algorithm
+eOeval(m, τdec) → c and returns c to B.
+� Ch increases Clexp by 1 for every q queries B issues to Oeval.
+� B can request the decryption of a ciphertext c by sending (Dec, c, wτ ) to Ch.
+Then, Ch just runs the algorithm dOeval(c, wτ ) → y ∈ {m, ⊥} and returns to B
+(Dec, c, wτ , y).
+Challenge Phase.
+� B can request for a single time a challenge from Ch by sending (Challenge, τ).
+Then, Ch picks a value r
+$← Mλ and sends (Challenge, τ, cr ← eOeval(r, τ −Clexp))
+to B. Then, B is free to repeat the Learning Phase.
+� B sends as the answer of the challenge the message (Challenge, τ, cr, r
+∗) to Ch.
+� If (r∗ = r)∧ (τ > Clexp) (i.e. B manages to decrypt cr before the decryption time
+comes) then EXPTLE outputs 1. Else, EXPTLE outputs 0.
+Fig. 5. Experiment EXPTLE for a number of queries q, function fstate, message domain
+Mλ, algorithms eOeval , dOeval in the presence of an adversary B, oracle Oeval and a chal-
+lenger Ch all parameterized by 1λ.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 417
+to reverse a function, for our purpose of achieving UC realization (Theorem 1)
+it is enough. This is possible because we extend our TLE construction into a
+bigger one in the random oracle model and we rely on the hardness of inverting
+the underlying TLE construction. Because of that, in Subsect. 6.3, we provide
+an indistinguishability game-based definition, similar to IND-CPA but in the
+context of TLE so that we can argue about the security of a TLE construction
+even in the standalone model.
+In Fig. 5, we present the experiment EXPTLE in the presence of a challenger
+Ch and an adversary B. More details on the description of EXPTLE can be found
+in Supporting Material C.7 of the extended version of this paper.
+Definition 1. A one-way secure time-lock encryption scheme with respect to an
+evaluation oracle Oeval, a relation ROeval
+, a state function fstate, puzzle function
+fpuzzle and a witness construction function wit con for message space M and a
+security parameter λ is a pair of PPT algorithms (eOeval
+, dOeval
+) such that:
+– eOeval
+(m, τdec): The encryption algorithm takes as input message a m ∈ M,
+an integer τdec ∈ N and outputs a ciphertext c.
+– dOeval
+(c, wτdec): The decryption algorithm takes as input wτdec ∈ {0, 1}∗ and a
+ciphertext c, and outputs a message m ∈ M or ⊥.
+The pair (eOeval
+, dOeval
+) satisfies the following properties:
+1. Correctness: For every λ, τdec ∈ N,m ∈ M and wτdec , it holds that
+Pr
+[
+m′ ← dOeval
+(eOeval
+(m, τdec), wτdec)
+ROeval
+(wτdec , (fpuzzle(c), τdec))
+: m′ = m
+]
+> 1 − negl(λ)
+where wτdec can be constructed from the received responses of Oeval and func-
+tion wit con as it is described in both Table 1 and Fig. 4.
+2. qSecurity: For every PPT adversary B with access to oracle Oeval, the proba-
+bility to win the experiment EXPTLE and thus output 1 in Fig. 5 is negl(λ).
+5.2 Proof of UC Realizing F leak,delay
+TLE
+In this Subsection we show that if the TLE scheme used in protocol ΠTLE in
+Fig. 4 is a secure time-lock encryption scheme according to Definition 1 then the
+protocol ΠTLE UC realizes FTLE. We provide the proof of the theorem below in
+Supporting Material C.8 of the extended version of this paper.
+Theorem 1. Let (eOeval
+, dOeval
+) be a pair of encryption/decryption algorithms
+that satisfies Definition 1. Then, the protocol ΠTLE in Fig. 4 UC-realizes func-
+tionality F leak,delay
+TLE in the (Wq(F∗
+RO),Gclock,FRO,FBC)-hybrid model with leakage
+function leak(x) = x+1, delay = 1, where FRO and F∗
+RO are two distinct random
+oracles.
+On the importance of instantiating FOeval
+with F∗
+RO: In our proof, we instantiate
+the functionality FOeval
+with F∗
+RO, so that Z cannot bypass the interaction with
+the functionality wrapper and thus breach the security argument of our proof.
+For more information and insightful comments see Supporting Material C.9 of
+the extended version of this paper.
+418 M. Arapinis et al.
+Efficiency cost for UC security: As we have seen, to provide UC security we
+need to extend a secure TLE construction (according to Definition 1) in the RO
+model. Specifically, in step 2 of the Encryption procedure of Fig. 4, the party
+makes two extra calls to the FRO functionality. In reality, this means two extra
+hash function evaluations, which is very efficient [24]. Thus, the performance is
+not affected by providing UC security.
+Relation between absolute and relativistic time: Our FTLE captures naturally the
+concept of TLE in absolute time (messages are encrypted at time t0 so that
+they open at time tm). On the other hand, the construction that UC realizes our
+functionality is a relativistic one in the sense that a message is protected for a
+period of time (tm − t0).
+6 Astrolabous: A UC-Secure TLE Construction
+We present and prove that our relative TLE construction is a secure time-lock
+encryption scheme according to Definition 1. Our scheme combines the construc-
+tion of [37] and [43].
+First, we present our TLE construction, namely Astrolabous, and the proof of
+security, i.e. Astrolabous satisfies Definition 1. Finally, for the sake of complete-
+ness, we present the equivocable Astrolabous algorithm, which is the algorithm
+that is used in the hybrid protocol in Fig. 4.
+We did not adopt any of the TLE constructions provided in [43] and [37]
+because they can not provide us with the necessary security properties we are
+seeking in our theoretical framework so that we can UC realise FTLE. More
+details and insightful comments can be found in Supporting Material C.9 of the
+extended version of this paper.
+Description of the Astrolabous scheme Initially, we provide the necessary
+glossary in Table 2. We name our construction Astrolabous from the ancient
+Greek clock device Astrolabe, which was used by the astronomers of that era to
+perform different types of calculations including the measurement of the altitude
+above the horizon of a celestial body, identification of stars and the determination
+of the local time.
+We refer to the encryption/decryption algorithms of the Astrolabous scheme
+in Subsect. 6.1 as AST.enc,AST.dec where AST is the abbreviation of Astrola−
+bous. In Subsect. 6.2, we refer to the equivocable encryption/decryption algo-
+rithms as EAST.enc,EAST.dec where the letter E indicates the extended algo-
+rithms of the Astrolabous scheme.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 419
+Table 2. The glossary of Astrolabous scheme.
+Notation Description
+E = (enc, dec) A symmetric key encryption scheme
+H, G Two hash functions (modelled as random oracles)
+b
+$← D b is sampled uniformly at random from D
+X.enc,X.dec Encryption and decryption algorithm respectively of scheme X
+⊕ The XOR bit operation, e.g. 0 ⊕ 1 = 1, 1 ⊕ 1 = 0
+x||y The concatenation of two bit strings x and y
+6.1 AST Scheme Description (AST.encE,H,AST.decE,H)
+AST.encE,H(m, τdec): The algorithm accepts as input the message m and the
+time-lock’s puzzle difficulty τdec
+3 and does:
+– Picks kE
+$← KE, where KE is the key space of the symmetric encryption scheme
+E and the size of the key is equal to the domain of the hash function H equal
+to p1(λ). Then compute cm,kE
+← enc(m, kE).
+– It picks r0||r1|| . . . ||rqτdec−1
+$← {0, 1}p2(λ) and computes ckE,τdec ← (r0, r1 ⊕
+H(r0), r2 ⊕ H(r1), . . . , kE ⊕ H(rqτdec−1)4.
+– It outputs c = (τdec, cm,kE
+, ckE,τdec) as the ciphertext.
+AST.decE,H(c, wτdec): The algorithm accepts as input the ciphertext c of the form
+(τdec, cm,kE
+, ckE,τdec) and the witness wτdec = (r0,H(r0),H(r1), . . . ,H(rqτdec−1), c)
+that can be computed by issuing qτdec random oracle queries. Specifically, to
+solve the puzzle the first oracle query is r0 and the response H(r0). Then, the
+decryptor computes the value r1 from ckE
+by using the XOR operation such as
+r1 ← ckE,τdec [1]⊕H(r0). Similarly, it computes the pair of values (r2,H(r2)), . . . ,
+(rqτdec−1,H(rqτdec−1)). Then it does:
+– It computes kE = H(rqτdec−1)⊕ ckE,τdec [qτdec], where ckE,τdec [j] indicates the jth
+element in vector ckE,τdec .
+– It computes and outputs m ← dec(cm,kE
+, kE).
+In Table 3, we summarize the oracle, algorithms, functions and relation that
+define a TLE scheme as in Definition 1. We instantiate these to specify our TLE
+construction.
+We instantiate the items from Table 3 based on our construction as shown
+below.
+3 Note that this time difficulty is relative, that means that it specifies the duration
+for solving the puzzle rather than the specific date at which the puzzle should be
+solved.
+4 To do this efficiently all the hash queries can be performed simultaneously
+as kE and r0||r1|| . . . ||rqτdec−1 are known. In the UC setting, the party sends
+(sid,Evaluate, τdec) to Wq and receives back (sid,Evaluate, τdec, {(rj , yj)}qτdec−1
+j=0 ).
+420 M. Arapinis et al.
+1. The oracle Oeval is the random oracle RO.
+2. The encryption and decryption algorithms (eOeval
+, dOeval
+) are described as
+AST.encE,H,AST.decE,H. Our algorithm is relative, meaning that we define the
+difficulty of the time-lock puzzle rather than the specific time that the message
+will eventually open. For our algorithms to be compatible with the UC setting,
+for a given time τdec we must define the difficulty of the puzzle. In that case,
+given the current time is Cl, the puzzle complexity is τdec − Cl. The time τdec
+gives us the essence of absolute time that a ciphertext should be opened. On the
+other hand, both constructions in [37,43] function in relative time. To compute
+relative time, both values Cl and τdec are provided to eFOeval
+.
+Table 3. Oracle, algorithms, functions and relation that define a TLE construction.
+TLE items Description
+Oeval The oracle to which the parties issue queries for
+solving/creating time-lock puzzles
+(eOeval , dOeval) The pair of encryption/decryption algorithms with respect to
+the oracle Oeval
+fstate The state function that prepares the next oracle query to
+Oeval
+fpuzzle The puzzle function that extracts the time-lock puzzle from a
+given ciphertext
+wit con The witness construction function that returns the solution of
+the puzzle or the witness if that is possible
+ROeval The relation that specifies when a witness w is a solution to a
+puzzle c with difficulty τ
+3. The state function fstate for a ciphertext c = (τdec, cm,kE
+, ckE,τdec) as described
+previously, is defined as:
+fstate(c, 0,Null) = ckE,τdec [0] (1)
+and ∀j ∈ {1, . . . , q(τdec − Cl) − 1} it holds that:
+fstate(c, j, y = H(rj−1)) = y ⊕ ckE,τdec [j] (2)
+4. The puzzle function fpuzzle for a ciphertext c = (τdec, cm,kE
+, ckE,τdec) is defined
+as:
+fpuzzle(c) = ckE,τdec (3)
+5. The witness construction function wit con accepts the input described in Fig. 4
+and outputs the witness described in the same figure. More details can be
+found in Supporting Material C.6 of the extended version of this paper.
+6. A pair (wτdec = (r0,H(r0),H(r1), . . . ,H(rq(τdec−Cl)−1)), (fpuzzle(c), τ)) is in
+RFOeval
+, where wτdec and c as appeared in the description of AST.decE,H,
+if |wτdec | = |fpuzzle(c)| and w[j] = ckE,τdec [j] ⊕ H(w[j − 1]) for all j ∈
+[0, q(τdec − Cl) − 2], where w[−1] = 1.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 421
+The following theorem states that our TLE construction satisfies Definition 1.
+The proof is provided in Supporting Material D.1 of the extended version of this
+paper.
+Theorem 2. Let AST.encE,H,AST.decE,H be the pair of encryption/decryption
+algorithms just described. If the underlying symmetric encryption scheme E satis-
+fies IND − CPA security and correctness, then the pair (AST.encE,H,AST.decE,H)
+is a secure TLE scheme according to Definition 1 in the random oracle model.
+Verifiability and efficiency of Astrolabous: Astrolabous is efficiently verifiable.
+Solvers can present all the hash evaluations and, similar to puzzle creation, the
+verifier can in parallel evaluate them and recreate the puzzle. If both puzzles
+match it accepts the solution. So for a puzzle set for computation time τ , i.e.
+requiring qτ sequential hash evaluations to be solved, the verification can be
+parallelized, i.e. qτ parallel hash evaluations.
+6.2 Equivocable Astrolabous Scheme Description
+(EAST.encE,H,G,EAST.decE,H,G)
+For our purposes, it is not enough to directly adopt a TLE construction such
+as Astrolabous and make security claims in the UC framework because we can-
+not equivocate, which is essential. For that reason, in our hybrid protocol in
+Fig. 4 we extend the input TLE construction in order for our security claims
+to be compatible with the UC framework and in particular with the UC treat-
+ment of time. Specifically, in Fig. 4, in procedure Puzzle, the party prepares
+the time-lock puzzles for encrypting a random string in step 1 of the Encryp-
+tion procedure. Then, in step 2 the party makes two calls to the random oracle
+and extends the previously resulting ciphertext by two arguments for equivo-
+cation and non-malleability as explained above. This procedure is initiated by
+the party every time she advances the clock. So the execution of the Extended
+Astrolabous, as it appeared in Fig. 4 in both procedures, needs to be interleaved
+with the interaction of parties with the global clock. Because of this interac-
+tion, extended Astrolabous cannot be given black-box (e.g. as protocol input),
+it rather needs to be described as part of the ΠTLE protocol itself. However,
+outside of the UC framework, parties will actually use the extended algorithms
+as they do not actually interact with any global clock. This is merely the result
+of the way time is treated in the UC Gclock model. So morally, the Equivocable
+Astrolabous TLE scheme satisfies the UC security notion captured by our FTLE.
+The full specification of the corresponding extended algorithms is given in the
+Supporting Material D.2 of the extended version of this paper.
+6.3 IND-CPA-TLE Security
+Game-based definitions are often natural and easy to use. Unfortunately, the
+experiment EXPTLE presented in Figure: 5 is not enough to argue about the
+security of a TLE scheme on its own, and is only useful in the context of the
+422 M. Arapinis et al.
+Theorem: 1. The reason is that EXPTLE argues about only the onewayness of
+a TLE scheme, leaving aside any semantic security. On the other hand, it is
+enough for the proof of Theorem: 1 as we use an extension of the TLE scheme
+in the random oracle model and not the scheme as it is.
+Below, we present the analogous experiment of the IND-CPA security notion
+in the time-lock setting. In a nutshell, this experiment is the same as the one in
+Figure: 5 except that the adversary in the Challenge command specifies two
+messages (m0,m1) as in the classical IND-CPA game. Again, in order to win
+the game, the adversary B must guess correctly which of the two messages is
+encrypted by the challenger Ch without engaging with the oracle more than the
+desired amount of times. In case he wins, that would mean that he managed to
+“break” the TLE scheme in the sense that he decrypted the message before its
+decryption time.
+The experiment EXPIND−CPA−TLE(B, Oeval, eOeval , dOeval , fstate, fpuzzle, q)
+Initialization Phase.
+� Ch is initialized with eOeval , dOeval and sends them to B. In addition, it creates a
+local time counter Clexp.
+Learning Phase.
+� When B issues the query (Evaluate, x) to Oeval through the Ch, he gets back
+(Evaluate, x, y).
+� B can request the encryption of a message m ∈ Mλ with time label τdec by send-
+ing (Enc, m, τdec) to Ch.
+� When Ch receives a (Enc, m, τdec) request from B, it runs the algorithm
+eOeval(m, τdec) → c and returns c to B.
+� Ch increases Clexp by 1 every time B queries Oeval q times.
+� B can request the decryption of a ciphertext c by sending (Dec, c, w) to Ch.
+Then, Ch just runs the algorithm dOeval(c, w) → y ∈ {m, ⊥} and returns to B
+(Dec, c, w, y).
+Challenge Phase.
+� B can request for a single time a challenge from Ch by sending
+(Challenge, (m0, m1), τ). Then, Ch picks a value b
+$← {0, 1} and sends
+(Challenge, τ, c ← eOeval(mb, τ −Clexp)) to B. Then, B is free to repeat the Learn-
+ing Phase.
+� B sends as the answer of the challenge the message (Challenge, τ, c, mb∗) to Ch.
+� If (mb∗ = mb) ∧ (τ > Clexp) (i.e. B manages to decrypt cr before the decryption
+time comes) then EXPTLE outputs 1. Else, EXPTLE outputs 0.
+Fig. 6. Experiment EXPIND−CPA−TLE for a number of queries q, function fstate, message
+domain Mλ, algorithms eOeval , dOeval in the presence of an adversary B, oracle Oeval and
+a challenger Ch all parameterized by 1λ.
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 423
+Definition 2. A pair of TLE algorithms (eOeval
+, dOeval
+) as described in Defini-
+tion 1 is IND-CPA-TLE, if for every PPT adversary B the probability to win
+the experiment described in Fig. 5 is 1/2 + negl(λ).
+Mahmoody et al. construction is not IND-CPA-TLE: Recall the construction
+in [37] for encrypting a message m or a secret in general. It can be easily seen
+that it does not satisfy Definition 2, as the secret is spread across the puzzle, and
+thus part of it is leaked as the puzzle is solved (see Supporting Material D.3 of
+the extended version of this paper). In contrast, next we show both Astrolabous
+and an enhanced version of the construction in [37], we called it MMV 2.0 from
+the first letter of each author, are IND-CPA-TLE.
+MMV 2.0: As we explained above, the construction in [37] does not satisfy
+IND-CPA-TLE security because it spreads the message all over the puzzle. A
+natural question is if it satisfies our game based definition when the message is
+not spread across all over the puzzle, but instead, it is XORed in the last hash
+evaluation. Specifically, eMM0.1(m, τ) → (r0, r1⊕H(r0), . . . , m⊕H(rτq−1), where
+r = r0|| . . . ||rτq−1 is a random string. In that case, as we see next, the MMV 2.0
+satisfies IND-CPA-TLE. The proof can be found in Supporting Material D.4 of
+the extended version of this paper.
+Theorem 3. The construction MMV 2.0 as described above is IND-CPA-TLE
+secure in the random oracle model.
+Next we show that Astrolabous is also IND-CPA-TLE secure. The reasoning
+again is exactly the same as the one in Theorem 2 except that the IND-CPA
+adversary sends the messages m0,m1 received from the IND-CPA-TLE adversary
+to the challenger instead of choosing his own. The rest are exactly the same and
+thus we omit the proof.
+Theorem 4. Astrolabous, i.e. the pair (AST.encE,H,AST.decE,H), is IND-CPA-
+TLE secure given that the underlying symmetric encryption scheme E satisfies
+IND − CPA security.
+Even if both Astrolabous and MMV 2.0 are IND-CPA-TLE secure, Astrolabous
+has a potential advantage in terms of efficiency. Namely, Astrolabous hides the
+key of the symmetric cryptosystem that it uses into the puzzle, instead of the
+message itself as in MMV 2.0. As a result, many messages can be encrypted
+under the same key and be opened at the same time solving just one puzzle. In
+contrast, with MMV 2.0, for every message, a new puzzle must be generated,
+making the encryption more time-consuming. For example, for a puzzle with
+difficulty that should last 24 h, an 8-core CPU can generate it in 3 h (24/8). The
+total time for encrypting two messages with MMV 2.0 with the above difficulty
+is 3 h for the first message and 2.625 h (24–1.5/8) for the second, in total 5.625 h.
+With Astrolabous one puzzle can be used for both messages, making the total
+encryption time just 3 h. The gap becomes even bigger if we consider several
+encryptions instead of just two. In both examples with did not consider the time
+to perform AES, as in practice is very efficient.
+424 M. Arapinis et al.
+Asymmetry of puzzle generation and puzzle solving time with Astro-
+labous: A natural question is if the puzzle generation time is significantly smaller
+than the time that is required for solving the puzzle. The answer is positive.
+Specifically, there are hash functions that are not meant to have an efficient eval-
+uation, such as Argon2 [6]. Equipped with such function we can create puzzles
+that are small (in terms of space) and fast, but at the same time difficult enough.
+For example, Argon2 can be parameterized in such a way that a single hash eval-
+uation can take roughly 60 s [45], meaning that an 8-core processor can generate
+a puzzle that meant to be solved in 4 h (equably 14.400 s or 14.400/60 = 240
+hash evaluations) in just 30 min (puzzle generation is parallelizable so an 8-core
+processor can do 8 hash evaluation simultaneously which each one of them takes
+60 s. So 240 hash evaluations can be done in 30 min.). As the number of CPU
+cores increases the puzzle generation can become even smaller but at the same
+time, the time for solving the puzzle remains unchanged (no parallelization for
+puzzle solving).
+References
+1. Arapinis, M., Lamprou, N., Zacharias, T.: E-cclesia: universally composable self-
+tallying elections. Cryptology ePrint Archive, Report 2020/513 (2020)
+2. Arapinis, M., Lamprou, N., Zacharias, T.: A universally composable time-lock
+encryption scheme. Cryptology ePrint Archive, Astrolabous (2021)
+3. Christian, B., et al.: A composable treatment. In: CRYPTO, Bitcoin as a Trans-
+action Ledger (2017)
+4. Baum, C., et al.: Craft: composable randomness and almost fairness from time.
+Cryptology ePrint Archive, Report 2020/784 (2020)
+5. Baum, C. et al.: A foundation of time-lock puzzles in uc. Advances in Cryptology
+- EUROCRYPT (2021)
+6. Biryukov, A., Dinu, D., Khovratovich, D.: Argon2: new generation of memory-hard
+functions for password hashing and other applications. In: 2016 IEEE European
+Symposium on Security and Privacy (EuroS P) (2016)
+7. Bitansky, N., et al.: Time-lock puzzles from randomized encodings. In: ITCS (2016)
+8. Boneh, D., Naor, M.: Timed commitments. In: CRYPTO (2000)
+9. Boneh, D., Bonneau, J., Bunz, B., Fisch, B.: Verifiable delay functions. In:
+CRYPTO 2018 (2018)
+10. Bellare, M.: Timed commitments. In: Bellare, Mihir (ed.) Advances in Cryptology
+– CRYPTO 2000. Springer, Berlin Heidelberg (2000)
+11. Camenisch, J., Lehmann, A., Neven, G., Samelin, K.: Uc-secure non-interactive
+public-key encryption. In: CSF 2017 (2017)
+12. Canetti, R.: Universally composable security: a new paradigm for cryptographic
+protocols. In: FOCS (2001)
+13. Canetti, R., Dodis, Y., Pass, R., Walfish, S.: Universally composable security with
+global setup. In: TCC (2007)
+14. Cheon, J.H., Hopper, N., Kim, Y., Osipkov, I.: Timed-release and key-insulated
+public key encryption. In: Di Crescenzo, G., Rubin, A. (eds.) Financial Cryptog-
+raphy and Data Security. FC 2006. LNCS, vol. 4107. Springer, Heidelberg (2006).
+https://doi.org/10.1007/11889663 17
+https://doi.org/10.1007/11889663_17
+Astrolabous: A Universally Composable Time-Lock Encryption Scheme 425
+15. Cheon, J.H., Hopper, N., Kim, Y., Osipkov, I.: Provably secure timed-release public
+key encryption. ACM Trans. Inf. Syst. Secur., 11(2), (2008)
+16. Dachman-Soled, D., Mahmoody, M., Malkin, T.: Can optimally-fair coin tossing be
+based on one-way functions?. In: Lindell, Y. (eds.) Theory of Cryptography. TCC
+2014. LNCS, vol. 8349. Springer, Heidelberg (2014). https://doi.org/10.1007/978-
+3-642-54242-8 10
+17. Daemen, J., Rijmen, V.: The design of Rijndael. Springer-Verlag (2002). https://
+doi.org/10.1007/978-3-662-60769-5
+18. ElGamal, T.: A public key cryptosystem and a signature scheme based on discrete
+logarithms. In: Blakley, G.R., Chaum, D. (eds.) CRYPTO 1984. LNCS, vol. 196,
+pp. 10–18. Springer, Heidelberg (1985). https://doi.org/10.1007/3-540-39568-7 2
+19. Ephraim, N., Freitag, C., Komargodski, I., Pass, R.: Non-malleable time-lock puz-
+zles and applications. Cryptology ePrint Archive, Report 2020/779 (2020)
+20. Garay, J., Kiayias, A., Panagiotakos, G.: Proofs of work for blockchain protocols.
+IACR Cryptol. ePrint Arch., 2017 (2017)
+21. Juan, A.: Garay, Aggelos Kiayias, and Nikos Leonardos. analysis and applications.
+In: EUROCRYPT, The Bitcoin Backbone Protocol (2015)
+22. Garg, S., Gentry, C., Sahai, A., Waters, B.: Witness encryption and its applications.
+In: STOC (2013)
+23. Gennaro, R., Jarecki, S., Krawczyk, H., Rabin, T.: Secure distributed key genera-
+tion for discrete-log based cryptosystems. J. Cryptol. 20 (2007)
+24. Gilbert, H., Handschuh, H.: Security analysis of SHA-256 and sisters. In: Matsui,
+M., Zuccherato, R.J. (eds.) Selected Areas in Cryptography. SAC 2003. LNCS, vol.
+3006. Springer, Heidelberg (2004). https://doi.org/10.1007/978-3-540-24654-1 13
+25. Goldreich, O.: The foundations of modern cryptography. In: Modern Cryptography,
+Probabilistic Proofs and Pseudorandomness. Algorithms and Combinatorics, vol.
+17. Springer, Heidelberg (1999). https://doi.org/10.1007/978-3-662-12521-2 1
+26. Goldreich, O.: Foundations of cryptography:, vol. 1. Cambridge University Press,
+USA (2006)
+27. Gordon, D., Ishai, Y., Moran, T., Ostrovsky, R., Sahai, A.: On complete primitives
+for fairness. In: Micciancio, D. (eds.) Theory of Cryptography. TCC 2010. LNCS,
+vol. 5978. Springer, Heidelberg (2010). https://doi.org/10.1007/978-3-642-11799-
+2 7
+28. Groth, J.: Evaluating security of voting schemes in the universal composability
+framework. In: Jakobsson, M., Yung, M., Zhou, J. (eds) Applied Cryptography
+and Network Security. ACNS 2004. LNCS, vol. 3089. Springer, Heidelberg (2004).
+https://doi.org/10.1007/978-3-540-24852-1 4
+29. Hirt, M., Zikas, V.: Adaptively secure broadcast. In: Gilbert, H. (ed.) EURO-
+CRYPT 2010. LNCS, vol. 6110, pp. 466–485. Springer, Heidelberg (2010). https://
+doi.org/10.1007/978-3-642-13190-5 24
+30. Katz, J., Loss, J., Xu, J.: On the security of time-lock puzzles and timed com-
+mitments. In: Pass, R., Pietrzak, K. (eds.) Theory of Cryptography. TCC 2020.
+Lecture Notes in Computer Science, vol. 12552. Springer, Cham (2020). https://
+doi.org/10.1007/978-3-030-64381-2 14
+31. Katz, J., Maurer, U., Tackmann, B., Zikas, V.: Universally composable synchronous
+computation. In: TCC (2013)
+32. Khisti, A., Tchamkerten, A., Wornell, G. W.: Secure broadcasting over fading
+channels. IEEE Trans. Inf. Theory, 54(6) (2008)
+33. Kiayias, A., Yung, M.: Self-tallying elections and perfect ballot secrecy. In: Nac-
+cache, D., Paillier, P. (eds.) PKC 2002. LNCS, vol. 2274, pp. 141–158. Springer,
+Heidelberg (2002). https://doi.org/10.1007/3-540-45664-3 10
+https://doi.org/10.1007/978-3-642-54242-8_10
+https://doi.org/10.1007/978-3-642-54242-8_10
+https://doi.org/10.1007/978-3-662-60769-5
+https://doi.org/10.1007/978-3-662-60769-5
+https://doi.org/10.1007/3-540-39568-7_2
+https://doi.org/10.1007/978-3-540-24654-1_13
+https://doi.org/10.1007/978-3-662-12521-2_1
+https://doi.org/10.1007/978-3-642-11799-2_7
+https://doi.org/10.1007/978-3-642-11799-2_7
+https://doi.org/10.1007/978-3-540-24852-1_4
+https://doi.org/10.1007/978-3-642-13190-5_24
+https://doi.org/10.1007/978-3-642-13190-5_24
+https://doi.org/10.1007/978-3-030-64381-2_14
+https://doi.org/10.1007/978-3-030-64381-2_14
+https://doi.org/10.1007/3-540-45664-3_10
+426 M. Arapinis et al.
+34. Kościelny, C., Kurkowski, M., Srebrny, M.: Foundations of symmetric cryptogra-
+phy. In: Modern Cryptography Primer, pp. 77–118. Springer, Heidelberg (2013).
+https://doi.org/10.1007/978-3-642-41386-5 3
+35. Lindell, Y.: Highly-efficient universally-composable commitments based on the
+DDH assumption. In: EUROCRYPT 2011 (2011)
+36. Liu, J., Jager, T., Kakvi, S.A., Warinschi, B.: How to build time-lock encryption.
+Designs, Codes and Cryptography (2018)
+37. Mahmoody, M., Moran, T., Vadhan, S.: Time-lock puzzles in the random oracle
+model. In: Rogaway, P. (eds.) Advances in Cryptology. LNCS, vol. 6841. Springer,
+Heidelberg (2011). https://doi.org/10.1007/978-3-642-22792-9 3
+38. Timothy, C.: May. Timed-release crypto (1993)
+39. Nielsen, J.B.: Separating random oracle proofs from complexity theoretic proofs:
+the non-committing encryption case. In: CRYPTO (2002)
+40. Okamoto, T.: Receipt-free electronic voting schemes for large scale elections. In:
+Security Protocols (1998)
+41. Pedersen, T.P.: Non-interactive and information-theoretic secure verifiable secret
+sharing. In: Feigenbaum, J. (ed.) Advances in Cryptology. LNCS, vol. 576. Springer,
+Heidelberg (1992). https://doi.org/10.1007/3-540-46766-1 9
+42. Pietrzak, K.: Simple verifiable delay functions. In: Blum, A., (ed.) 10th Innovations
+in Theoretical Computer Science Conference (ITCS 2019), of Leibniz International
+Proceedings in Informatics (LIPIcs). Schloss Dagstuhl-Leibniz-Zentrum fuer Infor-
+matik, vol. 124 (2018)
+43. Rivest, R.L., Shamir, A., Wagner, D.A.: Time-lock puzzles and timed-release
+crypto. Technical report (1996)
+44. Szepieniec, A., Preneel, B.: New techniques for electronic voting. USENIX Associ-
+ation (2015)
+45. Toponce, A.: Further investigation into scrypt and argon2 password hashing (2016)
+46. Wesolowski, B.: Efficient verifiable delay functions. In: Ishai, Y., Rijmen, V. (eds.)
+Advances in Cryptology. LNCS, vol. 11478. Springer, Cham (2019). https://doi.
+org/10.1007/978-3-030-17659-4 13
+https://doi.org/10.1007/978-3-642-41386-5_3
+https://doi.org/10.1007/978-3-642-22792-9_3
+https://doi.org/10.1007/3-540-46766-1_9
+https://doi.org/10.1007/978-3-030-17659-4_13
+https://doi.org/10.1007/978-3-030-17659-4_13
+	Astrolabous: A Universally Composable Time-Lock Encryption Scheme
+	1 Introduction
+	2 Related Work
+	2.1 Comparison With ch14CBRJS20 and ch14CBRJS20B
+	2.2 Asymptotic vs Concrete Definitions
+	3 Preliminaries
+	3.1 Universal Composability
+	4 Definition of Fleak,delayTLE
+	5 Realization of Fleak,delayTLE via Time-Lock Puzzles
+	5.1 Security Definitions of (Computational-Puzzle-Based) Time-Lock Encryption
+	5.2 Proof of UC Realizing Fleak,delayTLE
+	6 Astrolabous: A UC-Secure TLE Construction
+	6.1 AST Scheme Description (AST.encE,H,AST.decE,H)
+	6.2 Equivocable Astrolabous Scheme Description (EAST.encE,H,G,EAST.decE,H,G)
+	6.3 IND-CPA-TLE Security
+	References

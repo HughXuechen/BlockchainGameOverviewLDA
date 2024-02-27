@@ -1,0 +1,1511 @@
+Aegis: Privacy-Preserving Market for Non-Fungible Tokens
+Aegis: Privacy-Preserving Market
+for Non-Fungible Tokens
+Hisham S. Galal and Amr M. Youssef, Senior Member, IEEE
+Abstract—Non-fungible tokens (NFTs) are unique non-
+interchangeable digital assets verified and stored using blockchain
+technology. Quite recently, there has been a surging interest and
+adoption of NFTs, with sales exceeding $10 billion in the third
+quarter of 2021. Given the public state of Blockchain, NFTs owners
+face a privacy problem. More precisely, an observer can trivially
+learn the whole NFT collections owned by an address. For some
+categories of NFTs like arts and game collectibles, owners can sell
+them for a profit. However, popular marketplaces trade NFTs
+using public auctions and direct offers. Hence, an observer can
+learn about the new owner and the NFT purchase price. To tackle
+those problems, we propose Aegis,(Aegis is a shield carried by
+Zeus and Athena. It is a symbol of protection.) a protocol that
+allows users to add privacy to their NFTs ownership. In Aegis
+users can swap NFTs for payment amounts in fungible tokens while
+hiding the details (i.e., involved parties, the NFTs, and the payment
+amounts). One of the main properties of Aegis is its complete
+compatibility with existing NFT standards. We design Aegis by
+leveraging zkSNARK proof system and smart contracts. We build
+an open-source prototype and perform experiments to evaluate
+Aegis’s performance.
+Index Terms—Atomic swap, blockchain, non-fungible tokens,
+zkSNARK.
+I. INTRODUCTION
+NON fungible tokens (NFTs) have gained significant
+interest and adoption. Sales volumes of NFTs surged to
+$10.7 billion in the third quarter of 2021 alone [1]. The popu-
+lar and largest NFT marketplace, Opensea1 hit $3.4 billion as
+a sales volume in August 2021 [1]. NFTs are tokens that rep-
+resent ownership of unique digital items such as art, collecti-
+bles, essays, domains, and even tickets to access real-world
+events. Although anyone can trivially copy digital assets, an
+NFT can have one owner only at a time, and the Blockchain
+secures the ownership status. In particular, the standard NFT
+smart contract [2] (ERC-721) contains a mapping that asso-
+ciates each NFT identifier with its corresponding owner’s
+address. The smart contract code guarantees that only the
+owner or approved operators can assign a new owner.
+The design of Aegis is primarily motivated by the current
+limitations of NFT standards and marketplaces design. For
+instance, ERC-721 specifications [2] require compatible smart
+contracts to expose the owner’s address given the NFT identi-
+fier. Privacy-advocate users cannot tolerate this limitation as
+none would like their entire NFT collections to be accessible
+to the public. The lack of privacy could also introduce the
+owners to life-threatening situations. For example, suppose
+Bob has an address x that is the owner of an NFT ticket for a
+real-world event. After scanning x using online services such
+as Etherscan, it turns out that x is also the owner of some of
+the most expensive and premium NFTs in addition to signifi-
+cant fungible assets. Effectively, this information could attract
+bandits in an attempt to find Bob in the event’s small proxim-
+ity and find ways to extort his private key.
+Furthermore, the current design of NFTs marketplaces also
+lacks privacy. For instance, the popular NFTs marketplace
+Opensea allows users to trade NFTs only via public auctions
+and swaps. Unfortunately, in public auctions, an observer can
+trivially learn the submitted bids even before they get mined
+by simply inspecting the mempool. Hence, these auctions are
+susceptible to front-running, an illegal act that provides risk-
+free profits to front-runners. Moreover, public auctions and
+swaps reveal sensitive information about the seller, buyer,
+NFT, and payment amount.
+The contribution of this paper can be summarized as fol-
+lows: We design Aegis as a privacy-preserving protocol
+that allows users to add privacy to their NFT ownership
+status. Aegis enables users to maintain private balances
+of funds in a non-custodial manner. More importantly,
+Aegis allows users to atomically swap their NFTs for
+payment amounts in a complete privacy-preserving way
+without revealing any information about the involved par-
+ticipants, NFTs, and payment amounts. Finally, we imple-
+mented a basic prototype to assess name’s performance
+and released its source code [3].
+The rest of this paper is organized as follows. Section II out-
+lines the background before giving an overview of Aegis in
+Section III. Section IV presents a detailed construction of
+Aegis. Section V analyzes the Aegis’s security and pri-
+vacy. Section VI evaluates Aegis’s performance based on an
+open-source prototype. Section VII summarizes related work
+on adding privacy to transactions on Ethereum. Finally,
+Section IV concludes this paper.
+Manuscript received 3 January 2022; revised 24 July 2022; accepted 5 Septem-
+ber 2022. Date of publication 9 September 2022; date of current version 6 January
+2023. Recommended for acceptance by Dr. Kui Ren. (Corresponding author:
+Hisham S. Galal.)
+Hisham S. Galal is with the Faculty of Computers and Information, Assiut
+University, Assiut 71515, Egypt (e-mail: hisham_sg@aun.edu.eg).
+Amr M. Youssef is with the Concordia Institute for Information Systems
+Engineering, Concordia University, Montreal, QC H3G 1M8, Canada (e-mail:
+youssef@ciise.concordia.ca).
+Digital Object Identifier 10.1109/TNSE.2022.3205428
+1 https://opensea.io
+92 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+2327-4697 © 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See ht_tps://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+https://orcid.org/0000-0001-9904-8386
+https://orcid.org/0000-0001-9904-8386
+https://orcid.org/0000-0001-9904-8386
+https://orcid.org/0000-0001-9904-8386
+https://orcid.org/0000-0001-9904-8386
+mailto:
+mailto:
+https://opensea.io
+II. BACKGROUND AND PRELIMINARIES
+Ethereum Blockchain. Acts as a distributed virtual machine
+that supports quasi Turing-complete programs [4]. Developers
+can deploy smart contracts guaranteed by the blockchain con-
+sensus to run precisely according to their code. There are types
+of accounts: externally-owned accounts (EoA) controlled by
+users’ private keys, and contract accounts owned by smart
+contracts. Only EoAs can send transactions that change the
+blockchain state. In particular, transactions can transfer Ethers
+and trigger the execution of smart contract code. The costs of
+executing smart contracts code are measured in gas units, and
+the transaction’s sender pays the gas cost in Ether.
+NFT Smart Contracts. NFT smart contracts adhere to the
+standard specifications outlined by ERC-721 [2]. Additionally,
+ERC-1155 [5] is a novel standard for creating fungibility-
+agnostic tokens. Both standards maintain mappings from NFT
+identifiers (IDs) to their owners’ addresses. This mapping is
+publicly accessible; hence, an observer can trivially determine
+the NFTs collection owned by an arbitrary user. Moreover, the
+observer can track how the ownership status of an arbitrary
+NFT changes over time.
+To transfer the ownership of an NFT, the owner sends a
+transferFrom transaction [2] to the NFT smart contract to
+assign an address as the new owner. Alternatively, the owner
+can send approve [2] transaction to set an operator. In prac-
+tice, the operator is a smart contract that changes ownership
+status based on a specific trigger. For example, users set smart
+contracts of marketplaces as operators to their NFTs, allowing
+the marketplace to transfer ownership from a seller (i.e., cur-
+rent owner) to a buyer (i.e., new owner) once the trade is
+complete.
+Meta-Transactions. In Ethereum, all transactions consume
+gas, and their senders must have enough Ether to pay for the
+gas cost. Furthermore, Ethereum uses account-model where
+an EoA trivially links all transactions performed by its user.
+One way to break that link is by having another EoA, not
+owned by the user, pay the gas cost. In particular, the user gen-
+erates a meta-transaction [6] containing some parameters and
+sends it to a trustless relayer. Then, the relayer creates a trans-
+action with those parameters and pays the gas cost. To com-
+pensate relayers, they often receive shares from protocols’
+fees which should cover their expenses plus an extra profit.
+III. AEGIS OVERVIEW
+We specify the system goals and threat model. Then, we
+provide the structure of Aegis and protocol participants.
+Finally, we briefly describe transactions in Aegis.
+Aegis works in the Unspent Transaction Output (UTXO)
+model where users own multiple coins controlled by different
+keys in contrast to having a single state as in Account model.
+Hence, transactions in Aegis privately consume old UTXO(s)
+and generate new ones. Since Ethereum has a public state, then
+Aegis smart contract needs to conceal users’ state in the form
+of commitments to NFT IDs and funds. However, as the smart
+contract cannot access the committed values, it cannot deter-
+mine if they are updated correctly. To solve this dilemma, users
+submit Zero-Knowledge Succinct Non-interactive ARgument
+of Knowledge (zkSNARK) [7] proofs that assert the correct-
+ness of state updates without revealing any further information.
+Upon successful verification, the smart contract accepts the
+updated state. Furthermore, the smart contract utilizes incre-
+mental Merkle trees to accumulate commitments of new
+UTXOs. Additionally, to prevent double-spending, Aegis
+leverages the notion of serial numbers [8] to privately nullify
+consumed UTXOs without linking them to the new ones.
+A. System Goals
+We design Aegis such that it achieves the following goals:
+� Unlinkability: an adversary cannot link between NFTs
+deposit and swap transactions. Similarly, the adversary
+cannot link funds deposit to swap and withdrawal
+transactions.
+� Balance: an adversary cannot successfully withdraw
+assets belonging to honest users.
+� Atomic Swap: honest sellers and buyers can success-
+fully swap their assets atomically, or the swap reverts
+entirely without causing any loss.
+� Availability: users should always be able to submit
+transactions without any risk of censorship.
+� Compatibility: Aegis should be compatible with exist-
+ing NFT smart contracts standard [2] without requiring
+any changes to the deployed contracts.
+B. Threat Model
+We assume the cryptographic primitives are secure. We fur-
+ther assume the adversary A is computationally bounded and
+cannot tamper with the execution of the Aegis smart con-
+tracts. Additionally,A has the capabilities of a miner (i.e., reor-
+der transactions within a blockchain block, and inject its
+transactions before and after certain transactions). A can
+always read all transactions issued to Aegis while propagat-
+ing over the network. We assume users can always read from
+and write to the blockchain state. Moreover, users utilize trust-
+less relayers to submit non-deposit transactions on their behalf.
+C. Protocol Participants
+In Aegis, there are four participants: sellers, buyers, trust-
+less relayers, and a smart contract. Sellers privately own NFTs
+in Aegis, and they can swap for payment amounts or with-
+draw them by transferring the ownership from Aegis. Simi-
+larly, buyers have private funds in Aegis, which they can
+swap for NFTs or withdraw. Relayers receive meta-transac-
+tions from sellers and buyers and submit transactions to Ether-
+eum while paying the gas cost. They are incentivized by
+rewards from Aegis based on their contribution. We assume
+sellers and buyers are implicitly using relayers. For example,
+a user sends a transaction to Aegis implies that the user
+sends a meta-transaction to a relayer, and the relayer sends a
+transaction to Aegis.
+Aegis has a Main smart contract in addition to two inter-
+nal smart contracts:
+GALAL AND YOUSSEF: AEGIS: PRIVACY-PRESERVING MARKET FOR NON-FUNGIBLE TOKENS 93
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+� Main: it receives transactions from users, and it is the
+non-custodial owner of all deposited NFTs and funds.
+� Merkle: it implements an efficient incremental Mer-
+kle tree.
+� Verifier: it verifies zkSNARK proofs.
+D. Aegis Transactions
+Fig. 1 shows a high-level overview of transactions in
+Aegis. Users can directly deposit NFTs and funds to Main.
+A seller and a buyer communicate off-chain to agree on the
+swap detail, such as the NFT ID and payment amount. Then,
+the buyer can send swap transaction to settle the exchange.
+Furthermore, users can withdraw their assets from Main to
+public recipient addresses. More importantly, swap and with-
+drawal transactions are sent via relayers, so an observer can-
+not link them to deposit transactions using the gas payer’s
+address.
+NFT Transactions. Aegis does not mint NFTs; therefore,
+sellers have to transfer the ownership of their NFTs in a non-
+custodial manner to Main. Accordingly, sellers initially send
+approve transactions [2] to their NFT smart contracts to
+assign Main’s address as an operator. Then, sellers can add
+privacy to their NFTs ownership status by sending Depos-
+itNFT transactions to Main. Finally, Main (i) transfers
+ownership from the user’s address to its address, (ii) gener-
+ates an NFT commitment, (iii) and accumulates it in the
+NFTs Merkle tree. Later, a seller can send WithdrawNFT
+transaction containing a zkSNARK proof of NFT ownership.
+Upon successful verification, Main transfers the ownership
+to the recipient’s address which should be different from the
+deposit address.
+Fund Transactions. Aegis allows buyers to build private
+funds that they can swap for NFTs in a privacy-preserving man-
+ner. Buyers send DepositFund transactions that include
+amounts in Ethers to Main. Then, Main generates a fund com-
+mitment for the deposited amount and accumulates the commit-
+ment in the funds Merkle tree. Later, a buyer can send
+WithdrawFund transaction containing a zkSNARK proof of
+funds. Upon successful verification, Main transfers the
+requested amount to the recipient’s address.
+Swap Transaction. Aegis allows users to trade NFTs
+without revealing IDs, payment amounts, and identities.
+The NFT trade is an atomic swap that either completes suc-
+cessfully or reverts without causing any loss. To understand
+how atomic swap works in Aegis, consider the following
+basic protocol that uses digital signatures. Alice wants to
+transfer an NFT a to Bob for a payment amount b. She
+deploys a smart contract and initializes it with her and
+Bob’s public signature verification keys. Additionally, the
+smart contract holds assets a and b as escrow. Then, Alic
+signs Bob’s asset b, and Bob signs her asset a. Next, Bob
+sends both signatures to the smart contract. Finally, the
+smart contract settles the swap only if both signatures are
+valid for the counterparty’s asset. This simple protocol cor-
+rectly performs atomic swap; however, it lacks privacy
+since assets and owners are public. Aegis fixes this issue
+by utilizing zkSNARK proofs as signatures of knowledge [9]
+over commitments instead of digital signatures over plain-
+text values.
+IV. AEGIS DETAILED CONSTRUCTION
+A. Building Blocks
+Hash Functions. Let H2 and H3 be collision-resistant hash
+functions that map two and three elements from Fp to an ele-
+ment in Fp, respectively.
+H2 : Fp � Fp ! Fp
+H3 : Fp � Fp � Fp ! Fp
+Pseudorandom Functions. To utilize Aegis, a user samples a
+seed s $ Fp and keeps it private. We construct PRFaddr and
+PRFsn using H3 to generate spending addresses and serial
+numbers as follows:
+PRFaddrðs; �Þ ¼ H3ð0; s; �Þ
+PRFsnðs; �Þ ¼ H3ð1; s; �Þ
+Commitment Scheme. We instantiate a commitment scheme
+COMM using H2 to generate NFTs and funds commitments as
+follows:
+COMM : Fp � Fp ! Fp
+COMMðv; addrÞ ¼ H2ðv; addrÞ
+v denotes an NFT ID or a fund amount, and addr is a spending
+address generated randomly for each commitment (i.e., com-
+mitment randomness).
+Merkle Trees. We instantiate Merkle trees as incremental
+binary trees of depth d using H2 over the left and right chil-
+dren. More importantly, Merkle smart contract implements
+an efficient append-only Merkle tree as shown in Fig. 2. In
+particular, Merkle stores the last l roots and d elements com-
+prising the Merkle proof for the first empty leaf. For example,
+in Fig. 2, the Merkle proof for the first empty leaf in the left
+tree is p ¼ ð5; 00; 13Þ. Using p and the new element 6, Mer-
+kle can compute the new root 15 in the right tree. Finally,
+Merkle sets p ¼ ð0; 11; 13Þ as the Merkle proof for the next
+empty leaf.
+It is worth mentioning that using the Merkle proof p stored
+on Merkle is insufficient for users to generate Merkle
+Fig. 1. Green components are Aegis smart contracts. Users directly send
+transactions in blue, while relayers send transactions in red. Black arrows are
+calls between smart contracts.
+94 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+proofs for their commitments. Therefore, Main emits New-
+Commitment event for every new commitment. Conse-
+quently, by scanning Ethereum for these events, users can
+collect every accumulated commitment for building the
+entire Merkle tree off-chain. Hence, users can successfully
+generate proof of membership for any commitment.
+Coin Structure. We use the term coin [8] to refer to a data
+object that represents NFTs and funds in Aegis. The coins
+for NFTs and funds have the exact structure, yet their commit-
+ments are accumulated in two separate instances of Merkle
+smart contract. To generate a coin ccccccc for a value v, a user with
+a private seed s samples r $ Fp. Then, the user utilizes s and
+r to generate a spending address addr, a serial number sn as
+follows:
+addr PRFaddrðs; rÞ
+sn PRFsnðs; rÞ
+cm COMMðv; addrÞ
+ccccccc ðr; v; addr; sn; cmÞ
+The user keeps r private, which will be used as part of the wit-
+ness to generate zkSNARK proofs for spending the coin ccccccc. For
+transactions in Main, the user sends cm for new coins and sn
+for spent coins in swap and withdrawal transactions. Addition-
+ally, in deposit and withdrawal transactions, Main must vali-
+date the transferred in/out value v; therefore, the user sends
+the committed values ðv; addrÞ for new and withdrawn coins,
+respectively.
+B. Aegis Setup
+Aegis protocol relies mainly on zkSNARK proofs that
+assert the satisfiability of constraints in circuits. We design
+Ownership and JoinSplit circuits for checking the
+validity of NFTs and funds coins, respectively. More impor-
+tantly, both circuits include a message signal for defining an
+extra parameter to facilitate swaps and withdrawals (e.g., the
+recipient’s Ethereum address and counterparty’s coin commit-
+ment). In particular, this signal allows users to signatures of
+knowledge [9] on a message m given knowledge of a valid
+witness.
+Ownership. It allows users to prove the correctness of trans-
+ferring NFT ownership from an input coin to an output one. It
+checks (i) knowledge of the sender’s seed and randomness for
+the input commitment, (ii) validity of Merkle proof of mem-
+bership, (iii) correctness of the serial number, (iv) and correct-
+ness of the output coin’s commitment on the same NFT.
+Ownershipð~x; ~wÞ
+� Statement ~x:
+– root: the root of NFTs Merkle tree
+– snin: serial number of input coin
+– cmout: commitment of output coin
+–m: message
+� Witness ~w:
+– s: sender’s seed
+– v: NFT ID
+– rin: the randomness of input coin
+– pin: proof of membership for the commitment of
+input coin
+– addrout: spending address of output coin
+� Compute and assert:
+– addrin  PRFaddrðs; rinÞ
+– cmin  COMMðv; addrinÞ
+–Merkle:Verifyðcmin; root;pinÞ ¼ 1
+– snin ¼ PRFsnðs; rinÞ
+– cmout ¼ COMMðv; addroutÞ
+JoinSplit. It allows users to prove the correctness of joining
+funds from up to two input coins and splitting that amount
+into two output coins (e.g., a recipient coin and a change coin
+for the sender). In addition, it checks (i) equality of the input
+and output balances, (ii) knowledge of the sender’s seed and
+randomnesses for the input commitments, (iii) correctness of
+serial numbers, (iv) validity of Merkle proofs of membership,
+(v) correctness of the output commitments, (vi) and the output
+values lie in the range of ½0; vmax� to avoid arithmetic overflow
+and underflow in Fp. More importantly, it skips constraints
+check for a dummy input commitment with a zero value.
+Therefore, a user with one input coin can still utilize the circuit
+by providing a dummy coin as the second input. Additionally,
+a user can join the entire input funds into one output coin by
+using a dummy coin for the other output.
+JoinSplitð~x; ~wÞ
+� Statement ~x:
+– root: the root of funds Merkle tree
+– fsnin
+i g: serial numbers of input coins
+– fcmout
+i g: commitments of output coins
+–m: message
+� Witness ~w:
+– s: sender’s seed
+– frini g: randomnesses of input coins
+– fvini g: values of input coins
+Fig. 2. Illustration of accumulating a new element 6. The shaded circles are Merkle proof p for the first empty leaf, which is depicted in green.
+GALAL AND YOUSSEF: AEGIS: PRIVACY-PRESERVING MARKET FOR NON-FUNGIBLE TOKENS 95
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+– fpin
+i g: proofs of membership for commitments of
+input coins
+– faddrouti g: spending addresses of output coins
+� Compute and assert:
+–
+P2
+i¼1 v
+in
+i ¼
+P2
+i¼1 v
+out
+i
+– For i 2 f1; 2g
+cmout
+i ¼ COMMðvouti ; addrouti Þ
+0 � vouti � vmax
+Ifvini 6¼ 0
+addrini  PRFaddrðs; rini Þ
+cmin
+i  COMMðvini ; addrini Þ
+Merkle:Verifyðcmin
+i ; root;p
+in
+i Þ ¼ 1
+snin
+i ¼ PRFsnðs; rini Þ
+Setup and Deployment. For Groth [7] zkSNARK construc-
+tion, the circuit’s signals must be fixed before running
+zkSNARK Setup (i.e., circuits cannot utilize a variable num-
+ber of signals).
+ðpkown; vkownÞ  zkSNARK:Setupð1�; OwnershipÞ
+ðpkjs; vkjsÞ  zkSNARK:Setupð1�; JoinSplitÞ
+Both JoinSplit and Ownership circuits verify Merkle
+proofs of membership which rely on the Merkle tree depth d.
+Therefore, d is one of the public parameters fixed per circuit
+setup. Next, Main smart contract is deployed and initialized
+with the verifying keys and Merkle tree depth. In turn, Main
+initializes Verifier and Merkle smart contracts for NFTs
+and funds. Additionally, it maintains two lists for storing and
+tracking revealed serial numbers from spent NFT and funds
+coins. Finally, it initializes a mapping for translating an NFT
+globally unique identifier into an NFT smart contract address
+and token ID.
+Initialize(�; vkjs; vkown; d)
+fundVerifier :¼ VerifierðvkjsÞ
+nftVerifier :¼ VerifierðvkownÞ
+nftMerkle :¼ MerkleðdÞ
+fundMerkle :¼ MerkleðdÞ
+nftSerials :¼ fg
+fundSerials :¼ fg
+nftMap :¼ mappingðv� > ðaddress; idÞÞ
+C. Deposit Transactions
+To trade on Aegis, a user initially deposit an NFT or
+funds. These deposits are non-custodial because a user can
+withdraw them at any time. Furthermore, due to the inherent
+public state of the Blockchain, a deposit transaction reveals
+the initial NFT ownership, funds, and the sender’s identity.
+However, we argue that these initial facts can change behind
+the scenes due to the unlinkability between deposits and other
+transactions (see Section V).
+Depositing NFTs. To deposit an NFT, a user sends an
+approve transaction to the NFT smart contract as shown in
+Fig. 1. Let address denote the NFT smart contract’s address
+on Ethereum, and id denote to NFT token identifier. The
+user samples r and generates an NFT coin ccccccc ¼
+ðr; v; addr; sn; cmÞ and sends the spending address addr
+along with address and id as parameters to DepositNFT
+transaction.
+DepositNFT(address; id; addr)
+erc721 :¼ ERC721ðaddressÞ
+requireðtx:sender ¼ erc721:OwnerOfðidÞÞ
+erc721.transferFrom(tx.sender, Main.
+address, id)
+v :¼ H2ðaddress; idÞ
+nftMap½v� :¼ ðaddress; idÞ
+cm :¼ COMMðuid; addrÞ
+nftMerkle.Accumulate(cm)
+emit NewCommitment(NFT, cm)
+Main checks whether the transaction sender tx.sender
+is the owner of the NFT with an identifier id. Upon success,
+it transfers the ownership to its address. Note that this call
+will fail if the user has not approved Main.address pre-
+viously. Next, it generates a global unique identifier v based
+on the NFT contract address address and token’s identifier
+id, and stores the association between them in the mapping
+nftMap for easier lookup in WithdrawTransaction.
+Subsequently, it generates a commitment cm and accumu-
+lates it in the NFT Merkle tree. Finally, it emits an event
+containing cm so users can rebuild the Merkle tree off-
+chain.
+Depositing Funds. To deposit funds, a user samples r and
+generates a fund coin ccccccc ¼ ðr; v; addr; sn; cmÞ. Then, the user
+sends addr in DepositFund transaction with a value of v.
+Main generates a commitment cm to the amount tx.value.
+Subsequently, it accumulates cm in the funds Merkle tree, and
+emits NewCommitment event.
+DepositFund(addr)
+v :¼ tx:value
+cm :¼ COMMðv; addrÞ
+fundMerkle.Accumulate(cm)
+emit NewCommitment(Fund, cm)
+D. Withdrawal Transactions
+Users can withdraw their NFTs and funds from Main pub-
+lic Ethereum addresses of recipients given valid zkSNARK
+proofs to Ownership and JoinSplit statements, respec-
+tively. One of the witness parameters in both circuits is proof
+of membership for the commitments of input coins. To gener-
+ate these proofs, users rebuild Merkle trees off-chain by scan-
+ning NewCommitment events from Main. In practice,
+96 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+relayers can maintain synchronized off-chain Merkle trees and
+expose them as a service to users. Furthermore, users utilize
+the message m signal to specify the recipient’s Ethereum
+address. Additionally, users open one of the output commit-
+ments so that Main can determine which NFT and how much
+funds to transfer out.
+Withdrawing NFTs. To withdraw an NFT, a user generates a
+zkSNARK proof p that asserts knowledge of a valid witness ~w
+satisfying Ownership circuit for a statement ~x. Then, the
+user sends p, ~x, and the opening values v and addroutÞ of the
+output commitment cmout as parameters to WithdrawNFT
+transaction.
+WithdrawNFT(~x;p; v; addrout)
+Parse ~x as ðroot; snin; cmout;mÞ
+requireðcmout ¼ COMMðv; addroutÞÞ
+require(nftSerials.NotIn(snin))
+require(nftMerkle.ContainsRoot(root))
+require(nftVerifier.Verifyð~x;pÞ)
+nftSerials.AppendðsninÞ
+ðaddress; idÞ :¼ nftMap½v�
+erc721 :¼ ERC721ðaddressÞ
+recipient :¼ addressðmÞ
+erc721 .transferFrom(Main.address,
+recipient; id)
+Initially, Main checks the output commitment is computed
+based on v and addrout. Then, it checks that the serial number
+snin has not been seen before, and root is one of the recent l
+roots in the NFT Merkle tree. Subsequently, it verifies the
+proof p with respect to the statement ~x using nftVerifier.
+Upon success, it appends snin to the list of NFT serial num-
+bers. Next, it retrieves the NFT address and identifier corre-
+sponding to the value v using nftMap. Finally, it sets m as
+the recipient address that receives the NFT ownership.
+Withdrawing Funds. To withdraw a fund, a user generates a
+zkSNARK proof p that asserts knowledge of a valid witness
+~w satisfying JoinSplit circuit for a statement ~x. Then, the
+user sends p, ~x, and the opening values vout1 and addrout1 of the
+output commitment cmout
+1 as parameters to WithdrawFund
+transaction.
+WithdrawFund(~x;p; vout1 ; addrout1 )
+Parse ~x as ðroot; snin
+1 ; sn
+in
+2 ; cm
+out
+1 ; cmout
+2 ;mÞ
+requireðcmout
+1 ¼ COMMðvout1 ; addrout1 ÞÞ
+require(fundSerials.NotIn(snin
+1 ; sn
+in
+2 ))
+require(fundMerkle.ContainsRoot(root))
+require(fundVerifier.Verifyð~x;pÞ)
+fundSerials.Appendðsnin
+1 ; sn
+in
+2 Þ
+fundMerkle.Accumulate(cmout
+2 )
+emit NewCommitment(Fund, cmout
+2 )
+recipient :¼ addressðmÞ
+recipient .transfer(vout1 )
+The logic for WithdrawFund has some similarities to
+WithdrawNFT. Initially, Main checks the output commit-
+ment cmout
+1 is correctly computed based on vout1 and addrout1 .
+Then, it checks the serial numbers snin
+1 and snin
+2 have not
+been seen before in fundSerials. Additionally, it asserts
+that root is one of the recent l roots in the Merkle tree of fund
+coins. Subsequently, it verifies the proof p for the statement ~x
+using fundVerifier. Upon success, it appends the input
+serial numbers to fundSerials. Next, it accumulates the
+unspent output commitment cmout
+2 in the funds Merkle tree,
+and emit the NewCommitment event. Finally, it sets m as
+the recipient address that receives an amount v from Main.
+E. Atomic Swap
+Aegis allows two users to swap an NFT for a payment
+amount in an atomic transaction. The atomic swap relies
+mainly on designing contingent transfer of coins. Initially,
+each user generates a zkSNARK proof for a statement trans-
+ferring its coin to the counterparty. More importantly, Main
+accepts proofs if and only if (i) they are valid, (ii) and the
+statement’s message is equal to the output commitment of the
+counterparty’s statement. Informally speaking, each statement
+is interpreted as “I’m transferring my coin to the counterparty
+if and only if the counterparty transfers a coin with a specific
+commitment”. The atomic swap process consists of an off-
+chain interaction protocol and an on-chain settlement by
+Main.
+Off-chain Interaction Protocol. Suppose Alice owns an
+NFT coin cina with a value vina and she wants to swap it for a
+payment amount voutb;1 with Bob who owns fund coins cinb;1 and
+cinb;2. Initially, Alice generates a spending address addrouta that
+Bob uses to generate an output fund coin’s commitment cmout
+b;1
+with the value voutb;1 for her. Similarly, Bob generates two
+spending addresses: addroutb;1 for receiving an output NFT
+coin’s commitment cmout
+a with the value vina from Alice, and
+addroutb;2 for receiving an output fund coin’s commitment cmout
+b;2
+with the change value voutb;2 from himself.
+More importantly, Alice and Bob set their messagesma and
+mb to the output coin’s commitment cmout
+b;1 and cmout
+a expected
+from the counterparty, respectively. Next, Alice and Bob
+query off-chain Merkle trees MerkleNFT and MerkleFund
+to generate proofs of membership pin
+a and ðpin
+b;1;p
+in
+b;2Þ for their
+input coins’ commitments cmin
+a and ðcmin
+b;1; cm
+in
+b;2Þ, respec-
+tively. Afterwards, Alice and Bob generate zkSNARK proofs
+pa and pb for Ownership statement ~xa and JoinSplit
+statement ~xb, respectively. Finally, Alice sends ~xa and pa to
+Bob, who asserts that messages are valid to the counterparty’s
+output commitment.
+On-chain Settlement. To settle the atomic swap, Bob sends
+~xa;~xb;pa and pb as parameters to Swap transaction. Initially,
+Main checks that the message of each statement is equal to
+the output commitment of the other statement, which ensures
+that both parties have a mutual agreement on the swapped
+coins. Then, for each statement, Main checks (i) the freshness
+of serial numbers, the validity of Merkle root, (iii) and the
+GALAL AND YOUSSEF: AEGIS: PRIVACY-PRESERVING MARKET FOR NON-FUNGIBLE TOKENS 97
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+validity of zkSNARK proof. Upon success, Main settles the
+atomic swap by storing the serial numbers, which nullify the
+input coins and accumulate the new output commitments in
+the corresponding Merkle trees, thereby enforcing the transfer
+of coins. Finally, Main emits NewCommitment events for
+each accumulated commitment.
+Swap(~xa;~xb;pa;pb)
+Parse ~xa as ðroota; snin
+a ; cm
+out
+a ;maÞ
+Parse ~xbasðrootb; snin
+b;1; sn
+in
+b;2; cm
+out
+b;1 ; cm
+out
+b;2 ;mbÞ
+require(ma ¼ cmout
+b;1 )
+require(mb ¼ cmout
+a )
+require(nftSerials.NotIn(snin
+a ))
+require(nftMerkle.ContainsRoot
+(roota))
+require(nftVerifier.Verify(~xa;pa))
+require(fundSerials.NotIn(snin
+b;1; sn
+in
+b;2))
+require(fundMerkle.ContainsRoot
+(rootb))
+require(fundVerifier.Verify(~xb;pb))
+nftSerials.Append(snin
+a )
+nftMerkle.Accumulate(cmout
+a )
+fundSerials.Append(snin
+b;1; sn
+in
+b;2)
+fundMerkle.Accumulate(cmout
+b;1 ; cm
+out
+b;2 )
+emit NewCommitment(’NFT,’ cmout
+a )
+emit NewCommitment(’Fund,’ cmout
+b;1 ; cm
+out
+b;2 )
+F. Proving Ownership of an NFT: One of the main func-
+tionalities of public NFTs implemented by standard ERC721
+is the verification of ownership. Typically by querying the
+owner’s address associated with a given NFT identifier. With
+Aegis, users can prove the ownership of their NFTs in a pri-
+vacy-preserving manner without leaking their addresses. Sup-
+pose that Bob wants to verify whether Alice is the owner of an
+NFT with an identifier id and ERC721 address. First, Bob
+sends Alice a random challenge ch to prevent her from replay-
+ing others’ proofs successfully. With the knowledge of a valid
+witness ~w, Alice generates a zkSNARK proof p satisfying the
+Ownership circuit for a statement ~x where the message m
+signal is set to the challenge ch. Subsequently, Alice sends p
+and ~x to Bob. Finally, Bob calls VerifyOwnership on
+Main.
+VerifyOwnership (~x;p; id; address; ch)
+Parse ~x as ðroot; snin; cmout;mÞ
+requireðm ¼ chÞ
+v :¼ H2ðaddress; idÞ
+requireðcmout ¼ COMMðv; 0ÞÞ
+require(nftSerials.NotIn(snin))
+require(nftMerkle.ContainsRoot(root))
+require(nftVerifier.Verifyð~x;pÞ)
+Main checks that the message m is set to the challenge ch.
+Then, Main computes the image v of the NFT id and
+ERC721 address, and checks that ðv; addr ¼ 0Þ are the
+opening values to the output commitment cmout. Finally,
+Main checks that the serial number snin has not been seen
+before, and root is one of the recent l roots in the NFT Merkle
+tree. Subsequently, it verifies the proof p with respect to the
+statement ~x using nftVerifier. If the call returns success-
+fully, then Bob has verified Alice’s ownership.
+Note that calling VerifyOwnership does not change
+any state, and hence it does not incur any gas cost. More
+importantly, Bob can maliciously abuse the code logic similar-
+ities between WithdrawNFT and VerifyOwnership to
+steal her NFT. In this attack, Bob sets ch to his address; then,
+he follows the same procedure with Alice to verify her owner-
+ship. Finally, he sends ð~x;p; v; 0Þ to WithdrawNFT where
+m, which is set to ch, is used as the recipient address. To pre-
+vent this attack, Alice must check that ch is not a valid address
+(i.e., an address is 160-bits).
+V. SECURITY ANALYSIS
+We informally discussed how Aegis achieves the security
+goals mentioned in Section III-A. Aegis has separate ano-
+nymity sets for NFTs and funds, and their settings are similar
+regarding data structures and protocols. Hence for the sake of
+a clearer exposition of the security analysis, we will discuss
+the security properties from the viewpoint of NFTs. In particu-
+lar, an adversary may try to guess the pair-wise link between
+deposit and swap transactions. Additionally, we analyze
+whether an adversary can successfully withdraw an NFT that
+belongs to an honest user.
+A. Unlinkability
+This property captures the requirement that an adversary
+cannot link deposited NFTs to swap transactions. Note that, it
+is trivial to link DepositNFT to WithdrawNFT since the
+NFT identifier revealed in the latter will uniquely determine
+the former transaction. However, the adversary will not be
+able to tell how the NFT changed hands in between via swap
+transactions, as shown in Fig. 3.
+We describe a game UNLINK between a challenger C and
+an adversary A where A wins if C outputs 1 at the end. Ini-
+tially, C submits two DepositNFT transactions tx0 and tx1
+to Aegis for two unique NFTs id0 and id1. Then, C samples
+b 2 0; 1 at random, and submits a Swap transaction tx2 to
+swap NFT idb. Next, A gets access to Aegis’s state where A
+can find the public parameters of tx0 and tx1. Finally, A
+guesses b0 and sends it to C, who outputs 1 if b ¼ b0, else out-
+puts 0. Let txtxtxtxtxtxtx ¼ tx0; tx1; tx2. The adversarial advantage is
+defined as:
+Fig. 3. Transactions graph with and without Aegis.
+98 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+AdvUNLINKA ð�Þ  Pr b0 ¼ b
+����
+pp Setupð�Þ
+ðb; txtxtxtxtxtxtxÞ  CðppÞ
+b0  Aðpp; txtxtxtxtxtxtxÞ
+2
+64
+3
+75� 1
+2
+�������
+�������
+Definition 1 (Unlinkability): Aegis maintains the unlink-
+ability property if the adversarial advantage to win UNLINK is
+negligible.
+AdvUNLINKA ð�Þ < neglð�Þ
+Claim 1: Aegis satisfies the unlinkability property.
+Proof: Typically, if A wins the game with a non-negligible
+probability, then A must have found a way to break the pre-
+image resistance property of H2 and H3 used in the computa-
+tion of txb:cm ¼ H2ðid;H3ð0; s; rÞÞ and tx2:sn ¼ H3ð1; s; rÞ
+such that he could determine the same pre-image to compute
+them: seed s and randomness r. However, this contradicts the
+main assumptions of secure cryptographic hash functions. &
+B. Balance
+This property requires that an adversary cannot withdraw an
+NFT that an honest user owns. We analyze this property by
+describing a game BAL between a challenger C and an adver-
+sary A where A wins if C outputs 1 at the end. Initially, C sub-
+mits a DepositNFT transaction txd to deposit an NFT with
+an identifier id. Next, A sends a WithdrawNFT transaction
+txw which reveals the identifier id0 of the withdrawn NFT.
+Finally, C outputs 1 if id0 ¼ id, else outputs 0. The adversary
+advantage is defined as:
+AdvBALA ð�Þ  Pr id0 ¼ id
+����
+pp Setupð�Þ
+ðtxdÞ  CðppÞ
+ðtxwÞ  Aðpp; txdÞ
+2
+64
+3
+75
+Definition 2 (Balance): Aegismaintains the balance prop-
+erty if the adversarial advantage to win BAL is negligible.
+AdvBALA ð�Þ < neglð�Þ
+Claim 2: Aegis satisfies the balance property.
+Proof: There are two ways the adversary A can success-
+fully withdraw an NFT that belongs to an honest user. Firstly,
+A controls more than 51% of the blockchain mining/valida-
+tion nodes, then A can tamper with the execution of Main to
+bypass the zkSNARK verification check. Finally, A breaks
+the soundness property of zkSNARK construction and gener-
+ates a bogus proof accepted by Main. In the former, the
+Blockchain is no longer secure, and the assets hold no actual
+value. In the latter, the ability to break the soundness contra-
+dicts the main assumption of secure zkSNARK construction.&
+Atomic Swap. The security of swap transactions relies on
+name’s guarantees of securing the balance property. In other
+words, the adversary A cannot swap coins that belong to hon-
+est users without breaking the balance property. Furthermore,
+Main executes swap transactions atomically such that either
+the swap completes or reverts to a previous state. More
+importantly, users follow the off-chain interaction protocol
+without any trust assumptions. If someone aborts the protocol,
+the counterparty does not lose assets. For example, assume
+Alice executed the protocol with Bob, who disappeared at the
+end. Then, Alice can run the protocol with Charlie, who com-
+pletes the protocol and submits the Swap transaction. If Bob
+tries to resume the protocol and submit a Swap transaction,
+then Main will revert due to a duplicate serial number in
+Alice’s statement.
+Compatibility. A key design goal of Aegis is to be com-
+patible with existing NFT smart contracts. The motivation is
+to develop a practical system without modifying current NFT
+smart contracts that might hold millions of dollars in value.
+Hence, we develop Aegis such that it can interact with any
+NFT smart contract as long as it supports the standard inter-
+face ERC-721 [2]. More precisely, in DepositNFT and
+WithdrawNFT transactions, Aegis calls ERC-721 own-
+erOf and transferFrom functions to manage the owner-
+ship in a non-custodial way.
+Availability. Aegis operates entirely as smart contracts
+running on layer-1. In other words, it does not rely on layer-2
+services, which might censor users’ transactions. Therefore,
+Aegis has the availability guarantees of the underlying
+Blockchain. Users can always read from or write to Aegis
+smart contracts. Recall that we mentioned that non-deposit
+transactions are sent via trustless relayers. There could be a
+chance where the entire relayers network is colluding to cen-
+sor an arbitrary transaction. In this unlikely case, the transac-
+tion sender can utilize its wallet to submit the transaction,
+which links the origin deposit transaction. It is acceptable in
+such circumstances to sacrifice privacy rather than deny users
+the ability to withdraw their assets.
+Blockchain Client Services. In Ethereum, a popular user
+wallet MetaMask outsources all its transactions to central-
+ized services Infura. Those centralized services know the
+users’ blockchain address(es), IP address, and the transac-
+tions sent to Aegis. Therefore, they can weaken users’
+privacy, as they may link different transactions from the
+same wallet and IP address. Consequently, users can oper-
+ate full nodes or utilize network-level anonymity services
+such as Tor or VPNs to have better privacy before using
+MetaMask.
+VI. EVALUATION
+We implemented a prototype of Aegis [3] to assess its per-
+formance and feasibility. More importantly, we measure the
+key performance metrics for proof generation and verification.
+These measurements depend on the number of constraints in
+each circuit and the depth of Merkle trees.
+A. Cryptographic Primitives
+In Aegis, we use Groth [7] zkSNARK protocol due to
+its high efficiency in terms of proof size and verification
+cost compared to other state-of-art zkSNARK protocols [10],
+[11], [12], [13]. More specifically, Groth [7] protocol
+GALAL AND YOUSSEF: AEGIS: PRIVACY-PRESERVING MARKET FOR NON-FUNGIBLE TOKENS 99
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+generates the smallest proof (i.e., two elements in G1 and
+one element in G2, where G1 and G2 are asymmetric bilin-
+ear groups). The verifier checks three pairing operations
+before accepting or rejecting the proof. More importantly,
+there is a pre-processing phase for the verifier, where it per-
+forms ECADD and ECMUL for each public input before
+verifying the proof.
+For cryptographic hash functions, we evaluate MiMC [14]
+and Poseidon [15] which are arithmetic circuit friendly hash
+function. Both hash functions yield a much lower number of
+constraints when compared to other standard hash functions
+such as SHA-256 and Keccak [16]. However, they consume
+more gas when executed in Ethereum smart contract. Table I
+shows a comparison between Poseidon, MiMC, and SHA-256
+hash functions. We choose Poseidon for computing commit-
+ments and Merkle proof verification due to its low number of
+constraints and lower gas cost than MiMC.
+Cryptographic Libraries. We utilize Circom (v2.0)
+library [17] to compile the arithmetic circuits JoinSplit
+and Ownership. For the proof system, we utilize snarkjs
+(v0.4.10) library [18] to (i) run an MPC-based setup ceremony
+for generating the proving and verifying keys and (ii) generate
+the zkSNARK proofs. We leverage the pre-compiled Ether-
+eum contracts: EIP-196 [19] and EIP-197 [20] to perform
+point addition and multiplication and pairing operations on
+the elliptic curve bn256 where the size of elements in Fp and
+curve points inG1 andG2 are 32, 64, 128 bytes, respectively.
+Hardware, Operating System, and Environment. We run
+our experiments on commodity hardware, which runs Ubuntu
+(v21.04) on a laptop equipped with an Intel i7-10700 K CPU
+with clock frequency up to 5.1 GHz and eight cores, and
+32 GB RAM. Additionally, we install Rust (v1.57) and Nodejs
+(v16.3) libraries, which are required to compile and run
+Aegis prototype. We develop the smart contracts in Solidty
+(v0.8.0). We utilize Hardhat framework to deploy and test the
+smart contracts in a local in-memory Ethereum blockchain
+and a block gas limit set to a maximum of 30 million gas.
+B. Performance Measurement
+We conduct several experiments to assess the performance
+and feasibility ofAegis prototype.More precisely, wemeasure
+the performance of JoinSplit and Ownership circuits in
+terms of (i) number of circuit constraints, (ii) time to complete
+the MPC ceremony for generating the CRS (i.e., proving and
+verifying keys), (iii) time to generate the proofs and (iv) the size
+of generated CRS. Furthermore, we measure the gas cost for
+deploying the smart contracts and running Aegis transactions.
+Merkle Tree Depth. Essentially, for Groth [7] protocol, the
+circuit’s wires are fixed before running zkSNARK Setup to
+generate the proving and verifying keys. Both JoinSplit
+and Ownership circuits verify Merkle proofs of member-
+ship which rely on the Merkle tree depth d. More importantly,
+in the prototype implementation, Aegis creates an additional
+Merkle tree whenever the current one becomes full. Therefore,
+the maximum number of accumulated commitments is no lon-
+ger limited by d. Consequently, we can further reduce the
+proof generation and verification cost by using smaller d.
+Fig. 4 shows the gas cost for transactions with Merkle tree
+depth d 2 ½8; 16�.
+Circuit Measurements. The performance measurement for
+the circuits scales linearly with d. In Table II, we report the
+equations to compute the number of constraints and Fp ele-
+ments for statements and witnesses. Note that only the state-
+ment size is constant since Merkle proofs of membership are
+part of the witness only. Furthermore, one may notice that the
+measurements for JoinSplit are two times those for Own-
+ership mainly because both circuits are implemented simi-
+larly. Yet, the number of inputs and outputs in JoinSplit is
+twice those in Ownership.
+Smart Contracts Measurement. We deploy the smart con-
+tracts on a local in-memory Ethereum blockchain to measure
+the gas cost and assess the feasibility of Aegis transactions
+with variable d. The cost of WithdrawNFT is constant
+regardless of d since there is no accumulation of the output
+commitment. On the other hand, the remaining transactions
+incur a cost that scales linearly with d. Furthermore, swap
+incurs the highest cost as it involves two zkSNARKs verifica-
+tion and two Merkle tree updates.
+VII. RELATED WORK
+To the best of our knowledge, Aegis is the first academic
+work that presents privacy-preserving ownership of NFTs and
+TABLE I
+COMPARISON BETWEEN HASH FUNCTIONS MEASUREMENTS
+TABLE II
+PERFORMANCE METRIC FOR JOINSPLIT AND OWNERSHIP CIRCUITS
+Fig. 4. Transactions gas cost with respect to Merkle tree depth d.
+100 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+funds in addition to atomic swap. Other protocols in literature
+[21], [22], [23], [24], [25], [26] tackle funds privacy only.
+Zether [21] is a protocol for making private payments in
+Ethereum. It utilizes Elgamal encryption to hide users’ balance
+in addition to Bulletproofs [27] to prove the correctness of
+transferred amounts. The key disadvantage of Zether is that it
+only hides the transferred amounts leaving the sender and
+recipient identities public. Furthermore, a single Zether trans-
+action costs roughly 7.8 m of gas. In Aegis, users’ identities
+are hidden using SoK and relayers. Moreover, the gas cost for
+transactions in Aegis is very cheap compared to Zether.
+Zeth [22] is a protocol that implements ZeroCash on top of
+Ethereum. In the Zeth, the identities of sender and recipients are
+not fully hidden since an observer can track identities by check-
+ing the gas payer. Furthermore, Zeth utilizes a complicated
+JoinSplit circuit, which also involves verification of cipher-
+text. Additionally, it uses SHA-256 as a hash function for gener-
+ating commitments and building Merkle trees which is heavy in
+terms of circuit constraints. Aegis solves the relayers trust
+problem using SoK, besides using Poseidon hash function for
+computing commitments and verifyingMerkle proofs.
+M€obius [23] is a mixer protocol on top of Ethereum. It uti-
+lizes linkable ring signature and stealth address primitives [28]
+to hide the address of the true sender and the recipient. How-
+ever, the anonymity set is limited to the ring size, and the gas
+cost of the withdrawing transaction increases linearly with the
+size of the ring. Thus, in terms of privacy, Aegis balance pool
+offers a bigger anonymity set that scales exponentially with
+Merkle tree depth while incurring a fixed verification cost.
+AMR [29] is a censorship-resilient mixer, which incentives
+users in a privacy-preserving manner for participating in the
+system. The paid-out rewards can take the form of governance
+tokens to decentralize the voting on system parameters, simi-
+lar to how popular “Decentralized Finance (Defi) farming”
+protocols operate. Moreover, by leveraging existing Defi lend-
+ing platforms, AMR allows participating clients to earn finan-
+cial interest on their deposited funds. While AMR and Aegis
+share the objective of adding privacy to users’ transactions,
+they have different goals and properties. Furthermore, Aegis
+provides a complete system for trading NFTs in a privacy-pre-
+serving manner, while AMR provides a mixing service already
+inherent in Aegis, yet without an added incentive.
+VIII. CONCLUSION
+We presented Aegis protocol for trading NFTs and prov-
+ing ownership in a privacy-preserving manner. Furthermore,
+we analyzed its security and proved that it satisfies unlinkabil-
+ity and balance properties in addition to other qualitative prop-
+erties such as compatibility and availability. Finally, we
+implemented a prototype to assess the feasibility and perfor-
+mance of AegisȦccording to the experimental results, we
+believe that Aegis is feasible and practical to deploy and use.
+For future work, we will investigate improving Aegis so that
+it also handles sealed-bid auctions for NFTs to prevent front-
+running while preserving users’ privacy. Additionally, we will
+investigate adding support for fractional and composite NFTs.
+REFERENCES
+[1] S. Dickens, “More than $10bn in volume has now been traded on open-
+sea in 2021,” 2021. [Online]. Available: https://finance.yahoo.com/
+news/more-10bn-volume-now-traded-155716114.html
+[2] W. Entriken, D. Shirley, J. Evans, and N. Sachs, “EIP-721: Non-fungible
+token standard,” 2018. [Online]. Available: https://eips.ethereum.org/
+EIPS/eip-721
+[3] “Prototype implementation of aegis,” Accessed on: Jul. 7, 2022.
+[Online]. Available: https://https://github.com/HSG88/Aegis
+[4] G. Wood, “Ethereum: A secure decentralised generalised transaction
+ledger,” Ethereum Project Yellow Paper, vol. 151, pp. 1–32,
+2014.
+[5] W. Radomski, A. Cooke, P. Castonguay, J. Therien, E. Binet, and
+R. Sandford, “EIP-1155: Multi token standard,” 2018. [Online]. Avail-
+able: https://eips.ethereum.org/EIPS/eip-1155
+[6] OpenZeppelin, “Sending gasless transactions,” Accessed on: Jul. 7,
+2022. [Online]. Available: https://docs.openzeppelin.com/learn/sending-
+gasless-transactions
+[7] J. Groth, “On the size of pairing-based non-interactive arguments,” in
+Proc. Annu. Int.Conf. Theory Appl. Cryptographic Techn., 2016,
+pp. 305–326.
+[8] E. B. Sasson et al., “Zerocash: Decentralized anonymous payments from
+bitcoin,” in Proc. IEEE Symp. Secur. Privacy, 2014, pp. 459–474.
+[9] J. Groth and M. Maller, “Snarky signatures: Minimal signatures of
+knowledge from simulation-extractable SNARKS,” in Proc. Annu. Int.
+Cryptology Conf., 2017, pp. 581–612.
+[10] D. Boneh, J. Drake, B. Fisch, and A. Gabizon, “Halo infinite: Recursive
+zk-snarks from any additive polynomial commitment scheme,” IACR
+Cryptol. ePrint Arch., vol. 2020, 2020, Art. no. 1536.
+[11] A. Kosba, D. Papadopoulos, C. Papamanthou, and D. Song, “MIRAGE:
+Succinct arguments for randomized algorithms with applications to uni-
+versal zkSNARKs,” in Proc. 29th USENIX Secur. Symp., 2020,
+pp. 2129–2146.
+[12] A. Gabizon, Z. J. Williamson, and O. Ciobotaru, “Plonk: Permutations
+over lagrange-bases for oecumenical noninteractive arguments of knowl-
+edge,” IACR Cryptol. ePrint Arch., vol. 2019, 2019, Art. no. 953.
+[13] B. B€unz, B. Fisch, and A. Szepieniec, “Transparent snarks from dark
+compilers,” in Proc. Annu. Int. Conf. Theory Appl. Cryptographic
+Techn., 2020, pp. 677–706.
+[14] M. Albrecht, L. Grassi, C. Rechberger, A. Roy, and T. Tiessen, “MiMC:
+Efficient encryption and cryptographic hashing with minimal multiplica-
+tive complexity,” in Proc.Int. Conf. Theory Appl. Cryptology Inf. Secur.,
+2016, pp. 191–219.
+[15] L. Grassi, D. Khovratovich, C. Rechberger, A. Roy, and M. Schofnegger,
+“Poseidon: A new hash function for zero-knowledge proof systems,” in
+Proc. 30th USENIX Secur. Symp., 2021, pp. 519–535.
+[16] G. Bertoni, J. Daemen, M. Peeters, and G. Van Assche, “Keccak,” in
+Proc. Annu. Int.Conf. Theory Appl. Cryptographic Techn., 2013,
+pp. 313–314.
+[17] Iden3, “Circom: Circuit compiler,” Accessed on: Jul. 7, 2022. [Online].
+Available: https://github.com/iden3/circom
+[18] “SnarkJS: JavaScript implementation of zkSNARKs,” Accessed on:
+Dec. 12, 2021. [Online]. Available: https://github.com/iden3/snarkjs
+[19] C. Reitwiessner, “Precompiled contracts for addition and scalar multipli-
+cation on the elliptic curve alt_bn128,” Accessed on: Dec. 12, 2021.
+[Online]. Available: https://eips.ethereum.org/EIPS/eip-196
+[20] V. Buterin and C. Reitwiessner, “Precompiled contracts for optimal ate
+pairing check on the elliptic curve alt_bn128,” Accessed on: Dec. 12,
+2021. [Online]. Available: https://eips.ethereum.org/EIPS/eip-197
+[21] B. B€unz, S. Agrawal, M. Zamani, and D. Boneh, “Zether: Towards Pri-
+vacy in a Smart Contract World,” in Proc. Financial Cryptography
+Data Secur., 2020, pp. 423–443.
+[22] A. Rondelet and M. Zajac, “Zeth: On integrating zerocash on ethereum,”
+2019, arXiv:1904.00905.
+[23] S. Meiklejohn and R. Mercer, “M€obius: Trustless tumbling for transaction
+privacy,” Proc. Privacy Enhancing Technol., vol. 2018, pp. 105–121,
+2018.
+[24] M. Baza, N. Lasla, M. M. E. A. Mahmoud, G. Srivastava, and
+M. Abdallah, “B-ride: Ride sharing with privacy-preservation, trust and
+fair payment atop public blockchain,” IEEE Trans. Netw. Sci. Eng.,
+vol. 8, no. 2, pp. 1214–1229, 2021.
+[25] W. Lv, S. Wu, C. Jiang, Y. Cui, X. Qiu, and Y. Zhang, “Towards large-
+scale and privacy-preserving contact tracing in COVID-19 pandemic: A
+blockchain perspective,” IEEE Trans. Netw. Sci. Eng., vol. 9, no. 1,
+pp. 282–298, Jan./Feb. 2022.
+GALAL AND YOUSSEF: AEGIS: PRIVACY-PRESERVING MARKET FOR NON-FUNGIBLE TOKENS 101
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+https://finance.yahoo.com/news/more-10bn-volume-now-traded-155716114.html
+https://finance.yahoo.com/news/more-10bn-volume-now-traded-155716114.html
+https://eips.ethereum.org/EIPS/eip-721
+https://eips.ethereum.org/EIPS/eip-721
+https://https://github.com/HSG88/Aegis
+https://eips.ethereum.org/EIPS/eip-1155
+https://docs.openzeppelin.com/learn/sending-gasless-transactions
+https://docs.openzeppelin.com/learn/sending-gasless-transactions
+https://github.com/iden3/circom
+https://github.com/iden3/snarkjs
+https://eips.ethereum.org/EIPS/eip-196
+https://eips.ethereum.org/EIPS/eip-197
+[26] Z. Guan, Z. Wan, Y. Yang, Y. Zhou, and B. Huang, “Blockmaze: An
+efficient privacy-preserving account-model blockchain based on zk-
+snarks,” IEEE Trans. Dependable Secure Comput., vol. 19, no. 3,
+pp. 1446–1463, May/Jun. 2020.
+[27] B. B€unz, J. Bootle, D. Boneh, A. Poelstra, P. Wuille, and G. Maxwell,
+“Bulletproofs: Short proofs for confidential transactions and more,” in
+Proc. IEEE Symp. Secur. Privacy, 2018, pp. 315–334.
+[28] S. Noether, “Ring signature confidential transactions for monero,” IACR
+Cryptol. ePrint Arch., vol. 2015, 2015, Art. no. 1098.
+[29] D. V. Le and A. Gervais, “AMR: Autonomous coin mixer with privacy
+preserving reward distribution,” in Proc. 3rd ACM Conf. Adv. Financial
+Technol., 2021, pp. 142–155.
+Hisham S. Galal received the B.Sc and M.Sc.
+degrees in computer science from Assiut University,
+Asyut, Egypt, in 2008 and 2016, respectively, and the
+Ph.D. degree from Concordia University, Montreal,
+QC, Canada, in 2022. His research interests mainly
+include applied cryptography, privacy-preserving
+protocols, and malware security analysis.
+AmrM. Youssef (Senior Member, IEEE) received the
+B.Sc. and M.Sc. degrees from Cairo University, Cairo,
+Egypt, in 1990 and 1993, respectively, and the Ph.D.
+degree from Queens University, Kingston, ON, Can-
+ada, in 1997. He is currently a Professor with the Con-
+cordia Institute for Information Systems Engineering,
+Concordia University, Montreal, QC, Canada. His
+research interests include cryptology, malware analy-
+sis, and cyber-physical systems security. He has more
+than 230 referred journal and conference publications
+in areas related to his research interests. He was also
+with more than 60 technical program committees of cryptography and data secu-
+rity conferences. He was the Co/Chair for Africacrypt 2013 and Africacrypt
+2020, the conference Selected Areas in Cryptography, SAC 2014, SAC 2006,
+and SAC 2001.
+102 IEEE TRANSACTIONS ON NETWORK SCIENCE AND ENGINEERING, VOL. 10, NO. 1, JANUARY/FEBRUARY 2023
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 06:21:55 UTC from IEEE Xplore.  Restrictions apply. 
+<<
+  /ASCII85EncodePages false
+  /AllowTransparency false
+  /AutoPositionEPSFiles true
+  /AutoRotatePages /None
+  /Binding /Left
+  /CalGrayProfile (Gray Gamma 2.2)
+  /CalRGBProfile (sRGB IEC61966-2.1)
+  /CalCMYKProfile (U.S. Web Coated \050SWOP\051 v2)
+  /sRGBProfile (sRGB IEC61966-2.1)
+  /CannotEmbedFontPolicy /Warning
+  /CompatibilityLevel 1.4
+  /CompressObjects /Off
+  /CompressPages true
+  /ConvertImagesToIndexed true
+  /PassThroughJPEGImages true
+  /CreateJobTicket false
+  /DefaultRenderingIntent /Default
+  /DetectBlends true
+  /DetectCurves 0.0000
+  /ColorConversionStrategy /sRGB
+  /DoThumbnails true
+  /EmbedAllFonts true
+  /EmbedOpenType false
+  /ParseICCProfilesInComments true
+  /EmbedJobOptions true
+  /DSCReportingLevel 0
+  /EmitDSCWarnings false
+  /EndPage -1
+  /ImageMemory 1048576
+  /LockDistillerParams true
+  /MaxSubsetPct 100
+  /Optimize true
+  /OPM 0
+  /ParseDSCComments false
+  /ParseDSCCommentsForDocInfo true
+  /PreserveCopyPage true
+  /PreserveDICMYKValues true
+  /PreserveEPSInfo false
+  /PreserveFlatness true
+  /PreserveHalftoneInfo true
+  /PreserveOPIComments false
+  /PreserveOverprintSettings true
+  /StartPage 1
+  /SubsetFonts true
+  /TransferFunctionInfo /Remove
+  /UCRandBGInfo /Preserve
+  /UsePrologue false
+  /ColorSettingsFile ()
+  /AlwaysEmbed [ true
+    /Algerian
+    /Arial-Black
+    /Arial-BlackItalic
+    /Arial-BoldItalicMT
+    /Arial-BoldMT
+    /Arial-ItalicMT
+    /ArialMT
+    /ArialNarrow
+    /ArialNarrow-Bold
+    /ArialNarrow-BoldItalic
+    /ArialNarrow-Italic
+    /ArialUnicodeMS
+    /BaskOldFace
+    /Batang
+    /Bauhaus93
+    /BellMT
+    /BellMTBold
+    /BellMTItalic
+    /BerlinSansFB-Bold
+    /BerlinSansFBDemi-Bold
+    /BerlinSansFB-Reg
+    /BernardMT-Condensed
+    /BodoniMTPosterCompressed
+    /BookAntiqua
+    /BookAntiqua-Bold
+    /BookAntiqua-BoldItalic
+    /BookAntiqua-Italic
+    /BookmanOldStyle
+    /BookmanOldStyle-Bold
+    /BookmanOldStyle-BoldItalic
+    /BookmanOldStyle-Italic
+    /BookshelfSymbolSeven
+    /BritannicBold
+    /Broadway
+    /BrushScriptMT
+    /CalifornianFB-Bold
+    /CalifornianFB-Italic
+    /CalifornianFB-Reg
+    /Centaur
+    /Century
+    /CenturyGothic
+    /CenturyGothic-Bold
+    /CenturyGothic-BoldItalic
+    /CenturyGothic-Italic
+    /CenturySchoolbook
+    /CenturySchoolbook-Bold
+    /CenturySchoolbook-BoldItalic
+    /CenturySchoolbook-Italic
+    /Chiller-Regular
+    /ColonnaMT
+    /ComicSansMS
+    /ComicSansMS-Bold
+    /CooperBlack
+    /CourierNewPS-BoldItalicMT
+    /CourierNewPS-BoldMT
+    /CourierNewPS-ItalicMT
+    /CourierNewPSMT
+    /EstrangeloEdessa
+    /FootlightMTLight
+    /FreestyleScript-Regular
+    /Garamond
+    /Garamond-Bold
+    /Garamond-Italic
+    /Georgia
+    /Georgia-Bold
+    /Georgia-BoldItalic
+    /Georgia-Italic
+    /Haettenschweiler
+    /HarlowSolid
+    /Harrington
+    /HighTowerText-Italic
+    /HighTowerText-Reg
+    /Impact
+    /InformalRoman-Regular
+    /Jokerman-Regular
+    /JuiceITC-Regular
+    /KristenITC-Regular
+    /KuenstlerScript-Black
+    /KuenstlerScript-Medium
+    /KuenstlerScript-TwoBold
+    /KunstlerScript
+    /LatinWide
+    /LetterGothicMT
+    /LetterGothicMT-Bold
+    /LetterGothicMT-BoldOblique
+    /LetterGothicMT-Oblique
+    /LucidaBright
+    /LucidaBright-Demi
+    /LucidaBright-DemiItalic
+    /LucidaBright-Italic
+    /LucidaCalligraphy-Italic
+    /LucidaConsole
+    /LucidaFax
+    /LucidaFax-Demi
+    /LucidaFax-DemiItalic
+    /LucidaFax-Italic
+    /LucidaHandwriting-Italic
+    /LucidaSansUnicode
+    /Magneto-Bold
+    /MaturaMTScriptCapitals
+    /MediciScriptLTStd
+    /MicrosoftSansSerif
+    /Mistral
+    /Modern-Regular
+    /MonotypeCorsiva
+    /MS-Mincho
+    /MSReferenceSansSerif
+    /MSReferenceSpecialty
+    /NiagaraEngraved-Reg
+    /NiagaraSolid-Reg
+    /NuptialScript
+    /OldEnglishTextMT
+    /Onyx
+    /PalatinoLinotype-Bold
+    /PalatinoLinotype-BoldItalic
+    /PalatinoLinotype-Italic
+    /PalatinoLinotype-Roman
+    /Parchment-Regular
+    /Playbill
+    /PMingLiU
+    /PoorRichard-Regular
+    /Ravie
+    /ShowcardGothic-Reg
+    /SimSun
+    /SnapITC-Regular
+    /Stencil
+    /SymbolMT
+    /Tahoma
+    /Tahoma-Bold
+    /TempusSansITC
+    /TimesNewRomanMT-ExtraBold
+    /TimesNewRomanMTStd
+    /TimesNewRomanMTStd-Bold
+    /TimesNewRomanMTStd-BoldCond
+    /TimesNewRomanMTStd-BoldIt
+    /TimesNewRomanMTStd-Cond
+    /TimesNewRomanMTStd-CondIt
+    /TimesNewRomanMTStd-Italic
+    /TimesNewRomanPS-BoldItalicMT
+    /TimesNewRomanPS-BoldMT
+    /TimesNewRomanPS-ItalicMT
+    /TimesNewRomanPSMT
+    /Times-Roman
+    /Trebuchet-BoldItalic
+    /TrebuchetMS
+    /TrebuchetMS-Bold
+    /TrebuchetMS-Italic
+    /Verdana
+    /Verdana-Bold
+    /Verdana-BoldItalic
+    /Verdana-Italic
+    /VinerHandITC
+    /Vivaldii
+    /VladimirScript
+    /Webdings
+    /Wingdings2
+    /Wingdings3
+    /Wingdings-Regular
+    /ZapfChanceryStd-Demi
+    /ZWAdobeF
+  ]
+  /NeverEmbed [ true
+  ]
+  /AntiAliasColorImages false
+  /CropColorImages true
+  /ColorImageMinResolution 150
+  /ColorImageMinResolutionPolicy /OK
+  /DownsampleColorImages false
+  /ColorImageDownsampleType /Bicubic
+  /ColorImageResolution 900
+  /ColorImageDepth -1
+  /ColorImageMinDownsampleDepth 1
+  /ColorImageDownsampleThreshold 1.00111
+  /EncodeColorImages true
+  /ColorImageFilter /DCTEncode
+  /AutoFilterColorImages true
+  /ColorImageAutoFilterStrategy /JPEG
+  /ColorACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /ColorImageDict <<
+    /QFactor 0.40
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000ColorACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000ColorImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasGrayImages false
+  /CropGrayImages true
+  /GrayImageMinResolution 150
+  /GrayImageMinResolutionPolicy /OK
+  /DownsampleGrayImages false
+  /GrayImageDownsampleType /Bicubic
+  /GrayImageResolution 1200
+  /GrayImageDepth -1
+  /GrayImageMinDownsampleDepth 2
+  /GrayImageDownsampleThreshold 1.00083
+  /EncodeGrayImages true
+  /GrayImageFilter /DCTEncode
+  /AutoFilterGrayImages true
+  /GrayImageAutoFilterStrategy /JPEG
+  /GrayACSImageDict <<
+    /QFactor 0.76
+    /HSamples [2 1 1 2] /VSamples [2 1 1 2]
+  >>
+  /GrayImageDict <<
+    /QFactor 0.40
+    /HSamples [1 1 1 1] /VSamples [1 1 1 1]
+  >>
+  /JPEG2000GrayACSImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /JPEG2000GrayImageDict <<
+    /TileWidth 256
+    /TileHeight 256
+    /Quality 15
+  >>
+  /AntiAliasMonoImages false
+  /CropMonoImages true
+  /MonoImageMinResolution 1200
+  /MonoImageMinResolutionPolicy /OK
+  /DownsampleMonoImages false
+  /MonoImageDownsampleType /Bicubic
+  /MonoImageResolution 1600
+  /MonoImageDepth -1
+  /MonoImageDownsampleThreshold 1.00063
+  /EncodeMonoImages true
+  /MonoImageFilter /CCITTFaxEncode
+  /MonoImageDict <<
+    /K -1
+  >>
+  /AllowPSXObjects false
+  /CheckCompliance [
+    /None
+  ]
+  /PDFX1aCheck false
+  /PDFX3Check false
+  /PDFXCompliantPDFOnly false
+  /PDFXNoTrimBoxError true
+  /PDFXTrimBoxToMediaBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXSetBleedBoxToMediaBox true
+  /PDFXBleedBoxToTrimBoxOffset [
+    0.00000
+    0.00000
+    0.00000
+    0.00000
+  ]
+  /PDFXOutputIntentProfile (None)
+  /PDFXOutputConditionIdentifier ()
+  /PDFXOutputCondition ()
+  /PDFXRegistryName ()
+  /PDFXTrapped /False
+  /CreateJDFFile false
+  /Description <<
+    /CHS <FEFF4f7f75288fd94e9b8bbe5b9a521b5efa7684002000410064006f006200650020005000440046002065876863900275284e8e55464e1a65876863768467e5770b548c62535370300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c676562535f00521b5efa768400200050004400460020658768633002>
+    /CHT <FEFF4f7f752890194e9b8a2d7f6e5efa7acb7684002000410064006f006200650020005000440046002065874ef69069752865bc666e901a554652d965874ef6768467e5770b548c52175370300260a853ef4ee54f7f75280020004100630072006f0062006100740020548c002000410064006f00620065002000520065006100640065007200200035002e003000204ee553ca66f49ad87248672c4f86958b555f5df25efa7acb76840020005000440046002065874ef63002>
+    /DAN <FEFF004200720075006700200069006e0064007300740069006c006c0069006e006700650072006e0065002000740069006c0020006100740020006f007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400650072002c0020006400650072002000650067006e006500720020007300690067002000740069006c00200064006500740061006c006a006500720065007400200073006b00e60072006d007600690073006e0069006e00670020006f00670020007500640073006b007200690076006e0069006e006700200061006600200066006f0072007200650074006e0069006e006700730064006f006b0075006d0065006e007400650072002e0020004400650020006f007000720065007400740065006400650020005000440046002d0064006f006b0075006d0065006e0074006500720020006b0061006e002000e50062006e00650073002000690020004100630072006f00620061007400200065006c006c006500720020004100630072006f006200610074002000520065006100640065007200200035002e00300020006f00670020006e0079006500720065002e>
+    /DEU <FEFF00560065007200770065006e00640065006e0020005300690065002000640069006500730065002000450069006e007300740065006c006c0075006e00670065006e0020007a0075006d002000450072007300740065006c006c0065006e00200076006f006e002000410064006f006200650020005000440046002d0044006f006b0075006d0065006e00740065006e002c00200075006d002000650069006e00650020007a0075007600650072006c00e40073007300690067006500200041006e007a006500690067006500200075006e00640020004100750073006700610062006500200076006f006e00200047006500730063006800e40066007400730064006f006b0075006d0065006e00740065006e0020007a0075002000650072007a00690065006c0065006e002e00200044006900650020005000440046002d0044006f006b0075006d0065006e007400650020006b00f6006e006e0065006e0020006d006900740020004100630072006f00620061007400200075006e0064002000520065006100640065007200200035002e003000200075006e00640020006800f600680065007200200067006500f600660066006e00650074002000770065007200640065006e002e>
+    /ESP <FEFF005500740069006c0069006300650020006500730074006100200063006f006e0066006900670075007200610063006900f3006e0020007000610072006100200063007200650061007200200064006f00630075006d0065006e0074006f0073002000640065002000410064006f00620065002000500044004600200061006400650063007500610064006f007300200070006100720061002000760069007300750061006c0069007a00610063006900f3006e0020006500200069006d0070007200650073006900f3006e00200064006500200063006f006e006600690061006e007a006100200064006500200064006f00630075006d0065006e0074006f007300200063006f006d00650072006300690061006c00650073002e002000530065002000700075006500640065006e00200061006200720069007200200064006f00630075006d0065006e0074006f00730020005000440046002000630072006500610064006f007300200063006f006e0020004100630072006f006200610074002c002000410064006f00620065002000520065006100640065007200200035002e003000200079002000760065007200730069006f006e0065007300200070006f00730074006500720069006f007200650073002e>
+    /FRA <FEFF005500740069006c006900730065007a00200063006500730020006f007000740069006f006e00730020006100660069006e00200064006500200063007200e900650072002000640065007300200064006f00630075006d0065006e00740073002000410064006f006200650020005000440046002000700072006f00660065007300730069006f006e006e0065006c007300200066006900610062006c0065007300200070006f007500720020006c0061002000760069007300750061006c00690073006100740069006f006e0020006500740020006c00270069006d007000720065007300730069006f006e002e0020004c0065007300200064006f00630075006d0065006e00740073002000500044004600200063007200e900e90073002000700065007500760065006e0074002000ea0074007200650020006f007500760065007200740073002000640061006e00730020004100630072006f006200610074002c002000610069006e00730069002000710075002700410064006f00620065002000520065006100640065007200200035002e0030002000650074002000760065007200730069006f006e007300200075006c007400e90072006900650075007200650073002e>
+    /ITA (Utilizzare queste impostazioni per creare documenti Adobe PDF adatti per visualizzare e stampare documenti aziendali in modo affidabile. I documenti PDF creati possono essere aperti con Acrobat e Adobe Reader 5.0 e versioni successive.)
+    /JPN <FEFF30d330b830cd30b9658766f8306e8868793a304a3088307353705237306b90693057305f002000410064006f0062006500200050004400460020658766f8306e4f5c6210306b4f7f75283057307e305930023053306e8a2d5b9a30674f5c62103055308c305f0020005000440046002030d530a130a430eb306f3001004100630072006f0062006100740020304a30883073002000410064006f00620065002000520065006100640065007200200035002e003000204ee5964d3067958b304f30533068304c3067304d307e305930023053306e8a2d5b9a3067306f30d530a930f330c8306e57cb30818fbc307f3092884c3044307e30593002>
+    /KOR <FEFFc7740020c124c815c7440020c0acc6a9d558c5ec0020be44c988b2c8c2a40020bb38c11cb97c0020c548c815c801c73cb85c0020bcf4ace00020c778c1c4d558b2940020b3700020ac00c7a50020c801d569d55c002000410064006f0062006500200050004400460020bb38c11cb97c0020c791c131d569b2c8b2e4002e0020c774b807ac8c0020c791c131b41c00200050004400460020bb38c11cb2940020004100630072006f0062006100740020bc0f002000410064006f00620065002000520065006100640065007200200035002e00300020c774c0c1c5d0c11c0020c5f40020c2180020c788c2b5b2c8b2e4002e>
+    /NLD (Gebruik deze instellingen om Adobe PDF-documenten te maken waarmee zakelijke documenten betrouwbaar kunnen worden weergegeven en afgedrukt. De gemaakte PDF-documenten kunnen worden geopend met Acrobat en Adobe Reader 5.0 en hoger.)
+    /NOR <FEFF004200720075006b00200064006900730073006500200069006e006e007300740069006c006c0069006e00670065006e0065002000740069006c002000e50020006f0070007000720065007400740065002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e00740065007200200073006f006d002000650072002000650067006e0065007400200066006f00720020007000e5006c006900740065006c006900670020007600690073006e0069006e00670020006f00670020007500740073006b007200690066007400200061007600200066006f0072007200650074006e0069006e006700730064006f006b0075006d0065006e007400650072002e0020005000440046002d0064006f006b0075006d0065006e00740065006e00650020006b0061006e002000e50070006e00650073002000690020004100630072006f00620061007400200065006c006c00650072002000410064006f00620065002000520065006100640065007200200035002e003000200065006c006c00650072002e>
+    /PTB <FEFF005500740069006c0069007a006500200065007300730061007300200063006f006e00660069006700750072006100e700f50065007300200064006500200066006f0072006d00610020006100200063007200690061007200200064006f00630075006d0065006e0074006f0073002000410064006f00620065002000500044004600200061006400650071007500610064006f00730020007000610072006100200061002000760069007300750061006c0069007a006100e700e3006f002000650020006100200069006d0070007200650073007300e3006f00200063006f006e0066006900e1007600650069007300200064006500200064006f00630075006d0065006e0074006f007300200063006f006d0065007200630069006100690073002e0020004f007300200064006f00630075006d0065006e0074006f00730020005000440046002000630072006900610064006f007300200070006f00640065006d0020007300650072002000610062006500720074006f007300200063006f006d0020006f0020004100630072006f006200610074002000650020006f002000410064006f00620065002000520065006100640065007200200035002e0030002000650020007600650072007300f50065007300200070006f00730074006500720069006f007200650073002e>
+    /SUO <FEFF004b00e40079007400e40020006e00e40069007400e4002000610073006500740075006b007300690061002c0020006b0075006e0020006c0075006f0074002000410064006f0062006500200050004400460020002d0064006f006b0075006d0065006e007400740065006a0061002c0020006a006f0074006b006100200073006f0070006900760061007400200079007200690074007900730061007300690061006b00690072006a006f006a0065006e0020006c0075006f00740065007400740061007600610061006e0020006e00e400790074007400e4006d0069007300650065006e0020006a0061002000740075006c006f007300740061006d0069007300650065006e002e0020004c0075006f0064007500740020005000440046002d0064006f006b0075006d0065006e00740069007400200076006f0069006400610061006e0020006100760061007400610020004100630072006f0062006100740069006c006c00610020006a0061002000410064006f00620065002000520065006100640065007200200035002e0030003a006c006c00610020006a006100200075007500640065006d006d0069006c006c0061002e>
+    /SVE <FEFF0041006e007600e4006e00640020006400650020006800e4007200200069006e0073007400e4006c006c006e0069006e006700610072006e00610020006f006d002000640075002000760069006c006c00200073006b006100700061002000410064006f006200650020005000440046002d0064006f006b0075006d0065006e007400200073006f006d00200070006100730073006100720020006600f60072002000740069006c006c006600f60072006c00690074006c006900670020007600690073006e0069006e00670020006f006300680020007500740073006b007200690066007400650072002000610076002000610066006600e4007200730064006f006b0075006d0065006e0074002e002000200053006b006100700061006400650020005000440046002d0064006f006b0075006d0065006e00740020006b0061006e002000f600700070006e00610073002000690020004100630072006f0062006100740020006f00630068002000410064006f00620065002000520065006100640065007200200035002e00300020006f00630068002000730065006e006100720065002e>
+    /ENU (Use these settings to create PDFs that match the "Suggested"  settings for PDF Specification 4.0)
+  >>
+>> setdistillerparams
+<<
+  /HWResolution [600 600]
+  /PageSize [612.000 792.000]
+>> setpagedevice

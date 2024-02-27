@@ -1,0 +1,1333 @@
+Decentralized Computation Market for Stream Processing Applications
+Decentralized Computation Market for
+Stream Processing Applications
+Scott Eisele∗, Michael Wilbur∗, Taha Eghtesad†,Kevin Silvergold∗, Fred Eisele∗,
+Ayan Mukhopadhyay∗, Aron Laszka†, Abhishek Dubey∗
+∗ Vanderbilt University † University of Houston
+Abstract—While cloud computing is the current standard for
+outsourcing computation, it can be prohibitively expensive
+for cities and infrastructure operators to deploy services. At
+the same time, there are underutilized computing resources
+within cities and local edge-computing deployments. Using
+these slack resources may enable significantly lower pricing
+than comparable cloud computing; such resources would incur
+minimal marginal expenditure since their deployment and
+operation are mostly sunk costs. However, there are challenges
+associated with using these resources. First, they are not
+effectively aggregated or provisioned. Second, there is a lack of
+trust between customers and suppliers of computing resources,
+given that they are distinct stakeholders and behave according
+to their own interests. Third, delays in processing inputs may
+diminish the value of the applications. To resolve these chal-
+lenges, we introduce an architecture combining a distributed
+trusted computing mechanism, such as a blockchain, with
+an efficient messaging system like Apache Pulsar. Using this
+architecture, we design a decentralized computation market
+where customers and suppliers make offers to deploy and
+host applications. The proposed architecture can be realized
+using any trusted computing mechanism that supports smart
+contracts, and any messaging framework with the necessary
+features. This combination ensures that the market is robust
+without incurring the input processing delays that limit other
+blockchain based solutions. We evaluate the market protocol
+using game-theoretic analysis to show that deviation from the
+protocol is discouraged. Finally, we assess the performance
+of a prototype implementation based on experiments with a
+streaming computer-vision application.
+1. Introduction
+Edge computing is critical to balance the computing
+workloads necessitated by the growing integration of in-
+ternet of things and smart city applications [1, 2, 3, 4].
+However, the deployment and maintenance of edge com-
+puting infrastructure can be costly [5, 6]. Therefore, instead
+of relying only on new infrastructure, we consider the
+opportunity provided by the available slack computing re-
+sources in communities, owned by various stakeholders such
+This material is based upon work sponsored by National Science Founda-
+tion under grant CNS-1952011.
+as businesses, universities, and internet service providers
+(ISPs). By “slack” computing resources, we mean comput-
+ing resources that remain after their owners’ requirements
+are met. It is estimated that there are hundreds of exaFLOPs
+of slack compute capacity available [7, 8]. The advantage
+of using slack resources is that the expenditure for space,
+hardware, and operation is already paid for in supporting
+the devices’ primary applications. Prior efforts to access
+these resources, such as the Berkeley Open Infrastructure
+for Network Computing (BOINC) [9], rely on participants
+“volunteering” slack resources. However, participation in
+such programs is limited. We hypothesize that a market that
+enables resource providers to sell slack computing capability
+to customers who want to deploy an application is required
+to incentivize participation. In our prior work [10] we began
+work on such a market, however the application support was
+limited to batch processing with static input data. In this
+work the goal is to also support applications with dynamic
+inputs, which requires a distinct approach and introduces
+additional challenges.
+First, the resources are not effectively aggregated or pro-
+visioned. Aggregation requires participation, and provision-
+ing is difficult because slack capacity is transient and subject
+to the demands of the primary application. Therefore, it is
+likely that agents who provide slack compute will not be
+able to host a service for its entire life cycle. Second, it
+is imperative to establish trust between the customers and
+suppliers since they may behave selfishly. For example, the
+resource providers could claim that they executed a job with-
+out actually doing so. Customers, on the other hand, could
+provide cleverly crafted jobs that induce failures in resource
+providers to avoid payment, even for parts of the input that
+were processed correctly. Therefore, some assurance about
+the veracity of the results is imperative. The techniques we
+used to accomplish this in the batch processing scenario are
+not directly applicable to the online or stream processing
+use case. Third, the value of the application outputs may
+diminish with time. This means that the mechanisms used
+to establish trust should not delay the output.
+Existing approaches provide partial solutions to these
+problems [11, 12, 13, 14]. For example, Mutable [13] and
+Aurora [14] aggregate slack compute resources, but only
+from trusted entities like ISPs. This constraint sidesteps the
+problem of validating results but leaves the bulk of the slack
+resources untapped. Teutsch and Reitwießner [12] allow
+36
+2022 IEEE International Conference on Cloud Engineering (IC2E)
+978-1-6654-9115-0/22/$31.00 ©2022 IEEE
+DOI 10.1109/IC2E55432.2022.00012
+20
+22
+ IE
+EE
+ In
+te
+rn
+at
+io
+na
+l C
+on
+fe
+re
+nc
+e 
+on
+ C
+lo
+ud
+ E
+ng
+in
+ee
+rin
+g 
+(IC
+2E
+) |
+ 9
+78
+-1
+-6
+65
+4-
+91
+15
+-0
+/2
+2/
+$3
+1.
+00
+ ©
+20
+22
+ IE
+EE
+ |
+ D
+O
+I: 
+10
+.1
+10
+9/
+IC
+2E
+55
+43
+2.
+20
+22
+.0
+00
+12
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+mistrusted entities and rely on blockchain-based distributed
+ledgers where there is no central trusted entity; instead, trust
+is distributed among the participants to provide trusted com-
+pute. Recognizing that blockchain-only systems are ineffi-
+cient, slow, and have limited throughput, the protocol per-
+forms the computation and verification on standard compute
+nodes. However, Teutsch and Reitwießner utilize a costly
+mediation mechanism that involves storing computation data
+on the blockchain.
+To address these issues, we develop a decentralized
+market to incentivize participation. To handle the volatility
+inherent in slack resources, Customers specify a minimum
+service time. To address the potential for Suppliers to fail
+accidentally, Customers can request that multiple Suppliers
+host their service. Similar to our prior work[10] as well as
+[11, 12], we choose to rely on blockchain primarily because
+it does not require participants to trust a single centralized
+entity. In addition, it is robust and has high availability.
+Recognizing the limitations, we restrict the use of the
+smart contract to recording allocation contracts, providing
+a minimal verification service, and transferring funds. All
+other functionality is enabled using a durable messaging
+framework. These two mechanisms work in parallel and
+only synchronize to record and sign the allocation contract
+prior to deployment and during the final payout. As a result,
+after applications have been deployed they do not incur
+delays that would be present if blockchain transactions were
+used to transmit inputs.
+To retain trust despite the inclusion of the messaging
+framework, we deter undesired actions available to the
+participants by designing a protocol that is both incentive-
+compatible and individually rational. This protocol estab-
+lishes a game and includes in the smart contract a mech-
+anism that verifies outputs generated by the participants
+(who are treated as rational players) to ensure expected
+outcomes. Then disputes, if they occur, are resolved by a
+Mediator. We show using game-theoretic analysis that this
+approach is sufficient to disincentivize deviation from the
+protocol. This analysis is an integral part of the system
+design since enforceable rewards and penalties are crucial
+in a decentralized and trustless setting.
+The outline of the paper is as follows. We first explain
+the problem, then describe our approach, followed by the
+analysis of the protocol. Finally, we describe our prototype
+implementation and measure 1) the delay introduced by our
+framework on the initial deployment, 2) the resource uti-
+lization of platform components, and 3) the monetary costs
+of the market operations associated with deploying services
+(making offers, allocations, verification, mediation). We do
+not include the latency or throughput of a deployed service
+because it does not depend on the market but rather on the
+resources available to the Supplier. The implementation is
+available at [15].
+2. Problem Formulation
+2.1. Assumptions
+We consider that the actors are selfish but non-malicious
+entities, i.e., they may try to cheat; however, given options,
+they will make choices that optimize their utility. In partic-
+ular, we assume that each si, ci (a Supplier or Customer)
+has a utility function U , and a set of actions Γ to choose
+from. Since the actors are rational, agent i chooses action
+χ∗ ∈ X such that γ∗ = argmaxγ∈Γ U . The utility function
+takes the general form U =
+∑
+(benefits)−∑
+(costs). We
+define these participants and some key attributes formally
+below.
+Definition 1 (Suppliers of Computation Resources): A Sup-
+plier s is a rational agent that, for some limited duration, has
+slack computing resources available. Specifically, it has Rs
+MB of memory and Is CPU cycles (in millions) per second
+available for a duration defined as Δs = send−sstart, where
+sstart and send denote the start and end clock times of the
+availability, respectively. We assume that the Supplier knows
+its primary workloads1 and can estimate Is, Rs, and Δs. To
+ensure profitability, the Supplier must require payment in
+excess of its operating costs, specifically, the cost of the
+electricity consumed to host a service, denoted by πsε.
+Definition 2 (Customer and Application Service): A Cus-
+tomer c is a rational agent that has an application service
+(organized as a Docker image) to deploy using our platform.
+The application has a data input rate of λ and requires Rc
+MB of memory and Ic CPU instructions (in millions) to
+process each input. Each deployment lasts for a specific
+duration, known as the service lifetime, and is defined as
+Δc = cend − cstart, where cstart and cend denote the start
+and end clock times of the service, respectively. We assume
+that for a specific service, Customers can estimate Ic, Rc,
+λ, and Δc. For every service output, the Customer receives
+a benefit b and is willing to pay up to πxmax.
+2.2. Requirements
+Given a set of offers, the market must enable suppliers
+and customers to benefit from participating in the market.
+This implies that the market provides an allocation that
+assigns a job to a supplier. Further, we need to ensure that
+the participants trust the market. Unfortunately, the nature of
+the utility function (Section 2.1) encourages the suppliers to
+neglect processing service inputs since electricity costs πsε
+can be saved by reducing processing. Therefore, we face the
+challenge of identifying the action space of the participants
+and designing a mechanism that makes undesired behavior
+expensive for the participating actors.
+1. In our definition, we do not include other resources such as disk space,
+GPU cycles, and network bandwidth. While these are additional constraints
+on the resource allocation algorithm, they do not fundamentally change the
+problem under consideration.
+37
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+3. Our Approach
+Before we introduce our market, we introduce additional
+actors that participate in our market protocol and formally
+describe offers through which the customers and suppliers
+interact with the market.
+Definition 3 (Supplier Market Offers): Both Customers and
+Suppliers participate in the market by making offers. A
+Supplier offer os ∈ Os is a tuple that includes: Asi, a unique
+account identifier associated with the Supplier that posted
+the offer; Is, the number of slack instructions (in millions)
+per second available; Rs, the amount of RAM available;
+sstart, when the resource is first available; send, when the
+resource availability ends; πxmin, the minimum price the
+Supplier is willing to be paid per million instructions; and
+[M ], a list of trusted Mediators (we describe mediators
+below).
+Definition 4 (Customer Market Offers): A Customer offer
+oc ∈ Oc is a similar tuple that includes: Aci, a unique
+account identifier associated with the Customer that posted
+the offer; Ic, CPU instructions (in millions) to process
+each input; Rc, the amount of RAM required; cstart; cend
+(defn 2); πxmax, the maximum price the Customer is willing
+to pay per million instructions; name, the name of the
+application service to be deployed; λ, data input rate of the
+service; and [M ], the criteria used by the Allocator to select
+a Mediator.
+Definition 5 (Allocators): An Allocator is an agent that
+aggregates participant offers, solves the resource matching
+problem, and proposes an allocation. The Allocator need
+not be trusted because all relevant parties must accept the
+allocation before it becomes an allocation contract(see be-
+low). The Allocator functionality could have been included
+in a smart contract, but this would have increased the costs
+of interacting with the platform. In particular, an allocation
+is a tuple which consists of customer, the allocated Cus-
+tomer; {suppliers}, a set of allocated Suppliers; astart, the
+allocation start time; aend, the allocation end time; name,
+the service name; and πx, the service price per million
+instructions such that πxmin ≤ πx ≤ πxmax. For the service
+price πx, any value between πxmin and πxmax is feasible,
+and is determined by the Allocator according to its allocation
+algorithm (e.g., double auction, fixed price, etc.).
+Effectively, an allocation declares which offers were
+matched, the start and end times, and the service price. This
+is only possible if
+Icλ ≤ Is and Rc ≤ Rs and πxmin ≤ πxmax (1)
+[sstart, send] ∩ [cstart, cend] = [astart, aend] (2)
+|aend − astart| > Δmin (3)
+i.e., the Supplier has sufficient resources to process inputs at
+the necessary rate, there exists a price that both Customer
+and Supplier would accept, and the length of time where
+the offers overlap exceeds the Customer’s minimum viable
+service time Δmin.
+Definition 6 (Minimum Viable Service Time): To offset
+the setup costs πsetup of making and matching offers, a
+Customer’s service must run for a minimum amount of time.
+We call this the minimum viable service time and denote
+it by Δmin. In addition to the start and end times of the
+service, the Customer also includes a minimum service time
+in the offer. While evaluating the offers, if the Allocator
+detects that currenttime + Δmin ≥ cend, then the offer
+becomes expired. Similarly if an allocation is created, it
+expires when currenttime+Δmin ≥ aend.
+If an allocation is agreed to by all parties then it becomes
+an allocation contract. The duration of the allocation is
+defined as Δ = aend−astart. The total value of an allocation
+is πtotal = πsλΔ, where πs is the value of processing a
+single service input: πs = Icπx. In our market, a number
+of Allocator agents can participate and incorporate various
+resource matching and constraint satisfaction algorithms to
+come up with their version of feasible allocation. The Allo-
+cator receives a payment πA for providing this service. This
+cost contributes to the setup costs of consumers (πc setup)
+and suppliers (πs setup) .
+Definition 7 (Mediators): Mediators are actors that are
+trusted to perform mediation in the case of a dispute on
+a particular allocation. The process involves recomputing
+the contended output and determining fault. Customers and
+Suppliers specify in their offers the criteria for selecting
+which Mediators they are willing to trust. An allocation is
+only feasible if there a trusted Mediator in common. If a
+participant chooses to no longer trust a particular Mediator
+then it no longer includes it in its offers. An example of a
+trusted Mediator may include an AWS service whose code
+has been formally verified.
+3.1. Understanding Costs
+In addition to monetary setup costs, there are costs
+associated with the time delay between when an offer is sub-
+mitted and when that offer is deployed. This delay depends
+on Supplier availability, the time required to construct an
+allocation, denoted by δalloc, and the time to set up the ser-
+vice, denoted by δsetup. Service setup includes transferring
+and starting the service. Assuming that the service inputs
+are being generated continuously, the cost of this delay is
+at least
+πdelay = λ× πs × (δsetup + δalloc). (4)
+The Customer must account for this delay when specifying
+offer start time, specifically cstart = c∗start−(δalloc+δsetup)
+where c∗start is the actual desired service start time. Finally,
+if a Supplier hosting a service fails, the cost to the Customer
+to recover from the failure is
+πrecover = πc setup + πdelay. (5)
+3.2. Middleware Components: Smart Contract and
+Pulsar
+In our market, there are two middleware components
+that are critical to its operation. First, we use a smart
+38
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+contract (SC) and blockchain2 to enforce allocation contracts
+by recording signed allocations, providing a verification
+service, and providing registration to the market by ac-
+cepting deposits and transferring payments upon successful
+completion of the contract. Second, we rely on a distributed
+messaging framework like Apache Pulsar [16], which uses
+a distributed write-ahead log, to record messages and
+transfer data between market participants. The fundamental
+properties we need from the messaging framework are fast,
+efficient, durable storage of messages that can be routed
+and are eventually delivered. Note that both blockchain and
+Pulsar record aspects of the market state, however, payments
+and contracts are only finalized through smart contracts in
+blockchains that provide trust assurances.
+4. Market Protocol
+We describe the market protocol (Fig. 1a) using numbers
+in the text (e.g., 1 ), which denote the events that take place.
+We also refer to the state machine shown in Fig. 1b to
+describe the protocol, which depicts how the SC tracks the
+state of each allocation. In our notation, text in teletype
+font represents SC functions and text that is italicized are
+state machine states.
+1) Making Offers: The protocol begins with the Customers
+and Suppliers constructing their offers and sending them
+on the offers channel 1 .
+2) Creating Allocation: The Allocator reads the offers
+channel 2 and executes a matching algorithm to con-
+struct an allocation, if one exists. It then sends the
+allocation on the allocations channel.
+3) Accepting Allocation: The Customers and Suppliers
+read the allocations channel and send a message on
+the accept channel 3 to specify if they accept the
+allocation or not. The Allocator reads the accept chan-
+nel and, if all the allocated participants accept, sends
+the allocation to the SC and requests that it calls the
+createAllocation function 4 . The SC checks the
+feasibility and correctness of the allocation, and the state
+of the allocation is initiated to Allocated. As part of
+submitting the allocation to the SC, the Allocator sends
+additional requests (AddSupplier) to add the id of
+each Supplier and the hash of its offer to the allocation
+stored by the SC. These two function calls incur a cost
+of allocation πca. When all Suppliers are added, the state
+of the allocation transitions to Signing.
+Once the allocation is in the Signing state on the SC,
+the participants check the allocation to make sure that it
+matches the specific allocation that the Allocator sent
+on the allocations channel; if it does, they sign the
+allocation on the SC by submitting their security deposits
+5 . Additionally, as part of signing the allocation, the
+Customer commits n tests, which are inputs that will
+be hidden in the data stream going to the service, and
+their corresponding outputs. It does this in two steps.
+2. We can support different implementations, but we use Ethereum in
+the current prototype.
+First, by processing the n inputs and hashing the inputs
+and outputs incurring a cost nπcg . Second, it sends those
+hashed tests to the SC incurring a commitment cost of
+πcc. During the service lifetime those inputs are injected
+uniformly at random among the workload inputs3. See
+Section 4.1.
+When all the participants sign the contract, the state
+of the allocation is changed to Running. The allocated
+Customer, Suppliers, and Mediators also incur a cost
+for signing the allocation and paying the Allocator for
+its service; we denote these costs, lumped together, as
+πa. Once all participants have signed the contract, the
+Allocator receives πA as payment for its service.
+4) Service Execution: After the service-specific channels
+are constructed, the Customer can begin writing to the
+service input channel and the Supplier can begin reading
+6 , processing inputs and sending outputs on the service
+output channel (this process can actually start before
+signing is complete). For each correctly processed input
+the Customer reads 7 , it receives a benefit b. The
+Supplier, on the other hand, incurs electricity cost πsε
+for processing each input.
+5) Verifying Outputs: At the end of the allocation, the
+Allocator sends a message on the cleanup channel 8
+notifying the participants to end the allocation. The
+Customer informs the Supplier which n outputs are to
+be verified. The Supplier identifies the corresponding
+outputs and sends them to the SC for verification 9 ,
+calling postOutput. The Supplier incurs a cost of
+πv for performing this operation. The SC compares the
+Supplier output against the test data committed by the
+Customer when it signed the allocation and stores the
+result4. We discuss verification further in Section 4.1.
+6) Mediation and Closing the Allocation: If the outputs
+match in the previous step, the SC calls ClearMarket
+(black 10 ) which transfers payments, with the Supplier
+receiving λΔπs, the Customer paying λΔπs, and the
+Mediator receiving πm for being available. It also causes
+the allocation state on the SC to transition to Closed. The
+participants receive notification of this change via their
+respective SC clients (black 11 ). The allocation is then
+finished.
+However, if the outputs do not match, the SC records
+this outcome and emits a MediationRequested event (red
+10 ), which the Mediator receives from its SC client (red
+11 ). The Mediator then reads 12 from the input and
+output channels and re-processes the n inputs, incurring
+a cost of n(πsε+πcg). The Mediator then sends the result
+to the SC, calling postMediation, which incurs a
+cost of πmc.
+The SC calls ClearMarket (red 13 ) which compares the
+Mediator output against the output of the Suppliers and
+Customer to determine which participants are at fault.
+3. This assumes that the Supplier cannot distinguish test inputs from
+workload inputs.
+4. The verification is only capable of detecting errors, not ascertaining
+which entities are at fault. To determine fault, we use a Mediator.
+39
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+Pulsar Interactions
+offers
+allocations
+accept
+input
+output
+cleanup
+Smart Contract(SC) on a blockchain, currently Ethereum
+allocation
+verification
+Allocator
+Pulsar Client
+SC Client
+2
+4
+8
+4 11, 14
+Customer
+Pulsar Client
+SC Client
+1
+3
+4
+6
+7
+8
+5
+11, 14
+Supplier
+Pulsar Client
+SC Client
+1
+3
+4
+6
+8
+5
+9
+11, 14
+10 10, 13
+Mediator
+Pulsar Client
+SC Client
+3
+4
+12
+8
+5 11, 11
+12
+Legend
+write
+read
+create
+mismatch
+(a)
+Allocated
+Closed Running
+Signing
+AddSupplier
+(true)
+AddSupplier(false)
+Everyone Signed
+Pay Allocator
+mediatorSign()
+customerSign()
+supplierSign()
+ClearMarket()
+Pay Supplier
+Return Customer Deposit
+ReturnDeposits()
+CreateAllocation()
+PostMediation()
+Pay Mediator
+PostOutput()
+Run Verification
+Close/MediationRequested
+(b)
+Figure 1: (a) Horizontal lines represent communication channels between participants. Vertical lines represent functions
+that write to (filled circle) and/or read from (open circle) channels. For example, the Supplier reads that an allocation was
+accepted on the accept channel which causes it to create a reader (denoted by a square) on the input channel, a writer on the
+output channel and a reader on the cleanup channel. The functions occur in the numbered sequence. Red numbers signify
+the sequence after the outputs checked by the SC deployed on the blockchain do not match. (b) State of an allocation on
+SC represented as a state diagram. Our SC functions are described in [15].
+If a Customer or Supplier’s output did not match the
+Mediator output, they are fined πcd or πsd respectively.
+The Mediator is paid n(πs) from the fine. For any
+agent whose output does match the Mediator, payment
+is transferred as normal, i.e., the Supplier receives λΔπs
+or the Customer pays λΔπs. The call causes the state
+of the allocation to transition to Closed. The participants
+receive notification of this via their respective SC clients
+(red 14 ). The allocation is then finished.
+4.1. Verification
+As part of the verification process, we expect the Cus-
+tomers to commit to at least n inputs and their corresponding
+outputs which we refer to as tests, where n is a platform pa-
+rameter as part of an accepted allocation. It is also important
+that the Supplier cannot read them; otherwise, the Supplier
+can copy the outputs (by reading from the blockchain) and
+provide those outputs at the end of allocation and neglect
+processing the actual inputs. To prevent such behavior, our
+protocol dictates that the Customer uses a hash function
+to mask the values it commits in the blockchain. The key
+idea behind the verification strategy is to check the hash of
+the Supplier output against the hash of the expected output,
+without letting the Supplier know which output is being
+checked.
+We introduce some additional notation to describe the
+solution. Let Oc = {o1, o2, . . . on} represent the set of the
+Customer’s n tests where oi = (ini, outi) is the ith test for a
+particular Customer. Let Os = {os1, os2, . . . osn} represent
+the set of all test solutions produced by the Supplier during
+an allocation. To mask the input and output values, we use
+hash functions that are supported by the chosen blockchain
+implementation. We define the following functions for hash-
+ing. α hashes all elements of a set K and creates a set
+of hashes, γ applies a hash function to a given set and
+produces a single hash value, and Γ applies a double hash.
+The cardinality of outputs produced by γ and Γ is one,
+whereas α produces a set whose size is same as the size
+of input elements. That is, α(K) = {hash(ki) : ∀ki ∈ K},
+γ(K) = hash(K), and Γ(K) = hash(hash(K)).
+During the finalization of an allocation, the Customer
+sends α(Oc), a set of hashes to the Supplier. During ex-
+ecution, the Supplier records the hash of each input and
+output, so upon receiving the set provided by the Customer
+it is able to determine the set of test inputs that it must
+submit to the SC for verification. Note that this list does
+not directly specify the index of the input or output that
+must be sent. Rather, it identifies the Ov ⊆ Os, such that
+Ov = {oi : hash(oi) ∈ α(Oc) ∩ α(Os)}. This approach en-
+sures that the Supplier must have processed the test inputs to
+be able to correctly identify them. If the Customer directly
+provided the indices, the Supplier could neglect to process
+the inputs until it received them and then produce Ov .
+Finally, the Supplier sends γ(Ov) to the SC, where the SC
+then checks if Γ(Oc) = hash(γ(Ov)). Recall that, during
+signing, the Customer committed Oc to the blockchain. In
+reality, it sent Γ(Oc). The data is double hashed because
+if the Customer had sent γ(Oc), then the verification pro-
+cess on the blockchain would have required to hash all
+the Supplier’s n outputs, thereby incurring additional costs.
+Instead, the Customer sends Γ(Oc), requiring the Supplier
+40
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+TABLE 1: Key Symbols
+Smart Contract (SC)
+ρ penalty rate set by the SC
+πv cost of Supplier submitting outputs to the SC
+πcc cost of Customer committing outputs to the SC
+πmc cost of Mediator committing mediation results to the SC
+Mediator (M)
+πm payout to the Mediator for being available for the du-
+ration of the service
+πvε Mediator’s electricity cost to verify outputs
+Customer
+ci Customer i
+Aci Customer i’s account ID
+cstart,end Customer offer start and end times
+πxmax amount the Customer is willing to pay per million
+instructions
+Ic number of instructions (in millions) required to process
+a service input
+b benefit that the Customer obtains from service output
+πcg Customer’s cost of generating test output
+ec =
+πcg
+πs
+Customer’s efficiency of processing vs. the price
+paid to outsource
+λ rate at which data is set to deployed application instance
+sc represents when the Customer chooses to provide n
+correct tests (true or false)
+Supplier
+si Supplier i
+Asi Supplier i’s account ID
+sstart,end Supplier offer start and end times
+πxmin payment that the Supplier requires per million instruc-
+tions
+πsε cost to process a service input
+πv cost to send output hash to the SC
+P (s) probability that the Supplier will process a particular
+input
+es = πsε
+πs
+: Supplier’s efficiency of processing vs. the price
+paid to outsource
+Is number of slack instructions (in millions) per second
+available
+Rs slack RAM available
+Allocator
+Ω an allocation
+πa cost to pay Allocator (πA) and for signing the allocation
+πA payout to the Allocator for providing an accepted allo-
+cation
+Δ = aend − astart: duration of a service allocation
+πx market price per million instructions between πxmin and
+πxmax (determined by the Allocator)
+πs = πx × I: amount to be charged/paid to a Cus-
+tomer/Supplier for a processed input
+πca cost of SC adding an allocation
+n number of outputs that must be provided by the Cus-
+tomer for verification
+πcd Customer’s security deposit for collateral prior to trans-
+action (set to ρπs)
+πsd Supplier’s security deposit for collateral prior to trans-
+action (set to ρπs)
+Other
+xstart/end Customer’s service start/end time (x := c), start/end of
+Supplier’s resource availability (x := s), start/end of
+allocated service time (x := a)
+Δmin minimum viable service time
+to send γ(Ov) to the SC. This makes it so that the SC
+only has to hash a single element to compare against the
+Customer’s hash.
+4.2. Handling Failures
+Our protocol ensures that the consequences of failures
+are localized to the specific stakeholder that experiences
+the failure. If a Customer fails prior to signing, the Allo-
+cation is canceled. If the failure occurs after, the Supplier
+is unaffected. In the case of a Supplier failure the Customer
+submits a new service offer which incurs the cost πrecover
+(see Eq. (5)). Since the Supplier is penalized in these cases,
+they choose their availability based on estimates of their
+reliability to reduce the cost of unintentional failures. Thus,
+from a market perspective, as long as more than one agent
+sends offers to an Allocator and the agents have a mutually
+accepted Mediator, the Market is operational.
+4.3. Prototype
+In the current prototype, we use the Ethereum
+blockchain. The system can also be implemented by using
+other ledgers that provide byzantine fault tolerance, such as
+Hashgraph [17]. For the messaging framework we use Pul-
+sar. Other options include Kafka or even layer 2 blockchain
+solutions such as side-chains [18]. We chose Pulsar due to
+its unique capabilities: zero data loss, guaranteed message
+delivery, infinite scalability, and in particular multi-tenancy
+[19]. Multi-tenancy enables the ownership of the market to
+be distributed between the participants, who can each control
+access to their tenants.
+The various actors in the system, i.e., Customers, Suppli-
+ers, Allocators, and Mediators were implemented in Python
+and packaged as Docker Containers. Further, we use Docker
+to pass the application code between Customer and the
+Suppliers. The algorithm used in the prototype (given a set
+of current offers): 1) finds feasible mapping through brute
+force search, 2) utilize the Hopcroft-Karp [20] algorithm to
+output a maximum cardinality matching, 3) run a double
+auction to determine a fair price, 4) and construct the
+final allocation. Each time a new offer is received by the
+Allocator, it runs to see if any allocations can be constructed.
+In this way it provides a result in the minimum possible
+time. Other allocation algorithms can be easily integrated
+into the architecture. See the GitHub repository for the
+implementation [15].
+5. Protocol Analysis
+This protocol has been designed to disincentivize devia-
+tion from the protocol. We show this by deriving the partic-
+ipants’ utility functions, the incentives associated with each
+action and model the protocol as a two-player simultaneous
+move game. We refer reader to Table 1 for reference.
+5.1. Customer Utility
+For each input sent, the Customer pays πs, and for each
+correct output, the Customer receives a benefit b. Also, for
+each allocation the customer incurs a setup cost πc setup
+which is
+πc setup = nπcg + πcc + πm + πa (6)
+where πcg is the cost of generating a test, n is the number
+of tests, πcc is the cost of committing the hash of the tests
+41
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+to the SC, πm is the payment to the Mediator for being
+available, and πa is the payment to the Allocator for the
+allocation. The Customer utility then is
+UC = λΔ(b− πs)− nπcg − πcc − πm − πa (7)
+Based on the utility function, the Customer can improve its
+utility if it takes actions that allow it to avoid paying πs to
+the Supplier, or reduce the number n of test inputs that must
+be provided.
+Therefore, we must ensure the customer cannot avoid
+paying πs and will commit n test inputs. We can ensure that
+the Customer cannot avoid payment by having the Customer
+pay λΔπs at the end of the allocation regardless of the
+outcome. This decision avoids complications that appear
+with refunding services that fail, as in prior work [10].
+This design choice may seem unfair—there is a possibility
+that the Customer pays for a service that is not delivered.
+However, our justification for using such a mechanism is
+that in the game analysis we will show that this loss does
+not occur when all participants behave rationally.
+To detect when a Customer does not submit n correct
+tests, the following measures are taken. During signing,
+in addition to the hash of the tests Γ(Oc), the Customer
+includes a hash of the list of inputs Γ(Inc). Similarly, when
+the Supplier calls postOutput, it includes a hash of the
+list of n test inputs γ(Inv). If during the verification process
+Γ(Inc) �= hash(γ(Inv)), then mediation is requested. To
+make sure the Customer commit was honest, the Mediator
+re-processes the n test inputs and computes Γ(Oc) and
+Γ(Inc) and also recomputes α(Oc) and compares against
+the set of hashes α(Oc) the Customer sent to the Supplier
+for identifying the tests. This process ensures the proposed
+system detects if the Customer does not provide the correct
+commitment or data to the Supplier. Since there is no way
+for the Customer to avoid paying, the only deviation from
+the protocol the Customer can take is to provide an incorrect
+commitment of n tests which will be detected and penalized.
+5.2. Supplier Utility
+Recall λ is the incoming data rate and Δ is the duration
+of the allocation, therefore, λΔ is the total number of
+inputs sent during an allocation. That is, if the supplier
+runs an application successfully, it will produce λΔ ≥ n
+outputs, where n is the number of tests used for verification
+(Section 4.1).
+The supplier incurs a cost of πsε processing an input
+and z is the number of inputs processed. For each allocation,
+the Supplier incurs a setup cost of
+πs setup = πv + πm + πa (8)
+where πv is the cost of sending a postOutput request to
+the SC. The Supplier utility then is
+US = λΔ(πs)− zπsε − πv − πm − πa (9)
+Based on the utility function, the Supplier can improve its
+utility if it takes actions that allow it to reduce the number z
+of inputs processed, i.e. skip the processing of some inputs.
+5.3. Incentives
+The goal is to have Customers to provide correct test
+data and Suppliers to process all inputs. In order to disin-
+centivize deviation from this behavior, the Customers and
+Suppliers are required to provide a security deposit πd to
+participate. πd is computed as
+πd = πsλΔρ (10)
+where ρ is a penalty rate defined by the market. Therefore,
+if the Customer is detected for not providing the correct test
+data, or the Supplier is detected for skipping the processing
+of inputs, they are fined πd.
+5.4. Interaction Between Customer and Supplier
+We model the interaction between the Supplier(s) and
+the Customer as a game. The Supplier’s actions are to either
+process an input (denoted by s) or not (denoted by s).
+Similarly, the Customer can choose to provide n correct
+tests (sc) or not (sc). The resulting utility for each possible
+combination is shown in Table 2, and the resulting game is
+shown in Fig. 2.
+The Customer’s dominant strategy is to honestly provide
+n test inputs as long as the utility of providing the inputs
+(sc) is greater than the utility of not providing the inputs
+(sc). Formally if
+[
+UC(s, sc) > UC(s, s̄c)
+]
+∧
+[
+UC(s̄, sc) > UC(s̄, s̄c)
+]
+(11)
+then Uc(∗, sc) is the Customer’s dominant strategy, where ∗
+represents any strategy of the Supplier. To determine the
+conditions that make this true we reference the Customer
+outcomes in Table 2 and substitute them into Eq. (11) and
+simplify. Both inequalities in Eq. (11) result in the same
+simplified inequality nπcg < πcd. Recall that πcg = ecπs,
+where ec < 1 is the customer’s processing efficiency and
+πcd was set to πsλΔρ. Substituting these values in and
+simplifying the inequality gives
+nπcg < πcd
+necπs < πsλΔρ
+nec < n < λΔρ
+(12)
+As shown in Eq. (12), the Customer will always process
+n inputs as long as n < λΔρ, where ρ is the penalty rate
+set by the market. Since we can ensure that the Customer’s
+only reasonable strategy is to provide the test inputs, we do
+not need to consider (for the Supplier) the case when the
+Customer does not provide the inputs.
+The Supplier can neglect processing inputs during the
+allocated service time. Therefore, processing all inputs
+(s, sc) is the dominant strategy for the Supplier as long as
+US(s, sc) > US(s, sc), which holds when λΔ(πs − πsε) >
+42
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+TABLE 2: Game outcomes and payments from Fig. 2. For example, o2 is the outcome when the Supplier does not process
+all the validation inputs correctly and the customer does provide sufficient validation inputs.
+Outcomes
+o1 (ssc) o2 (ssc) o3 (ssc) o4 (ssc)
+Customer λΔ(b− πs)− nπcg − πcc − πa − πm −λΔπs − nπcg − πcc − πa − πm λΔ(b− πs)− πcc − πcd − πa − πm −λΔπs − πcc − πcd − πa − πm
+Supplier λΔ(πs − πsε)− πv − πa − πm −πv − πsd − πa − πm λΔ(πs − πsε)− πv − πa − πm −πv − πsd − πa − πm
+Allocator πA πA πA πA
+Mediator πm πm − n(πsε − πvε + πs)− πmc πm − n(πsε − πvε + πs)− πmc πm − n(πsε − πvε + πs)− πmc
+S
+commit to n outputs
+C
+2
+sc
+3
+sc
+S
+o1 s o2s
+S
+o3 s o4s
+Figure 2: Extensive-form game produced by our protocol.
+Blue nodes indicate Customer moves, red nodes indicate
+Supplier moves. The game is sequential, but the decisions
+are hidden, so we treat it as a simultaneous move game.
+Each outcome has payouts for the agents (Table 2).
+0 20 40 60 80 100
+−1
+0
+1
+·104
+Percentage of Inputs Processed z
+λΔ
+S
+u
+p
+p
+li
+er
+U
+ti
+li
+ty
+U
+S ρ = 0.0001 ρ = 0.1 ρ = 0.2
+Figure 3: Supplier utility US as a function of the percentage
+of inputs processed by the supplier ( z
+λΔ ). Utility is highest
+when all inputs are processed, regardless of ρ.
+−πsd. This is true unless the Customer severely underesti-
+mates the resources required, in which case the Supplier’s
+output states that the resources allocated were exceeded, or
+the Supplier underestimated its power consumption in its
+initial offer.
+This presumes that the Supplier processed every input
+or none of them. However, it is possible that the Supplier
+can risk skipping the processing of some inputs to reduce
+its costs. Given that the Customer only checks n inputs, as
+long as the Supplier processes those n inputs it will not be
+caught. To derive the Supplier’s utility, recall that λΔ is the
+total number of inputs, n is the number of test inputs and
+z is the number of inputs processed by the Supplier. In this
+case, there are
+(
+λΔ
+z
+)
+total ways to select which z inputs are
+processed by the supplier and
+(
+λΔ−n
+z−n
+)
+ways for the supplier
+to not be detected. Therefore, the probability of the supplier
+getting detected is represented by Pd, where Pd is
+Pd = 1−
+(
+λΔ−n
+z−n
+)
+(
+λΔ
+z
+) (13)
+We can then define the utility of the supplier (US) as
+US = λΔπs(1−Pd)−Pdπsd− zπse−πa−πm−πv (14)
+TABLE 3: Experiment Scenarios
+Scenario # of Customers # of Suppliers Supplier Type
+S1 10 10 ideal
+S2 20 10 ideal
+S3 20 20 ideal
+S4 10 10 dishonest
+S5 20 10 dishonest
+S6 20 20 dishonest
+We plot this utility in Fig. 3, where we see that the Supplier
+obtains maximum utility when it processes all of the inputs.
+This analysis shows that since the penalty multiplier ρ is
+set by the market, the market can ensure that the Customer
+will always provide n correct tests. Further, since ρ and n
+are market parameters, and λ and Δ are determined by the
+service the market can ensure a minimum value for Pd.
+6. Experiments
+We have shown analytically that our protocol will deter
+deviation from the protocol for rational agents. We now
+present the experimental performance. To emulate a large
+market, we deployed the actors as Kubernetes Pods using
+the Google Kubernetes Engine (GKE). CPU and RAM
+utilization were extracted directly from GKE’s monitoring
+framework using BigQuery. The blockchain was deployed
+on a machine with an 18 core Intel CPU and 64GB of
+memory.
+The application deployed on this market is a real-world
+application from our partner transit agency that processes a
+stream of video frames to count the number of passengers
+in each vehicle [21, 22]. The data is used for guiding
+the planning of decisions that include deploying additional
+transit vehicles to an area later in the day. We considered
+six scenarios (Table 3), where we varied the number of
+Customers and the number and type of Suppliers. The types
+of Suppliers are: ideal Suppliers that do not cheat and
+process all inputs, and dishonest Suppliers that correctly
+process an input with a 50% probability, otherwise they
+provide a random output. Each of the Customers posted
+one offer to run the occupancy detection application on
+600 frames.
+6.1. Deployment Overhead
+For each scenario, we measured the delay between
+submitting an offer and receiving the allocation from the
+Allocator. The result in Fig. 4 shows that the median allo-
+cation time across scenarios ranged from 9 to 12 seconds
+for Customers and 2 to 12 seconds for Suppliers. Additional
+delay is incurred if the participants wait until the participants
+sign the allocation stored by the SC. The block mean mining
+43
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+Customer Supplier
+0
+5
+10
+15
+D
+u
+ra
+ti
+o
+n
+(s
+)
+S1 S2 S3 S4 S5 S6
+Figure 4: Time between when a customer (or supplier)
+submits an offer and receives an allocation.
+time on our private Ethereum network was 12 seconds.
+Thus the minimum time to call the createAllocation,
+addSupplier and the various sign functions is 45 sec-
+onds on average. To verify we measured the time between
+calling these functions and the transaction being added to
+block and measured 13.6± 6.5, 15.6± 18.5, and 14.4± 9.1
+accordingly. The other SC functions (e.g., postOutput,
+postMediation) are not in the critical path of deploying
+and running the application and so do not delay the appli-
+cation deployment.
+We also measure the time to start the application once
+the allocation has been accepted. This result in Fig. 5 varies
+from 3 to 74 seconds. This time includes downloading and
+starting to run the application Docker image, and depends
+heavily on the size of the image itself. In our case, the
+occupancy detection image was 3GB which impacted the
+setup time. It is important for Customers to take this into
+account when setting the start time of the service. Scenarios
+1, 2, 5, and 6 have significantly shorter setup times, this is
+due to images persisting on disk between runs eliminating
+the time needed to download the image. In the scenarios
+with dishonest Suppliers we measure the time spent in
+mediation. This result in Fig. 6 shows that the median time
+for mediation ranged from 145 to 210 seconds. The duration
+of mediation increased as the number of sporadic Suppliers
+increased. One way to reduce Mediation time is load balance
+the Mediators available in the system.
+During the scenarios we recorded the CPU and memory
+utilization of the pods. The results in Figs. 7 and 8 show the
+average CPU utilization and RAM requirements respectively
+for the Customers, Suppliers and Mediator in scenarios S1-
+S6. Both CPU and RAM usage was consistent for Customers
+and Suppliers between scenarios. Scenarios S4-S6 consisted
+of included dishonest Suppliers and thus required mediation
+which is reflected an increase in CPU and memory usage
+for the Mediator in these cases.
+6.2. Monetary Costs
+The monetary costs of the system are primarily a conse-
+quence of using Ethereum. The gas costs of each function
+can be found in table Table 4. The cost to a Customer of
+using the market for an ideal iteration of the protocol is
+322,222 Gas which includes the cost of signing the alloca-
+S1 S2 S3 S4 S5 S6
+0
+25
+50
+75
+100
+D
+u
+ra
+ti
+o
+n
+(s
+) S1 S2 S3 S4 S5 S6
+Figure 5: Time spent setting up the application for all
+Suppliers in scenarios S1-S6.
+S1 S2 S3 S4 S5 S6
+0
+100
+200
+300
+D
+u
+ra
+ti
+o
+n
+(s
+)
+S1 S2 S3 S4 S5 S6
+Figure 6: Time spent in mediation for scenarios S4-S6 due
+to dishonest Suppliers.
+Customer Supplier Mediator
+0
+2
+4
+·10−2
+C
+P
+U
+U
+ti
+li
+za
+ti
+o
+n
+(%
+)
+S1 S2 S3 S4 S5 S6
+Figure 7: Average CPU utilization per customer, supplier
+and mediator for scenarios S1-S6.
+tion, plus the amount it pays to the Allocator to create the al-
+location. The cost in dollars will depend on which Ethereum
+network is used. The cost on the Ethereum MainNet, using
+the conversion [23] (On 4/20/22 With cost of 30Gwei/gas),
+is $30.22. Alternatively using a Layer 2 scaling solutions
+such as the Polygon network [18] results in a cost of $0.0168
+[24]. For our implementation we ran a private Ethereum
+Network and measured the power consumption. The load
+due to running a miner was approximately 15 watts on
+the lab machine with Intel Xeon CPU and 64 GB RAM,
+which has a base power usage of 145 watts. Thus the cost
+of operating the Ethereum miner, using $0.10/kWh for the
+cost of electricity, is $0.0015/h. For comparision an AWS
+m4.4xlarge (16vCPU and 64GiB memory) spot instance is
+$0.0387/h [25].
+7. Related Research
+Market-driven approaches to outsourced computation
+have been studied in the context of residual cloud computing
+[26] and batch processing [10]. Cherniack et al. [14] outlined
+44
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+TABLE 4: Gas Costs and Delay of Each SC Function Call
+Function createAllocation addSupplier customerSign supplierSign mediatorSign postOutput postMediation
+Gas 208,404 127,038 113,818 109,931 58,053 88,992 87,944
+Response time[s] 13.6 ± 6.5 15.6 ± 18.5 14.4 ± 9.1 12.6 ± 7.1 16 ± 19.3 15.2 ± 11 28.5 ± 18
+Customer Supplier Mediator
+0
+1,000
+2,000
+3,000
+M
+em
+o
+ry
+(M
+B
+) S1 S2 S3 S4 S5 S6
+Figure 8: Average memory used per customer, supplier and
+mediator for scenarios S1-S6.
+a federated market from which producers and consumers de-
+rive value from streaming data; however, they do not address
+trust in their design. TrueBit [12] is a platform designed
+to extend the computation capabilities of blockchain-based
+consensus computers (such as Ethereum) that provide strong
+guarantees that small computations are performed correctly.
+Körbel et al. [27] also relies on blockchain for verification,
+using zk-SNARKs as the verification mechanism. This has
+the advantage that it is able to verify non-deterministic
+computations as long as rules can be defined for determining
+the validity and quality of a result. However, creating the
+verification contract is labor intensive and is required for
+each new service. Further, the process of creating the rules
+requires a trusted step. Thus, for the system to be open to
+any service consumer additional work is required to prevent
+consumers from abusing the service creation process. Ad-
+ditionally, neither of these platforms are suitable for stream
+computing because they incur the latency associated with
+sending results to the blockchain before they are released.
+Dong et al. [28] determine that for verifying outsourced
+computation, the cryptographic approach is not practical and
+should instead use repeated executions. The computations,
+however, should not be duplicated more than twice. Their
+strategy is simple: outsource to two providers and compare
+results. However, their approach does not restrict collusion
+between suppliers, especially if interaction outside smart
+contracts is allowed. Our approach relies on mediation and
+using n inputs make collusion unlikely.
+Coopedge [11] is an edge computing platform imple-
+mented on HyperLedger. Their approach works for co-
+operative offloading of cloud computing tasks to edge
+servers participating in the network. Their primary trust
+mechanism relies on reputation, assuming that the edge
+servers have a long history and can gather enough reputation
+over time. The incentive mechanism consists of offering
+higher rewards for completing a task sooner, and the time
+is determined through consensus on the blockchain. This
+mechanism is not well suited for stream applications with
+potentially high and sporadic data rates. They also do not
+address how to ensure that computations are performed
+correctly.
+8. Conclusion
+Our goal in this paper was to develop a framework that
+would enable the creation of a decentralized market for
+outsourcing of streaming computation. We presented a pro-
+tocol and showed that rational participants would follow the
+protocol and benefit from participating in the system, while
+participants that deviate from the protocol incur fines. While
+this does not prevent agents from operating maliciously and
+returning erroneous results it does ensure that costs exceed
+the benefits within the system in such cases. We do not
+handle scenarios when there are benefits exogenous to the
+system that make it worthwhile to misbehave; we would
+consider such scenarios in future work. Further work is
+also required to improve ways to address potential Mediator
+corruption, as well as the means used to inject the test inputs
+into the data stream as a naive approach could limit the
+system to only support stateless applications.
+References
+[1] W. Yu, F. Liang, X. He, W. G. Hatcher, C. Lu, J. Lin,
+and X. Yang, “A survey on the edge computing for the
+internet of things,” IEEE access, vol. 6, pp. 6900–6919,
+2017.
+[2] L. U. Khan, I. Yaqoob, N. H. Tran, S. M. A. Kazmi,
+T. N. Dang, and C. S. Hong, “Edge-computing-enabled
+smart cities: A comprehensive survey,” IEEE Internet
+of Things Journal, vol. 7, no. 10, pp. 10 200–10 232,
+2020.
+[3] M. R. Schurgot, M. Wang, A. E. Conway, L. G. Green-
+wald, and P. D. Lebling, “A dispersed computing archi-
+tecture for resource-centric computation and commu-
+nication,” IEEE Communications Magazine, vol. 57,
+no. 7, pp. 13–19, 2019.
+[4] M. Garcı́a-Valls, A. Dubey, and V. Botti, “Introduc-
+ing the new paradigm of social dispersed computing:
+applications, technologies and challenges,” Journal of
+Systems Architecture, vol. 91, pp. 83–102, 2018.
+[5] R. van der Meulen, “What edge computing means for
+infrastructure and operations leaders,” Smarter with
+Gartner, 2018.
+[6] B. Varghese, N. Wang, S. Barbhuiya, P. Kilpatrick, and
+D. S. Nikolopoulos, “Challenges and opportunities in
+edge computing,” in 2016 IEEE International Confer-
+ence on Smart Cloud (SmartCloud), 2016, pp. 20–26.
+[7] D. P. Anderson, “BOINC: A platform for volunteer
+computing,” Journal of Grid Computing, vol. 18, no. 1,
+pp. 99–122, 2020.
+45
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply. 
+[8] Cisco, “Cisco annual Internet report - cisco annual
+internet report (2018–2023) white paper,” Cisco,
+2018. [Online]. Available: https://www.cisco.com/
+c/en/us/solutions/collateral/executive-perspectives/
+annual-internet-report/white-paper-c11-741490.html
+[9] D. P. Anderson, C. Christensen, and B. Allen, “De-
+signing a runtime system for volunteer computing,”
+in Proceedings of the 2016 ACM/IEEE Conference on
+Supercomputing (SC). Piscataway, New Jersey: IEEE,
+2006, pp. 33–33.
+[10] S. Eisele, T. Eghtesad, N. Troutman, A. Laszka, and
+A. Dubey, “Mechanisms for outsourcing computation
+via a decentralized market,” in Proceedings of the
+14th ACM International Conference on Distributed and
+Event-based Systems. New York, NY, USA: ACM,
+2020, pp. 61–72.
+[11] L. Yuan, Q. He, S. Tan, B. Li, J. Yu, F. Chen, H. Jin,
+and Y. Yang, “Coopedge: A decentralized blockchain-
+based platform for cooperative edge computing,” in
+Proceedings of the Web Conference 2021, ser. WWW
+’21. Association for Computing Machinery, 2021, p.
+2245–2257.
+[12] J. Teutsch and C. Reitwießner, “A scalable
+verification solution for blockchains,” 2017. [On-
+line]. Available: https://people.cs.uchicago.edu/teutsch/
+papers/truebit.pdf
+[13] Mutable, “Mutable: the public edge cloud,” 2020.
+[Online]. Available: https://mutable.io/
+[14] M. Cherniack, H. Balakrishnan, M. Balazinska, D. Car-
+ney, U. Cetintemel, Y. Xing, and S. Zdonik, “Scalable
+distributed stream processing.” in First Biennial Con-
+ference on Innovative Data Systems Research (CIDR),
+January 2003, pp. 257–268.
+[15] “Code repository for this paper.” [Online]. Available:
+https://github.com/TransactiveSCC/MODiCuM-Online
+[16] “Apache Pulsar – An open-source distributed pub-
+sub messaging system.” [Online]. Available: https:
+//pulsar.apache.org/
+[17] L. Baird and A. Luykx, “The hashgraph protocol: Effi-
+cient asynchronous bft for high-throughput distributed
+ledgers,” in 2020 International Conference on Omni-
+layer Intelligent Systems (COINS), 2020, pp. 1–7.
+[18] C. Sguanci, R. Spatafora, and A. M. Vergani, “Layer
+2 blockchain scaling: a survey,” arXiv, 2021. [Online].
+Available: https://arxiv.org/abs/2107.10881
+[19] D. Kjerrumgaard, Apache Pulsar in Action. Manning,
+2021.
+[20] J. E. Hopcroft and R. M. Karp, “An n5/2 algorithm
+for maximum matchings in bipartite graphs,” SIAM
+Journal on Computing, vol. 2, no. 4, pp. 225–231,
+1973.
+[21] A. Nuzzolo, U. Crisalli, L. Rosati, and A. Ibeas, “Stop:
+a short term transit occupancy prediction tool for aptis
+and real time transit management systems,” in 16th
+International IEEE Conference on Intelligent Trans-
+portation Systems (ITSC 2013). Piscataway, New
+Jersey: IEEE, 2013, pp. 1894–1899.
+[22] M. Wilbur, A. Ayman, A. Ouyang, V. Poon, R. Kabir,
+A. Vadali, P. Pugliese, D. Freudberg, A. Laszka,
+and A. Dubey, “Impact of covid-19 on public transit
+accessibility and ridership,” arXiv, 2020. [Online].
+Available: https://arxiv.org/abs/2008.02413
+[23] “ETH Gas Station.” [Online]. Available: https://legacy.
+ethgasstation.info/calculatorTxV.php
+[24] “Gas fees calculator.” [Online]. Available: https:
+//www.cryptoneur.xyz/gas-fees-calculator
+[25] “Amazon ec2 spot instances pricing,” accessed on
+8.10.2022. [Online]. Available: https://aws.amazon.
+com/ec2/spot/pricing/
+[26] P. Bonacquisto, G. Di Modica, G. Petralia, and
+O. Tomarchio, “A procurement auction market to trade
+residual cloud computing capacity,” IEEE Transactions
+on Cloud Computing, vol. 3, no. 3, pp. 345–357, 2014.
+[27] B. Körbel, M. Sigwart, P. Frauenthaler, M. Sober, and
+S. Schulte, “Blockchain-based result verification for
+computation offloading,” in Service-Oriented Comput-
+ing, H. Hacid, O. Kao, M. Mecella, N. Moha, and H.-y.
+Paik, Eds. Cham: Springer International Publishing,
+2021, pp. 99–115.
+[28] C. Dong, Y. Wang, A. Aldweesh, P. McCorry, and
+A. van Moorsel, “Betrayal, Distrust, and Rational-
+ity: Smart Counter-Collusion Contracts for Verifiable
+Cloud Computing,” in Proceedings of the 2017 ACM
+SIGSAC Conference on Computer and Communica-
+tions Security (CCS). ACM, 2017, pp. 211–227.
+46
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:51:39 UTC from IEEE Xplore.  Restrictions apply.

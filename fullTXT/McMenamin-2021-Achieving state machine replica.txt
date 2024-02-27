@@ -1,0 +1,2128 @@
+Achieving State Machine Replication without Honest Players
+Achieving State Machine Replication without Honest Players
+Conor McMenamin
+Department of Information and
+Communication Technologies,
+Universitat Pompeu Fabra,
+Barcelona, Spain
+Vanesa Daza
+∗
+Department of Information and
+Communication Technologies,
+Universitat Pompeu Fabra,
+Barcelona, Spain
+Matteo Pontecorvi
+NOKIA Bell Labs,
+Nozay, France
+ABSTRACT
+Existing standards for player characterisation in tokenised state
+machine replication protocols depend on honest players who will
+always follow the protocol, regardless of possible token increases for
+deviating. Given the ever-increasing market capitalisation of these
+tokenised protocols, honesty is becoming more expensive and more
+unrealistic. As such, this out-dated player characterisation must be
+removed to provide true guarantees of safety and liveness in a major
+stride towards universal trust in state machine replication protocols
+and a new scale of adoption. As all current state machine replication
+protocols are built on these legacy standards, it is imperative that a
+new player model is identified and utilised to reflect the true nature
+of players in tokenised protocols, now and into the future.
+To this effect, we propose the ByRa player model for state ma-
+chine replication protocols. In the ByRa model, players either at-
+tempt to maximise their tokenised rewards, or behave adversarially.
+This merges the fields of game theory and distributed systems, an
+intersection in which tokenised state machine replication proto-
+cols exist, but on which little formalisation has been carried out.
+In the ByRa model, we identify the properties of strong incentive
+compatibility in expectation and fairness that all protocols must sat-
+isfy in order to achieve state machine replication. We then provide
+Tenderstake, a protocol which provably satisfies these properties,
+and by doing so, achieves state machine replication in the ByRa
+model.
+CCS CONCEPTS
+• Security and privacy→Distributed systems security; •The-
+ory of computation→ Algorithmic game theory.
+KEYWORDS
+Blockchain, State Machine Replication, Game Theory, Incentives,
+Distributed Systems
+ACM Reference Format:
+Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi. 2021. Achieving
+State Machine Replication without Honest Players. In AFT ’21: 3rd ACM
+∗
+Author also affiliated to CYBERCAT - Center for Cybersecurity Research of Catalonia
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+AFT ’21, September 26–28, 2021, Arlington, VA, USA
+© 2021 Copyright held by the owner/author(s). Publication rights licensed to Associa-
+tion for Computing Machinery.
+ACM ISBN 978-1-4503-9082-8/21/09. . . $15.00
+https://doi.org/10.1145/3479722.3480986
+Advances in Financial Technologies, September 26–28, 2021, Arlington, VA,
+USA. ACM, New York, NY, USA, 14 pages. https://doi.org/10.1145/3479722.
+3480986
+1 INTRODUCTION
+Current state machine replication (SMR) protocols, a subset of
+which being blockchain protocols, depend on the existence of al-
+truistic players who ignore token changes and honestly follow the
+protocol. If a player can deviate from a protocol to increase their
+tokens with no perceived effect on safety and liveness, it must be
+assumed that every such individual will choose to do this. In Flash
+Boys 2.0 [17] and subsequent work
+1
+, it is demonstrated that these
+deviation opportunities are rampant in Ethereum, and that players
+are actively availing of them. In any large-scale SMR protocol, most,
+if not all players, will not consider their deviations as affecting SMR.
+Therefore, it is essential that we assume non-adversarial players
+will seek to maximise tokens in tokenised protocols. As a direct
+consequence, SMR guarantees can no longer depend on honest-by-
+default users. We explicitly outline the ByRa (Byzantine or Rational)
+model as an updated player characterisation framework to reflect
+this weakness in current standards. By moving to the ByRa model,
+which we formally define in Definition 4.1, the caveat of honest
+player dependencies in current SMR protocols is removed. Further-
+more, we demonstrate that it is possible to achieve SMR in the ByRa
+model by providing the Tenderstake protocol, an amendment to
+the Tendermint protocol [14, 24].
+To progress towards global adoption, a tokenised SMR protocol
+must first ensure that all players will maximise their tokens by fol-
+lowing the protocol. Implementing an SMR protocol that increases
+a player’s tokens for following the protocol is known as incentivi-
+sation, and is a fundamental requirement for any SMR protocol.
+Much of the work on incentivisation in SMR protocols stems from
+the seminal work on selfish mining in Nakamoto-consensus [20].
+In [20], it is demonstrated that certain players are incentivised to
+deviate from the prescribed protocol. This eventually leads to a sce-
+nario where SMR properties are violated, as discussed in [20]. It is
+only upon the performing of actions as required by the protocol by
+some majority that it is possible to guarantee the SMR properties
+of safety and liveness. This has remained the case in the age of
+tokenisation.
+Despite this, there has been no thorough treatment and analysis
+of tokenised SMR protocols from a game-theoretic standpoint in-
+volving rational players, who want to maximise their net tokenised
+gains (referred to as utility increases in game-theoretic literature),
+and an adversary, who can corrupt the owners of some amount
+of the tokenised consensus resource and behave arbitrarily. These
+1
+https://github.com/flashbots/pm Accessed: 25/05/2021
+1
+https://doi.org/10.1145/3479722.3480986
+https://doi.org/10.1145/3479722.3480986
+https://doi.org/10.1145/3479722.3480986
+https://github.com/flashbots/pm
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3479722.3480986&domain=pdf&date_stamp=2021-11-23
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+corrupted players are known as Byzantine. This characterisation of
+players as either Byzantine or Rational, which we refer to as the
+ByRa model, was first considered in distributed systems literature
+in [28], but never successfully with respect to SMR protocols, al-
+though attempts have been made [5, 25, 37]. The closest semblance
+to this model which has seen wide-scale adoption with respect to
+SMRs is the BAR (Byzantine, Altruistic and Rational) model [3].
+The BAR model crucially includes some portion of altruistic players
+who disregard tokenised utility, and always follow the protocol. Ex-
+amples of authors echoing our desire to move away from altruistic
+dependencies are numerous, but this from Fairledger [25] puts it
+concisely: “We have to take into account that every entity may be-
+have rationally, and deviate from the protocol if doing so increases
+its benefit". Non-adversarial, honest-by-default characters do not
+exist in competitive games, and cannot be depended on in tokenised
+SMR protocols due to their gamified nature. Although many other
+works state the need to move away from altruistic dependencies,
+none have proven the critical nature of this dependency, or pro-
+vided protocols which achieve SMR, in the ByRa model. In this
+paper, we fulfil both of these essential tasks.
+Without the safety net of altruistic players, any successful in-
+stantiation of an SMR protocol in the ByRa model must guarantee
+that rational players will always follow the protocol. To ensure
+this, rational players must expect to strictly maximise their utility
+by following the protocol, a property we define as strong incentive
+compatible in expectation (SINCE).
+Moreover, we must also guarantee that within such an incentive
+compatible protocol, the adversary cannot increase their share of
+tokens to a point where they control enough tokens to prevent
+SMR. Despite the existence of strong incentive compatibility in
+expectation, it may be possible for an adversary to receivemore than
+their share of the tokens that get distributed, increasing their share
+of control. Therefore, wemust additionally ensure that an adversary
+cannot increase the share of tokens they control, a property we
+define as fairness.
+1.1 Our Contribution
+We define the ByRa player characterisation model, the properties
+of SINCE and fairness, and in Definition 4.4, the basic requirements
+a prospective SMR protocol must meet in order to guarantee safety
+and liveness in the ByRa model. If these requirements are met for a
+protocol in the ByRa model, the protocol achieves ByRa SMR. Infor-
+mally, to achieve ByRa SMRwe require that rational players control
+a majority of tokens at all times, and are always incentivised to
+follow the protocol. We then prove that the properties of SINCE and
+fairness are necessary and together sufficient to achieve ByRa SMR
+in the main theorem of the paper.
+Theorem 5.8. For an SMR protocol Π, Π achieves ByRa SMR if
+and only if Π is strong incentive compatible in expectation and fair.
+In addition to this new game-theoretical framework, we provide
+Tenderstake as a concrete instantiation of an SMR protocol that
+provably achieves SINCE and fairness in the ByRa model. Using
+Theorem 5.8, we then prove Tenderstake achieves SMR in the ByRa
+model.
+1.2 Organisation of the paper
+In Section 2 we review related work and present an overview of
+attempts to implement, and works in favour of, the ByRa model for
+SMR protocols. In Section 3 we provide a background on the SMR
+and game theory concepts needed to define the ByRamodel. Section
+4 introduces a new game-theoretic framework for analysing SMR
+protocols. This new framework defines the ByRa model, and out-
+lines what we require from SMR protocols in the ByRa model, intro-
+ducing the properties of SINCE and fairness. In Section 5 we prove
+that SINCE and fairness are necessary for a protocol to achieve
+ByRa SMR. We then prove that together, SINCE and fairness are
+sufficient properties for a protocol to achieve ByRa SMR. In Sec-
+tion 6 we outline the Tenderstake protocol as an example, for the
+first time in literature, of a SINCE and fair ByRa SMR protocol. In
+Section 7 we reason that Tenderstake satisfies the necessary and
+sufficient properties of safety and liveness for SMR when players
+controlling a majority of the consensus votes follow the protocol in
+every round. We then prove that the Tenderstake protocol is SINCE
+and fair, which using Theorem 5.8, implies Tenderstake achieves
+ByRa SMR. We conclude in Section 8.
+2 RELATEDWORK
+There is a growing appreciation that incentivisation is not only
+important, but necessary, to ensure the successful instantiation of
+an SMR protocol. Many works have argued for the incentivisation
+of players in SMR protocols [2, 5, 6, 10, 11, 16, 18, 22, 23, 26–28,
+33, 34, 36, 37] while many others demonstrate the critical need for
+incentive compatibility in tokenised SMR protocols [4, 8, 9, 12, 13,
+15, 17, 20, 21, 30, 31, 35].
+The characterisations of Byzantine and rational, coupled with
+that of altruistic players who always follow the protocol, segues
+into the BAR player characterisation model as introduced in [3].
+We amend the player characterisations to only include those of
+Byzantine and rational players in what we call the ByRa model,
+removing any dependency on altruistic players.
+A very similar player model is discussed in [27, 28], but with
+respect to one-shot multiparty computation (MPC). We extend the
+action space of a one-shot MPC to allow for indefinite, sequen-
+tialised action profiles in line with those of SMR protocols. We
+introduce the necessity for strict maximisation of expected utility
+to ensure rational players always follow a protocol. This is opposed
+to [27, 28], where it is claimed that equality of utility will suffice
+to ensure a rational player will choose one strategy over another,
+a strong assumption which we prove to be unnecessary. We also
+allow the adversary to behave arbitrarily, as done in [27].
+Although [27] labels this player model as mixed-behaviour, and
+buzzwords such as Price of Malice and Price of Anarchy are associ-
+ated with the model in [28], there has been no consensus on the
+naming of player models containing only Byzantine and rational
+players. Distributed computing literature since then has been ap-
+parently divided on which model to use, while the BAR model
+remains prevalent. We believe this is, among other possibilities,
+a consequence of the ambiguity of these names compared to the
+clarity of BAR. We thus refer to our version of this player model as
+the ByRa model. The only examples of this player model in SMR
+2
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+Paper Network Model
+Player Model
+w/o Honest Players
+Evolving-Stake Adversary SINCE Fair
+Rationals vs. Byzantines [5] Broadcast Synchrony
+2 ✓ ✗ ✓ 3 ✓ 4
+Blockchain Without Waste [36] Synchrony ✓ ✗5 ✓ 6 ✗
+Blockchains Cannot Rely on Honesty [37] Synchrony ✓ ✗ ✗ ✗
+Fruitchains, Snow White [18, 33] Partial Synchrony ✗ ✗ ✗ ✗
+Casper Incentives [16] Partial Synchrony ✗ ✗ ✗ ✗
+FairLedger [25] Synchrony ✗ ✗ ✗ ✗
+Tenderstake (Algorithm 1) Partial Synchrony ✓ ✓ ✓ ✓
+Table 1: Comparison of main works claiming incentive compatibility. 2An idealised model where every message, including adversarial mes-
+sages, are known to be instantly delivered to all players. 3No explicit reward mechanism provided, non-trivial for BFT protocols. 4Enforced by the idealised
+network model/ unspecified reward mechanism. 5No adversary in player model. 6Author creates a dominating cost unrelated to quantity of stake for deviation.
+literature making meaningful attempts to remove altruistic entities
+are in [5, 37].
+Table 1 exhibits the shortcomings of related work in providing
+SMR protocols that guarantee rational players always follow the
+protocol (SINCE), and that prevent an adversary from increasing
+their share of stake to destroy the system (Fair). Table 1 also includes
+our proposal, Tenderstake as a standard against which to compare
+these works.
+A common pitfall of legacy incentive compatible proofs is to
+prove that following a protocol is a Nash Equilibrium in the presence
+of honest players [18, 21, 22, 33]. In the ByRa model this assumption
+is not possible, and therefore those proofs are not sound.
+In [5], it is implicitly assumed rewards are paid to all players
+who contribute to consensus on a block. This is non-trivial in the
+ByRamodel, as rewards in their system depend onmessage delivery.
+From a protocol’s perspective, these messages need to recorded by
+a proposer at some point in the protocol, and rational proposers
+may be incentivised to omit players, as is the case in previous works
+from subsets of the same authors [7, 8]. We address this omission
+in the Tenderstake protocol, providing an explicit solution in the
+ByRa model.
+Although [37] provides an SMR protocol which approaches
+SINCE, they do not provide a rigorous player model excluding al-
+truistic players, and in the presence of a deviating adversary, there
+are strategies which strictly outperform the recommended proto-
+col strategy for rational players, preventing both strong incentive
+compatibility and fairness.
+A purely economic approach to SMR protocols is taken in [36].
+The proposed player model only considers rational players, and
+depends on a dominating cost for certain deviations that is not
+quantifiable within the protocol game of maximising stake. In this
+paper, we demonstrate that it is possible to construct a protocol,
+Tenderstake, that strictly maximises stake by following the protocol.
+As following the protocol maximises the value of stake in [36],
+Tenderstake captures the same maximisation of value without the
+potentially problematic dependency on unquantifiable external
+costs unrelated to quantity of stake.
+One of the legacy works in relation to fairness and incentive
+compatibility of SMR protocols is Fruitchains [33]. The Fruitchains
+player model consists of an altruistic majority of players and a co-
+operative rational minority. Fruitchains crucially relies on an under-
+lying blockchain satisfying an SMR protocol in order to guarantee
+fairness of rewards. They fail to consider the incentives of all parts
+of the system, relying on an altruistic majority in order to guarantee
+the underlying blockchain satisfies the required SMR properties.
+They then add a section where claims of incentive compatibility
+for non-cooperative rational players are made. The authors claim a
+protocol is incentive compatible if fairness of rewards has already
+been guaranteed. As fairness in their system is only guaranteed if
+a majority of players follow the protocol, there is no logical impli-
+cation which proves that rational players will always follow the
+protocol, required for incentive compatibility. This is insufficient to
+guarantee SMR in the ByRa model. This dependence on an under-
+lying correct-by-default SMR protocol/ trusted third-party is also
+demonstrated in [16, 25], where claims of incentive compatibility
+and fairness do not hold in the ByRa model.
+3 PRELIMINARIES
+This section covers the concepts and definitions required to reason
+about SMR protocols from a game-theoretic perspective. First we
+define SMR and a general notion of a blockchain which provides
+some intuition for our SMR definitions, and primes the reader for
+our description of the Tenderstake protocol in Section 6. We then
+provide the game theory framework necessary to formally reason
+about SMR protocols involving rational and adversarial players,
+and how SMR can be achieved in the presence of these types of
+players. In the following we let negl() be a function which for any
+polynomial p() there exists a constant ^0 ∈ N such that negl(^) <
+1
+p(^0) for all ^ ≥ ^0. This negl() is known in literature as a negligible
+function.
+In this paper, we are interested in a distributed set of 𝑛 players
+{𝑃1, ..., 𝑃𝑛} interacting with one and other inside a protocol which
+will produce some output that all players correctly participating
+in the protocol can agree on. This output will be a replicated state
+machine. First, we define a state machine.
+Definition 3.1. A state machine consists of set of variables, and
+sequence of commands/ updates on those variables, producing some
+output.
+3
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+The concept of a state machine alone does not capture the notion
+that potentially many players can reconstruct a common view of
+the same state of a machine, and requires extension.
+Definition 3.2. For a set of players {𝑃1, ..., 𝑃𝑛} and a state ma-
+chine, state machine replication (SMR) is a process that allows each
+player to execute a common sequence of commands acting on the
+machine’s state in the same order, thus maintaining a common view
+of the machine’s state.
+Progressing towards our goal of analysing SMR protocols, we
+must first define what we require from an SMR protocol. We take
+inspiration for our definition from [1], where their system model is
+clearly and concisely explained, and is very similar to ours.
+Notation 3.3. With respect to protocols and recommended pro-
+tocol actions, a correct player is a player who always follows the
+recommended protocol actions.
+Definition 3.4. An SMR protocol Π deciding on a potentially in-
+finite sequence of state machine updates satisfies the following
+properties:
+• Safety: For any two correct players 𝑃𝑖 , 𝑃 𝑗 in Π, 𝑖 ≠ 𝑗 , if 𝑃𝑖
+decides on an SMR update 𝑉𝑖 at position 𝑘 in the sequence,
+and 𝑃 𝑗 decides on an SMR update 𝑉𝑗 at position 𝑘 in the
+sequence, then 𝑉𝑖 = 𝑉𝑗 .
+• Liveness: For any position 𝑘 in the sequence, every correct
+player eventually decides on an SMR update for position 𝑘 .
+To achieve SMR, we utilise the concept of a blockchain. This is
+done in a generic manner so as to allow for direct comparison with
+most blockchain instantiations.
+Definition 3.5. A block 𝐵 is a data structure used to communicate
+changes to the state machine view of each player. Blocks consist
+of a pointer(s) to previous block(s), and a set of instructions with
+which to update the state. State machine updates in a block are
+applied to the state described by the block(s) to which they point.
+The genesis block 𝐵1 describes the starting state of the system and is
+a priori agreed upon by all players. The global state at any point in
+the system is then described by applying the state machine updates
+according to some ordering rule starting from the genesis block. A
+blockchain C = [𝐵1, ..., 𝐵𝐻 ] is the ordered data structure created by
+traversing the block pointers from the genesis block to all blocks
+to be applied to the global state according to the ordering rule. 𝐻
+denotes the height of the blockchain.
+In our system, an SMR protocol Π consists of 𝑛 players owning
+shares of a finite resource, which we will refer to as stake, and
+denoted Stake1 at initialisation. Π proceeds in fixed-time periods,
+which we refer to as rounds, beginning in round 1. For any height
+𝐻 > 1 of the blockchain, players participate inΠ to decide on a block
+for that height. Reaching consensus on a block will involve one
+or more successful protocol steps. After a block has been decided
+for height 𝐻 ≥ 1, the total stake in the system is denoted Stake𝐻
+with player shares of Stake𝐻 denoted 𝑠𝐻
+1
+, ...., 𝑠𝐻𝑛 . Without loss of
+generality, we assume
+∑𝑛
+𝑖=1 𝑠
+𝐻
+𝑖
+= 1, and for all 𝑖 ∈ {1, ..., 𝑛}, 𝐻 ≥ 1,
+𝑠𝐻
+𝑖
+< 1
+2
+.
+Now we introduce some basic game theory to allow us to prop-
+erly reason about SMR protocols in our system as games, taking in-
+spiration for our definitions from [32]. The games we are concerned
+with, SMR protocols, are played by players with strict incomplete
+information, meaning some subset of players will not know the
+action choices of other players for certain rounds when they are
+required to choose their own actions. As such, we need to be able
+to describe what a player knows (and implicitly what they do not),
+which we call their private information. Furthermore, we must be
+able to describe what motivates players in games. This motivation
+is provided by a utility function, which attributes a numerical score
+to each action a player can take. In games, players choose the action
+which maximises their utility function.
+Definition 3.6. A game, denoted G, progressing in rounds with
+strict incomplete information for a set of 𝑛 players {𝑃1, ..., 𝑃𝑛} can
+be described by the following:
+• For every 𝑃𝑖 , a set of actions 𝑋𝑖 . We denote by 𝑋−𝑖 the set of
+actions that each player excluding 𝑃𝑖 can take. For 𝑥−𝑖 ∈ 𝑋−𝑖 ,
+𝑥−𝑖 is described by a vector of actions of length 𝑛 − 1, with
+each vector position mapping to a unique player.
+• For every player 𝑃𝑖 and round 𝑟 , a set of private informations
+𝑇 𝑟
+𝑖
+. A value 𝑡𝑟
+𝑖
+∈ 𝑇 𝑟
+𝑖
+is a private information value that 𝑃𝑖 can
+have at round 𝑟 . We denote by 𝑡𝑟−𝑖 the private informations
+held by all players excluding 𝑃𝑖 at round 𝑟 .
+• For every player 𝑃𝑖 , current round 𝑟 ≥ 1, and some round
+𝑟 ′ ≥ 𝑟 , the utility function for 𝑃𝑖 with respect to round 𝑟 ′ is
+defined as :
+𝑢𝑟𝑖 : 𝑇 𝑟
+𝑖 × 𝑋𝑖 × ... × 𝑋𝑖︸        ︷︷        ︸
+𝑟 ′+1−𝑟
+×𝑋−𝑖 × ... × 𝑋−𝑖︸            ︷︷            ︸
+𝑟 ′+1−𝑟
+→ R (1)
+where 𝑢𝑟
+𝑖
+(𝑡𝑟
+𝑖
+, 𝑥𝑟
+𝑖
+, ..., 𝑥𝑟
+′
+𝑖
+, 𝑥𝑟−𝑖 , ..., 𝑥
+𝑟 ′
+−𝑖 ) is the utility achieved by
+𝑃𝑖 in round 𝑟 ′ with private information 𝑡𝑟
+𝑖
+, if player 𝑃𝑖 takes
+the actions 𝑥𝑟
+𝑖
+, ..., 𝑥𝑟
+′
+𝑖
+in rounds 𝑟, ..., 𝑟 ′ respectively, and the
+actions of all other players are described by 𝑥𝑟−𝑖 , ..., 𝑥
+𝑟 ′
+−𝑖 in
+rounds 𝑟, ..., 𝑟 ′ respectively.
+Although utility functions evaluate actions given the actions of
+all other players, the actions of the other players may not be known
+in advance. Therefore, players will need to be able to choose their
+actions solely based on their private informations. The actions a
+player takes given some private information are computed through
+a strategy, which is defined in Definition 3.7.
+Definition 3.7. A strategy of a player 𝑃𝑖 is a function str𝑖 : 𝑇 𝑟
+𝑖
+→
+𝑋𝑖 , 𝑟 ≥ 1, which defines the action to be taken by 𝑃𝑖 given some
+private information value. A strategy str𝑖 is mixed if for a player
+𝑃𝑖 with𝑚𝑖 possible strategies Str𝑖 = {str1𝑖 , ..., str
+𝑚𝑖
+𝑖
+}, they select a
+strategy to follow from Str𝑖 according to some probability distribu-
+tion. For every player 𝑃𝑖 , str−𝑖 describes the mixed strategies taken
+by all players excluding 𝑃𝑖 .
+Definition 3.8. For an SMR protocol Π, the recommended strategy,
+denoted strΠ , is the strategy that Π requires players to follow in
+order to successfully achieve SMR.
+4 A GAME-THEORETIC FRAMEWORK FOR
+SMR
+In this section we formalise the ByRa framework for SMR pro-
+tocols, where participants are either adversarially or rationally
+motivated. This is in response to the existential threat posed by
+4
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+the growing trend of players managing SMR protocols acting in a
+profit-maximising manner [17] in protocols where security guaran-
+tees depend on honest players. Furthermore, this framing is made
+quite naturally, given SMR protocols are accurately modelled as
+games with strict incomplete information as defined in Definition
+3.6.
+This is a crucial progression from existing standards in dis-
+tributed systems literature where some number of non-adversarial
+players are honest-by-default. Due to the distributed nature of SMR
+protocols, as a baseline we need to account for some portion of
+adversarial players who can behave arbitrarily with unknown util-
+ity functions. The remaining rational players follow some known
+utility function, and attempt to choose the actions which maximise
+it. To ensure the honest behaviour of rational players in SMR pro-
+tocols within this setting, following the protocol strategy must
+maximise the expected utility of rational players. We define these
+player characterisations here formally as the ByRa model.
+Definition 4.1. The ByRamodel consists of Byzantine and Rational
+players. A player is:
+• Byzantine if they deviate arbitrarily from the recommended
+strategywithin a gamewith unknown utility function. Byzan-
+tine players are chosen and controlled by an adversary A.
+• Rational if they choose uniformly at random from all mixed
+strategies which maximise their known utility function as-
+suming all other players are rational.
+This definition of rational players omits tie-breaking assump-
+tions that bias a rational player to certain strategies over others
+with equal utility. If we have a protocol that requires rational play-
+ers to choose a certain strategy, it is necessary to make the payoff
+for that strategy strictly greater than that of any other.
+A rational player who assumes all other players are rational is
+known as an oblivious rational player [28, 29]. A rational player who
+is not oblivious knows there are players in the system controlling
+a non-negligible share of stake, controlled by an adversary, who
+may try to break safety and liveness. Adding this to the private
+information of a rational player adds a probability of safety and
+liveness failing if protocol actions are not followed, which becomes
+1 in the presence of a maximal adversary. This outcome has a critical
+cost for rational players (as used in [5, 28, 29, 36]), which can be
+made arbitrarily high to prevent rational players from deviating
+from protocol actions, and the following of protocol actions trivial.
+We believe this is highly unrepresentative of rational players
+in SMR protocols today, particularly in light of the clear recent
+evidence that miners can and are deviating from protocol actions
+to increase their on-chain rewards [17]. As such, in the rest of this
+paper, we assume all rational players are oblivious, and prove our
+main lemmas and theorems given this weakest possible assumption.
+To consider rational players in any game, it is necessary to ex-
+plicitly define what their utility functions are. Inkeeping with the
+tokenised assumptions of our model, we let rational player utility
+be measured in stake as described by the blockchain. By their na-
+ture, tokenised SMR protocols require it to be expensive to deviate
+from the protocol actions, encouraging honest behaviour through
+stake rewards, and/or stake punishments for dishonest behaviour.
+Given the unprecedented levels of SMR protocol usage as a result
+of tokenisation, we see stake as the driving utility measure for the
+players who participate in these protocols.
+As total stake is only meaningful with respect to a particular
+time-point, and SMR protocols are played indefinitely, rational play-
+ers will seek to maximise their total stake at all possible rounds
+sufficiently far into the future. Therefore, when discussing incentivi-
+sation and player utility, it is necessary to refer to stake/share/total
+stake with respect to rounds. As we are using the round variable
+as a counter, and some rounds may be unsuccessful, it cannot be
+independently used to determine the height, and vice versa. Rather
+than add notation to relate the two, we treat them separately, and
+make it clear from context which is being used. When referring to
+stake/share/total stake with respect to particular rounds, we use
+superscripts involving 𝑟 , whereas when discussing these variables
+with respect to the height of the blockchain, we use superscripts
+involving 𝐻 .
+Notation 4.2. For an SMR protocol Π, we denote by 𝛼 the maximal
+share of stake such that for players controlling greater than 1 −
+𝛼 of the stake following the SMR protocol, safety and liveness
+are achieved. The exact value of 𝛼 will depend on the network
+distribution assumptions, in line with the results of [19], which
+must be contained in the threat model.
+For some security parameter ^ ∈ N, our goal is to guarantee that
+SMR can be achieved (that is, both safety and liveness are satisfied)
+in the ByRa model with probability greater than 1 − negl(^) over
+any polynomial in ^ rounds.
+We first need to introduce an equivalence relation for mixed
+strategies over finite rounds. When we state the protocol strategy
+which needs to be followed to achieve SMR, although there is an
+infinite number of strategy encodings, we only require players to
+follow strategies which result in actions as outlined by the protocol.
+We are indifferent to how this is achieved. If a strategy is encoded
+differently to the recommended protocol strategy, but results in
+actions as prescribed by the protocol with probability greater than
+1 − negl(^) over any polynomial in ^ rounds, we see this as equiv-
+alent to the recommended protocol strategy.
+Definition 4.3. For a player 𝑃𝑖 at initialisation, and round 𝑟 ′ ≥ 1,
+two mixed strategies str𝑎
+𝑖
+and str𝑏
+𝑖
+are equivalent with respect to
+round 𝑟 ′ if for all rounds 𝑟 , 1 ≤ 𝑟 ≤ 𝑟 ′, and private informations
+𝑡𝑟
+𝑖
+∈ 𝑇 𝑟
+𝑖
+, it is the case that str𝑎
+𝑖
+(𝑡𝑟
+𝑖
+) = str𝑏
+𝑖
+(𝑡𝑟
+𝑖
+). We use str𝑎
+𝑖
+≡𝑟 ′ str𝑏
+𝑖
+to denote this equivalence relation. If str𝑎
+𝑖
+≡𝑟 ′ str𝑏
+𝑖
+for all rounds
+𝑟 ′ polynomial in ^, str𝑎
+𝑖
+and str𝑏
+𝑖
+are equivalent, denoted by str𝑎
+𝑖
+≡
+str𝑏
+𝑖
+.
+With this equivalence relation, we can now define what it means
+for a protocol to achieve SMR in the ByRa model. In this paper,
+after deciding on a block at height𝐻 ≥ 1, we denote the adversarial
+share of stake by 𝑠𝐻A .
+Definition 4.4. For an SMR protocol Π and round 𝑟 , let 𝑝𝑟Π be
+the probability that players controlling more than 1 − 𝛼 of the
+total stake follow a mixed strategy str ≡𝑟 strΠ up to and including
+round 𝑟 for any 𝑠1A < 𝛼 . Π achieves ByRa SMR if for all rounds
+𝑟 ′ polynomial in ^ it holds that 𝑝𝑟
+′
+Π is greater than 1 − negl(^).
+Otherwise, Π fails in the ByRa model.
+5
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+Towards the goal of achieving ByRa SMR, we need to formally
+define rational utility as measured in stake. For a rational player 𝑃𝑖
+with private information 𝑡𝑟
+𝑖
+and round 𝑟 ′ ≥ 𝑟 , we have:
+𝑢𝑟
+′
+𝑖 (𝑡
+𝑟
+𝑖 , 𝑥
+𝑟
+𝑖 , ..., 𝑥
+𝑟 ′
+𝑖 , 𝑥
+𝑟
+−𝑖 , ..., 𝑥
+𝑟 ′
+−𝑖 ) = 𝑠𝑟
+′
+𝑖 · Stake
+𝑟 ′ . (2)
+However, in a game with strict incomplete information as is the
+case in an SMR protocol, a rational player 𝑃𝑖 with private informa-
+tion 𝑡𝑟
+𝑖
+will not know their own future private information values
+(required to choose their actions), the private informations of the
+other players, or str−𝑖 , before choosing str𝑖 . Therefore, 𝑃𝑖 must
+choose the mixed strategy which maximises 𝑃𝑖 ’s expected stake
+at round 𝑟 ′, denoted 𝐸 (𝑠𝑟 ′
+𝑖
+· Stake𝑟 ′), according to the probability
+distribution that 𝑃𝑖 attributes to possible values for these unknowns.
+This distribution will be contained in 𝑡𝑟
+𝑖
+.
+Thus, knowing 𝑡𝑟
+𝑖
+is sufficient to calculate 𝑃𝑖 ’s expected utility of
+a particular strategy at round 𝑟 ′, which we express mathematically
+by 𝐸 (𝑠𝑟 ′
+𝑖
+· Stake𝑟 ′ |𝑡𝑟
+𝑖
+, str𝑖 ). We state this formally in Definition 4.5.
+Definition 4.5. For an SMR protocol Π and rational player 𝑃𝑖
+with private information 𝑡𝑟
+𝑖
+, mixed strategy str𝑖 , and a particular
+round 𝑟 ′ ≥ 𝑟 , the expected utility of str𝑖 for 𝑃𝑖 at round 𝑟 ′ is denoted
+𝑢𝑟
+′
+𝑖 (𝑡𝑟𝑖 , str𝑖 ) and is described by 𝑢
+𝑟 ′
+𝑖 (𝑡𝑟𝑖 , str𝑖 ) = 𝐸 (𝑠𝑟 ′
+𝑖
+· Stake𝑟 ′ |𝑡𝑟
+𝑖
+, str𝑖 ).
+As such, for a rational 𝑃𝑖 in an SMR protocol Π with private infor-
+mation 𝑡𝑟
+𝑖
+, 𝑃𝑖 will choose the mixed strategy str𝑖 which maximises
+𝑢𝑟
+′
+𝑖 (𝑡𝑟𝑖 , str𝑖 ). To establish the existence, or not, of such a mixed strat-
+egy, we introduce an inequality in Definition 4.6 which allows us
+to pairwise rank mixed strategies by expected utility.
+Definition 4.6. For an SMR protocol Π, rational player 𝑃𝑖 and two
+mixed strategies str𝑎
+𝑖
+, str𝑏
+𝑖
+, str𝑎
+𝑖
+strictly dominates str𝑏
+𝑖
+in expectation
+if there exists 𝑟 ′′ ≥ 𝑟 , 𝑟 ′′ polynomial in ^ , such that for all 𝑟 ′ >
+𝑟 ′′, 𝑢𝑟
+′
+𝑖 (𝑡𝑟𝑖 , str
+𝑎
+𝑖
+) > 𝑢𝑟
+′
+𝑖 (𝑡𝑟𝑖 , str
+𝑏
+𝑖
+). If str𝑎
+𝑖
+strictly dominates str𝑏
+𝑖
+in
+expectation, we denote this relationship by str𝑎
+𝑖
+>𝑢 str𝑏
+𝑖
+.
+Using the strict dominance in expectancy relationship, we can
+formally define what we require from an SMR protocol in order for
+rational players to follow the recommended protocol strategy. This
+requirement is strong incentive compatibility in expectation, and
+is defined in Definition 4.7.
+Definition 4.7. An SMR protocol Π is Strong INcentive Compatible
+in Expectation (SINCE) if for any rational player 𝑃𝑖 , strΠ >𝑢 str𝑖 for
+all mixed strategies str𝑖 ∈ Str𝑖 , with Str𝑖 the set of mixed strategies
+available to 𝑃𝑖 , such that str𝑖 �≡ strΠ .
+For a protocol to be SINCE in the ByRa model ensures that all
+rational players will follow the recommended protocol strategy.
+However, SINCE is not on its own sufficient to ensure the safety
+and liveness of an SMR protocol in ByRa model. It is still possible
+for an adversary to gain more than their fair share of rewards, and
+as such, increase their total share above the critical threshold of 𝛼 .
+Towards achieving SMR in the ByRa model, it must be ensured that
+the adversarial share remains strictly bounded by the threshold 𝛼
+required to achieve SMR if all non-adversarial players follow the
+protocol. We explicitly define what we mean by fairness in the
+ByRa model in Definition 4.8.
+Definition 4.8. An SMR protocol Π with adversary A is fair in
+the ByRa model if 𝑃 (𝑠𝑟A ≤ 𝑠1A ) > 1− negl(^) for any round 𝑟 ≥ 1 .
+5 ACHIEVING SMR IN THE BYRA MODEL
+With SINCE and fairness, we have two properties which turn out
+to be crucial in achieving ByRa SMR. Towards our final goal of
+proving that the properties of SINCE and fairness are necessary,
+and together sufficient, to achieve ByRa SMR, the first step is to
+prove in Lemma 5.6 that SINCE is necessary. To allow us to prove
+this result, we introduce notation which allows us to consider, for a
+potential SMR protocol, the strategies from which rational players
+choose.
+Definition 5.1. For a rational player 𝑃𝑖 with a set of mixed strate-
+gies Str𝑖 , let StrNSD𝑖
+⊆ Str𝑖 be such that for all str𝑖 ∈ StrNSD𝑖
+, there
+does not exist a str𝑢
+𝑖
+∈ Str𝑖 , such that str𝑢
+𝑖
+>𝑢 str𝑖 .
+That is, if a mixed strategy str ∈ Str𝑖 is in the set StrNSD
+𝑖
+, there is
+no strategy for 𝑃𝑖 which strictly dominates str in expectancy. We
+provide the following Lemmas towards establishing that rational
+players will choose strategies exclusively from StrNSD
+𝑖
+.
+Lemma 5.2. For an SMR protocol Π, a rational player 𝑃𝑖 , any
+strategy str𝑎
+𝑖
+∈ Str𝑖 , and |Str𝑖 | ≥ 2, either str𝑎
+𝑖
+∈ StrNSD
+𝑖
+or there is
+some str𝑏
+𝑖
+∈ StrNSD
+𝑖
+such that str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+.
+Proof. We will do this by induction over the cardinalities of
+Str𝑖 . First we check |Str𝑖 | = 2. If str𝑎
+𝑖
+is in StrNSD
+𝑖
+, we are finished.
+Assume otherwise. That is, str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+, which implies str𝑎
+𝑖
+̸>𝑢 str𝑏
+𝑖
+,
+and as such, str𝑏
+𝑖
+∈ StrNSD
+𝑖
+as required.
+Assume the inductive hypothesis for |Str𝑖 | = 𝑘 .
+Now, given this assumption, we must prove our hypothesis holds
+for |Str𝑖 | = 𝑘 + 1. Consider a strategy str𝑐
+𝑖
+∈ Str𝑖 . We need to prove
+either str𝑐
+𝑖
+∈ StrNSD
+𝑖
+, or there exists str ∈ StrNSD
+𝑖
+with str >𝑢 str𝑐
+𝑖
+.
+If str𝑐
+𝑖
+is not strictly dominated by any strategy str ∈ Str𝑖 , then
+str𝑐
+𝑖
+∈ StrNSD
+𝑖
+.
+Assume instead there exists some strategy str𝑎
+𝑖
+∈ Str𝑖 , str𝑎𝑖 >𝑢
+str𝑐
+𝑖
+. Consider 𝑍𝑖 = Str𝑖\{str𝑐𝑖 }. By the inductive assumption, either
+str𝑎
+𝑖
+∈ 𝑍NSD
+𝑖
+, or there exists str𝑏
+𝑖
+∈ 𝑍NSD
+𝑖
+such that str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+. If
+str𝑎
+𝑖
+∈ 𝑍NSD
+𝑖
+, then str𝑎
+𝑖
+∈ StrNSD
+𝑖
+, which implies there exists str ∈
+StrNSD
+𝑖
+such that str >𝑢 str𝑐
+𝑖
+. Otherwise, if str𝑎
+𝑖
+∉ 𝑍NSD
+𝑖
+, there exists
+str𝑏
+𝑖
+∈ 𝑍NSD
+𝑖
+, with str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+. As str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+, and str𝑎
+𝑖
+>𝑢 str𝑐
+𝑖
+,
+this implies str𝑏
+𝑖
+>𝑢 str𝑐
+𝑖
+. As str𝑏
+𝑖
+∈ 𝑍NSD
+𝑖
+, and str𝑏
+𝑖
+>𝑢 str𝑐
+𝑖
+, this
+implies str𝑏
+𝑖
+∈ StrNSD
+𝑖
+. Therefore, there exists str ∈ StrNSD
+𝑖
+such
+that str >𝑢 str𝑐
+𝑖
+.
+⊠
+As rational players choose uniformly at random from all mixed
+strategies which maximise utility, from Lemma 5.2 for a rational
+player 𝑃𝑖 these mixed strategies will be contained in StrNSD
+𝑖
+. More-
+over, Definition 4.1 states that 𝑃𝑖 chooses from these mixed strate-
+gies in StrNSD
+𝑖
+with uniform probability. Therefore, to ensure ra-
+tional players follow strΠ with probability at least 1 − negl(^),
+we must identify the conditions where for any rational player 𝑃𝑖 ,
+StrNSD
+𝑖
+= {strΠ}. We state this explicitly in Observation 5.3.
+Observation 5.3. A rational player 𝑃𝑖 follows strΠ with probability
+greater than 1 − negl(^) if and only if StrNSD
+𝑖
+= {strΠ}.
+The precise conditions where StrNSD
+𝑖
+= {strΠ} for a rational
+player 𝑃𝑖 are identified in Lemma 5.4.
+6
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+Lemma 5.4. For an SMR protocol Π and a rational player 𝑃𝑖 ,
+StrNSD
+𝑖
+= {strΠ} if and only if Π is strong incentive compatible
+in expectation.
+Proof. If an SMR protocol Π is SINCE, then for any rational
+player 𝑃𝑖 , strΠ strictly dominates all other strategies in expectation.
+From Lemma 5.2, this implies StrNSD
+𝑖
+= {strΠ}.
+Now we need to show if StrNSD
+𝑖
+= {strΠ}, then Π is SINCE. From
+Lemma 5.2, we know for any strategy str𝑎
+𝑖
+, either str𝑎
+𝑖
+∈ StrNSD
+𝑖
+or there is some str𝑏
+𝑖
+∈ StrNSD
+𝑖
+such that str𝑏
+𝑖
+>𝑢 str𝑎
+𝑖
+. As the only
+strategy in StrNSD
+𝑖
+is strΠ , this implies for any strategy str𝑎
+𝑖 �≡ strΠ ,
+strΠ >𝑢 str𝑎
+𝑖
+. This implies Π is SINCE, as required. ⊠
+Corollary 5.5. For an SMR protocol Π and a rational player 𝑃𝑖 ,
+𝑃 (𝑃𝑖 chooses strΠ) > 1− negl(^) if and only if Π is strong incentive
+compatible in expectation.
+Proof. Follows from Observation 5.3 and Lemma 5.4. ⊠
+This allows us to prove SINCE is a necessary property to achieve
+ByRa SMR.
+Lemma 5.6. For an SMR protocol Π, if Π is not strong incentive
+compatible in expectation, then Π fails in the ByRa model.
+Proof. Consider such a protocol Π. As a consequence of not
+SINCE, for a rational player 𝑃𝑖 , this means 𝑃 (𝑃𝑖 chooses strΠ) is not
+greater than 1 − negl(^), applying Corollary 5.5. From Definition
+4.4 we are required to consider 𝑠1A maximal. Given this rational 𝑃𝑖
+and a maximal adversary, there is now players controlling greater
+than or equal to 𝛼 of the total stake who will not choose a strategy
+equivalent to strΠ with non-negligible probability in ^. Using the
+notation of Definition 4.4, this means 𝑝𝑟Π is not greater than 1 −
+negl(^) for some 𝑟 ≥ 1, which impliesΠ fails in the ByRamodel. ⊠
+Using similar arguments, we are able to prove fairness is also
+necessary for a protocol to achieve ByRa SMR.
+Lemma 5.7. For an SMR protocol Π, if Π is not fair then Π fails in
+the ByRa model.
+Proof. If Π is not fair, there exists 𝑟 ≥ 1 such that 𝑃 (𝑠𝑟A >
+𝑠1A ) is not negligible in ^. From Definition 4.4, we are required to
+consider the case where 𝑠1A is maximal. In this case, the probability
+that the adversary controls greater than or equal to 𝛼 of the stake at
+round 𝑟 is is non-negligible in^ given 𝑃 (𝑠𝑟A > 𝑠1A ) is non-negligible
+in ^ . Given the uniform strategy selection probability of Byzantine
+players across all possible strategies, this implies that 𝑝𝑟Π is not
+greater than 1 − negl(^). Therefore, Π fails in the ByRa model. ⊠
+Collecting the results of this section, with some additional proof-
+work, we are equipped to prove the main theorem of the paper,
+Theorem 5.8.
+Theorem 5.8. For an SMR protocol Π, Π achieves ByRa SMR if
+and only if Π is strong incentive compatible in expectation and fair.
+Proof. For an SMR protocol Π, we will first prove that if Π
+achieves ByRa SMR then Π is SINCE and fair. Using the contrapos-
+itive of Lemma 5.6, we have that if Π achieves ByRa SMR (does
+not fail in the ByRa model), then Π is SINCE. Similarly, using the
+contrapositive of Lemma 5.7, we have that if Π achieves ByRa SMR,
+then Π is fair.
+We now need to prove if Π is SINCE and fair then Π achieves
+ByRa SMR. By SINCE and Corollary 5.5, this implies all rational
+players will always choose strΠ . Furthermore, as Π is fair, from
+Definition 4.8, we know rational players will maintain greater than
+1 − 𝛼 of the stake in every round with probability greater than
+1 − negl(^). Therefore, we have players controlling greater than
+1 − 𝛼 of the stake who will follow strΠ with probability greater
+than 1 − negl(^), which is precisely the definition of Π achieving
+ByRa SMR from Definition 4.4. ⊠
+This important theorem completes the first part of the paper,
+identifying the properties of SINCE and fairness as both necessary,
+and together sufficient, for a protocol to achieve ByRa SMR, inde-
+pendently of network assumptions and adversarial capabilities.
+6 TENDERSTAKE
+In this section, we provide the encoding of Tenderstake, and give
+an overview of the main differences between the Tenderstake pro-
+tocol and Tendermint. We assume a partially synchronous network
+communication model as in Tendermint [24]. Players are connected
+to nodes in a dynamic wide area network, with each node hav-
+ing direct connections to a subset of all other nodes, forming a
+sparsely connected graph of communication channels between
+nodes. Non-Byzantine player messages are transmitted through
+gossiping; players send a message to neighbouring nodes, who echo
+messages to their neighbours until all nodes eventually receive
+the message. Formally, there is global stabilisation round GSR > 0,
+such that all messages sent at round 𝑟𝑠𝑒𝑛𝑑 > 0 are delivered by
+round 𝑟𝑑𝑒𝑙𝑖𝑣𝑒𝑟 =𝑚𝑎𝑥 (𝑟𝑠𝑒𝑛𝑑 ,GSR) + Δ for some unknown number
+of rounds Δ > 0.
+We assume rational players are aware that there is a fixed, but
+unknown, upperbound Δ on message delivery between players in
+synchrony, which we refer to as Δ-synchrony, but are unaware
+of how many players are in Δ-synchrony at any given time. For a
+message𝑚, a call to broadcast(𝑚) sends a𝑚 to all players, includ-
+ing oneself, under the same gossiping specification. This is partial
+synchrony as defined in [19].
+6.1 Threat Model
+In Tenderstake, protocol actions take negligible amounts of time
+compared to network delays, so if all non-Byzantine players behave
+correctly and receive the same sequence of messages their machines
+will be in the same state. Rational players ignore messages which
+have not been signed using a protocol-associated private key. We
+do not consider coalitions of rational players.
+We consider an adversary A with the following properties:
+(1) A can read all messages sent by non-Byzantine parties, but
+cannot existentially forge signatures.
+(2) A can control and coordinate all Byzantine players in any
+way, with unknown utility function.
+(3) At initialisation we have
+1
+3
+−𝛿 < 𝑠1A < 1
+3
+= 𝛼 , for some 𝛿 > 0,
+in line with the partially synchronous network distribution
+limits [19].
+7
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+(4) At initialisation, A can choose to corrupt any 1 ≤ 𝑓 <
+𝑛 − 2 players, say 𝑃1, ..., 𝑃𝑓 with shares 𝑠1
+1
+, ..., 𝑠1
+𝑓
+, such that∑𝑓
+𝑖=1
+𝑠1
+𝑖
+= 𝑠1A .
+(5) Given A corrupts players 𝑃1, ..., 𝑃𝑓 as Byzantine for consen-
+sus on a block at height 𝐻 with shares 𝑠𝐻−1
+1
+, ..., 𝑠𝐻−1
+𝑓
+, the
+adversarial share at the proceeding height is calculated as
+𝑠𝐻A =
+∑𝑓
+𝑖=1
+𝑠𝐻
+𝑖
+.
+We focus on static adversaries for simplicity, and leave other
+interesting adversarial types, such as adaptive or mobile[38], as
+future work. The added complexity of such adversaries only stands
+to detract from the primary goals of the paper, that is, to demon-
+strate the importance of ByRa SMR and how it can be achieved
+with Tenderstake. We also choose not to allow players to join/leave
+the protocol for the same reasons; a desire to limit complexity and
+to maintain weak network communication model assumptions. We
+discuss the addressing of these decisions as part of future work in
+Section 8.
+6.2 Protocol Outline
+We now describe the pseudocode of Tenderstake as outlined in
+Algorithm 1. As the goal of Section 6 is to amend Tendermint to
+achieve ByRa SMR, readers of [14] will notice that we use large
+parts of the code and descriptions from that work. We describe the
+entire code here for completeness, and highlight the differences
+in Tenderstake to Tendermint as they arise. The two fundamen-
+tal additions to the Tendermint protocol used by Tenderstake are
+proof-of-transition and slashing functionalities, described in detail
+in Sections 6.2.1 and 6.2.2 respectively, and included in the code
+of Algorithm 1. Proof-of-transition ensures players who send a
+message at a particular height/ epoch/ step have gotten there by
+following the protocol, while the slashing functionality enforces the
+use of proofs-of-transition, as well as the sending of valid messages
+in general, by punishing players for sending invalid messages.
+In Tenderstake, every correct player is initialised by passing a
+block Genesis to the Initialise function (line 1). This ensures all play-
+ers start from a common state. Block Genesis contains information
+on player shares, stake and per-block reward at initialisation.
+The algorithm is presented as a set of upon rules that are to be
+executed automatically once the corresponding logical condition
+is TRUE. Variables with sub-index 𝑖 denote player 𝑃𝑖 ’s local state
+variables, while those without are value placeholders. The sign ∗
+denotes any value. We use the convention of > 𝑥
+3
+𝑚 with COND to
+stand for the logical statement which is TRUE if and only if players
+controlling more than
+𝑥
+3
+of the total stake with respect to 𝑃𝑖 ’s
+blockchain C𝑖 (represented as a vector in line 2) deliver messages,
+with each message𝑚 satisfying the logical condition COND. If𝑚
+contains a proposed deviator, that deviator’s share does not count
+towards the tally (it would be irregular that a player would affirm a
+message which tried to destroy their own stake).
+As the total voting power in the system is 1, this means if there
+are new deviators proposed in a particular valid value (line 24) with
+total share 𝑠𝑑𝑒𝑣 , the maximum total voting share for that value is
+1 − 𝑠𝑑𝑒𝑣 . This ensures any player 𝑃𝑖 at height 𝐻 with share 𝑠𝐻−1
+𝑖
+after deciding on the block at height 𝐻 − 1 can only have 0 or 𝑠𝐻−1
+𝑖
+Algorithm 1 Tenderstake protocol for a player 𝑃𝑖
+1: function 𝐼𝑛𝑖𝑡𝑖𝑎𝑙𝑖𝑠𝑒 (𝐺𝑒𝑛𝑒𝑠𝑖𝑠)
+2: C𝑖 := [Genesis] ⊲ 𝑃𝑖 ’s blockchain as a vector
+3: ℎ𝑖 := 1 ⊲ Tracks height of C𝑖
+4: epoch𝑖 := 1
+5: step𝑖 ∈ {propose, prevote, precommit}
+6: lockValue𝑖 := 𝑛𝑖𝑙
+7: lockEpoch𝑖 := −1
+8: validValue𝑖 := 𝑛𝑖𝑙
+9: validEpoch𝑖 := −1
+10: Stake𝑖 := Genesis.stake() ⊲ Total stake
+11: Shares𝑖 := Genesis.shares() ⊲ Vector of player shares
+12: Reward𝑖 := Genesis.reward() ⊲ Per-Block reward
+13: DevProofs𝑖 := [𝑛𝑖𝑙 𝑓 𝑜𝑟 𝑗 ∈ {1, ..., 𝑛}] ⊲ Deviation proofs
+14: prevoteProof𝑖 := 𝑛𝑖𝑙
+15: precommitProof𝑖 := 𝑛𝑖𝑙
+16: upon start do StartEpoch(1)
+17: function 𝑆𝑡𝑎𝑟𝑡𝐸𝑝𝑜𝑐ℎ(epoch)
+18: epoch𝑖 ← epoch
+19: step𝑖 ← propose
+20: if proposer(ℎ𝑖 , epoch𝑖 ) = 𝑃𝑖 then
+21: if validValue𝑖 ≠ 𝑛𝑖𝑙 then
+22: proposal𝑖 ← validValue𝑖
+23: else
+24: proposal𝑖 ← getValue() .include(DevProofs𝑖 )
+25: broadcast⟨PROPOSAL, ℎ𝑖 , epoch𝑖 , proposal𝑖 , validEpoch𝑖 , prevoteProof𝑖 ⟩
+26: else
+27: schedule OnTimeoutPropose(ℎ𝑖 , epoch𝑖 ) to be executed after 𝑡𝑖𝑚𝑒𝑜𝑢𝑡 ()
+28: upon ⟨PROPOSAL, ℎ𝑖 , epoch𝑖 , 𝑣,−1, proof⟩ with valid(proof) from proposer(ℎ𝑖 , epoch𝑖 )
+while step𝑖 = propose do
+29: if valid(𝑣) and (lockEpoch𝑖 = −1 or lockValue𝑖 = 𝑣) then
+30: broadcast ⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑣, prevoteProof𝑖 ⟩
+31: else
+32: broadcast ⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, prevoteProof𝑖 ⟩
+33: step𝑖 ← prevote
+34: upon ⟨PROPOSAL, ℎ𝑖 , epoch𝑖 , 𝑣, validEpoch, proofProposal⟩ with valid(proofProposal)
+from proposer(ℎ𝑖 , epoch𝑖 ) and > 2
+3
+⟨PREVOTE, ℎ𝑖 , validEpoch, 𝑣, proofPrevote⟩ with
+valid(proofPrevote) while
+(
+step𝑖 = propose and (validEpoch ≥ 0 and validEpoch < epoch𝑖 )
+)
+do
+35: prevoteProof𝑖 ← proof(> 2
+3
+⟨PREVOTE, ℎ𝑖 , validEpoch, 𝑣⟩ ∪ prevoteProof𝑖 )
+36: if valid(𝑣) and (lockEpoch𝑖 < validEpoch or lockValue𝑖 = 𝑣) then
+37: broadcast ⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑣, prevoteProof𝑖 ⟩
+38: else
+39: broadcast ⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, prevoteProof𝑖 ⟩
+40: step𝑖 ← prevote
+41: upon > 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , ∗, proof⟩ with valid(proof) while step𝑖 = prevote for the
+first time do
+42: precommitProof𝑖 ← proof(> 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , ∗⟩)
+43: schedule OnTimeoutPrevote(ℎ𝑖 , epoch𝑖 ) to be executed after 𝑡𝑖𝑚𝑒𝑜𝑢𝑡 ()
+44: upon ⟨PROPOSAL, ℎ𝑖 , epoch𝑖 , 𝑣, ∗, proofProposal⟩ with valid(proofProposal) from
+proposer(ℎ𝑖 , epoch𝑖 ) and > 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑣, proofPrevote⟩ with valid(proofPrevote) while
+valid(𝑣) and step𝑖 ≥ prevote for the first time do
+45: if step𝑖 = prevote then
+46: lockValue𝑖 ← 𝑣
+47: lockEpoch𝑖 ← epoch𝑖
+48: precommitProof𝑖 ← proof(> 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑣⟩)
+49: broadcast ⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , 𝑣, precommitProof𝑖 ⟩
+50: step𝑖 ← precommit
+51: validValue𝑖 ← 𝑣
+52: validEpoch𝑖 ← epoch𝑖
+53: upon > 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, proof⟩ with valid(proof) while step𝑖 = prevote do
+54: precommitProof𝑖 ← proof(> 2
+3
+⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙 ⟩)
+55: broadcast ⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, precommitProof𝑖 ⟩
+56: step𝑖 ← precommit
+voting power. Rules ending with ‘for the first time’ should only be
+executed on the first time the corresponding condition is TRUE.
+The algorithm proceeds in epochs, with each epoch having a
+dedicated proposer. The mapping of epochs to proposers is known
+to all players, with the function proposer(ℎ, epoch) returning the
+8
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+Algorithm 1 Tenderstake protocol (ctd.)
+57: upon > 2
+3
+⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , ∗, proof⟩ with valid(proof) for the first time do
+58: prevoteProof𝑖 ← proof(> 2
+3
+⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , ∗⟩)
+59: schedule OnTimeoutPrecommit(ℎ𝑖 , epoch𝑖 ) to be executed after 𝑡𝑖𝑚𝑒𝑜𝑢𝑡 ()
+60: upon > 2
+3
+⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, proof⟩ with valid(proof) while
+step𝑖 = precommit do
+61: StartEpoch(epoch𝑖 + 1)
+62: upon ⟨PROPOSAL, ℎ𝑖 , epoch, 𝑣, ∗, proofProposal⟩ with valid(proofProposal) from
+proposer(ℎ𝑖 , epoch) and > 2
+3
+⟨PRECOMMIT, ℎ𝑖 , epoch, 𝑣, proofPrecommit⟩ with valid(proofPrecommit) do
+63: newDeviators← 𝑣.deviators()\C𝑖 .deviators()
+64: if valid(𝑣) then
+65: if |newDeviators | > 0 then ⊲ True if deviators in 𝑣 not in C𝑖
+66: adjustForSlashing(newDeviators)
+67: prevoteProof𝑖 ← proof(> 2
+3
+⟨PRECOMMIT, ℎ𝑖 , epoch, 𝑣⟩)
+68: C𝑖 .append(𝑣.𝑖𝑛𝑐𝑙𝑢𝑑𝑒 (prevoteProof𝑖 ))
+69: Stake𝑖 ← Stake𝑖 + Reward𝑖
+70: ℎ𝑖 ← ℎ𝑖 + 1
+71: reset lockEpoch𝑖 , lockValue𝑖 , validEpoch𝑖 , validValue𝑖 to initial values
+72: StartEpoch(1)
+73: upon > 1
+3
+⟨∗, ℎ𝑖 , epoch, ∗, proof⟩ with (epoch > epoch𝑖 and 𝑣𝑎𝑙𝑖𝑑 (𝑝𝑟𝑜𝑜 𝑓 )) do
+74: prevoteProof𝑖 ← proof(> 1
+3
+⟨∗, ℎ𝑖 , epoch, ∗, ∗⟩)
+75: StartEpoch(epoch)
+76: function𝑂𝑛𝑇𝑖𝑚𝑒𝑜𝑢𝑡𝑃𝑟𝑜𝑝𝑜𝑠𝑒 (ℎ𝑒𝑖𝑔ℎ𝑡, 𝑒𝑝𝑜𝑐ℎ)
+77: if height = ℎ𝑖 and epoch = epoch𝑖 and step𝑖 = propose then
+78: broadcast ⟨PREVOTE, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, prevoteProof𝑖 ⟩
+79: step𝑖 ← prevote
+80: function𝑂𝑛𝑇𝑖𝑚𝑒𝑜𝑢𝑡𝑃𝑟𝑒𝑣𝑜𝑡𝑒 (ℎ𝑒𝑖𝑔ℎ𝑡, 𝑒𝑝𝑜𝑐ℎ)
+81: if height = ℎ𝑖 and epoch = epoch𝑖 and step𝑖 = prevote then
+82: broadcast ⟨PRECOMMIT, ℎ𝑖 , epoch𝑖 , 𝑛𝑖𝑙, precommitProof𝑖 ⟩
+83: step𝑖 ← precommit
+84: function𝑂𝑛𝑇𝑖𝑚𝑒𝑜𝑢𝑡𝑃𝑟𝑒𝑐𝑜𝑚𝑚𝑖𝑡 (ℎ𝑒𝑖𝑔ℎ𝑡, 𝑒𝑝𝑜𝑐ℎ)
+85: if height = ℎ𝑖 and epoch = epoch𝑖 then
+86: StartEpoch(epoch𝑖 + 1)
+87: upon𝑚 from 𝑃 𝑗 with valid(𝑚) = FALSE for the first time do
+88: DevProofs𝑖 [ 𝑗 ] ← proof(valid(𝑚) = FALSE)
+89: broadcast ⟨SLASH, 𝑃 𝑗 , ℎ𝑖 , epoch𝑖 ,𝑚,DevProofs𝑖 [ 𝑗 ] ⟩
+90: upon ⟨SLASH, 𝑃 𝑗 ,𝑚, proof⟩ from 𝑃𝑘 with valid(proof) do
+91: if DevProofs𝑖 [ 𝑗 ] = 𝑛𝑖𝑙 then
+92: DevProofs𝑖 [ 𝑗 ] ← proof
+93: broadcast ⟨SLASH, 𝑃 𝑗 ,𝑚,DevProofs𝑖 [ 𝑗 ] ⟩
+94: function 𝑎𝑑 𝑗𝑢𝑠𝑡𝐹𝑜𝑟𝑆𝑙𝑎𝑠ℎ𝑖𝑛𝑔(𝑛𝑒𝑤𝐷𝑒𝑣𝑖𝑎𝑡𝑜𝑟𝑠)
+95: slashedShare← 𝑠𝑢𝑚 (Shares𝑖 [𝑛𝑒𝑤𝐷𝑒𝑣𝑖𝑎𝑡𝑜𝑟𝑠 ])
+96: Shares𝑖 [𝑛𝑒𝑤𝐷𝑒𝑣𝑖𝑎𝑡𝑜𝑟𝑠 ] ← 0
+97: Shares𝑖 ←
+[ Shares𝑖 [𝑘 ]
+1−slashedShare for 𝑘 ∈ [1, ..., 𝑛]
+]
+98: Reward𝑖 ← (1 − slashedShare)Reward𝑖 ⊲ Same reward adjustment as in FAIRSICAL
+99: Stake𝑖 ← (1 − slashedShare)Stake𝑖 ⊲ Remove deviating stake
+100: Stake𝑖 ← Stake𝑖 + sum( [Genesis.shares() [ 𝑗 ] for 𝑗 ∈ 𝑛𝑒𝑤𝐷𝑒𝑣𝑖𝑎𝑡𝑜𝑟𝑠 ]) · Reward𝑖 ⊲
+Slash Bonus, not dependant on ordering
+proposer for epoch epoch given current blockchain height ℎ. Player
+state transitions are triggered by message reception and by expira-
+tion of the timeout function timeout(). Timeouts are to be called
+once per step during each epoch, and only trigger a transition if the
+player has not updated their step or epoch variable since starting
+the timeout function.
+In [14] it is proved that non-Byzantine players need to incorpo-
+rate increasing timeouts in the number of epochs at a particular
+height to guarantee eventual progression. In Tenderstake, we also
+incorporate increasing timeouts in epochs, but instead leave the
+precise definition of the timeout function timeout() to each player.
+We do however place the following restriction on the timeout()
+calculation: the value of timeout() is increasing in the number of
+epochs at every height, such that lim
+epoch→∞ timeout(epoch) → ∞.
+The intuition behind this choice is leaving it sufficiently general
+so as to not risk choosing some specific delta/ function for delta
+which would expose us to unnecessary optimisation analysis, while
+also ensuring Tenderstake retains the property of increasing time-
+outs in the number of epochs at each height required in the original
+Tendermint protocol to guarantee safety and liveness.
+Messages in Tenderstake contain one of the following tags:
+PROPOSAL, PREVOTE, PRECOMMIT and SLASH. ThePROPOSAL
+tag is used by the proposer of the current epoch to suggest a po-
+tential decision value (line 25), while PREVOTE and PRECOMMIT
+are votes for a proposed value, as in Tendermint. SLASH messages
+identify player deviations, and are described in detail in Section
+6.2.2.
+Every player 𝑃𝑖 stores the following variables in the Tenderstake
+protocol: step𝑖 , lockValue𝑖 , lockEpoch𝑖 , validValue𝑖 , validEpoch𝑖 ,
+Stake𝑖 , Shares𝑖 , Reward𝑖 , and DevProofs𝑖 , initialised in lines 5-13.
+The step𝑖 tracks the current step of the protocol execution during
+the current epoch. The lockValue𝑖 stores the most recent value for
+which a PRECOMMIT message was sent by 𝑃𝑖 for a non-𝑛𝑖𝑙 value,
+with lockEpoch𝑖 the epoch in which lockValue𝑖 was updated. As 𝑃𝑖
+can only decide on a value 𝑣 if more than
+2
+3
+voting power equivalent
+PRECOMMITmessages are received for 𝑣 , possible decision values
+can be any value locked by more than
+1
+3
+voting power equivalent
+players. Therefore any value 𝑣 for which PROPOSAL and more
+than
+2
+3
+voting power equivalent PREVOTE messages are received
+in some epoch is a possible decision value. The validValue𝑖 stores
+this value, while validEpoch𝑖 stores the epoch where this update
+occurred. The Stake𝑖 tracks the total stake in the system, and Shares𝑖
+the current player shares of Stake𝑖 . The Reward𝑖 is the total reward
+to be distributed among all players for deciding on the next value
+in C𝑖 . The DevProofs𝑖 vector tracks locally observed deviators as
+identified by SLASH messages.
+6.2.1 Proof-of-Transition Functionality. In Tenderstake, every
+PROPOSAL, PREVOTE and PRECOMMITmessage must be accom-
+panied by a proof-of-transitionwhich evidences the transition to the
+current step claimed by each player is valid. These proofs are stored
+in the local player variables prevoteProof𝑖 and precommitProof𝑖 ,
+with prevoteProof𝑖 also acting as proof for PROPOSAL messages
+when a player is selected as proposer. For example, in line 57, each
+PRECOMMIT message must be accompanied by a proof which
+shows that the respective players were at a protocol step which
+allowed them to send a PRECOMMIT message (lines 49, 55 or 82).
+This would be true either if the player received PREVOTEmessages
+correctly satisfying the condition at line 53, both of the conditions
+at lines 44, 45, or the condition at 80 . As these conditions have
+specific PREVOTE message reception rules, and given there is only
+one valid PRECOMMIT messages in each case, valid(proof) is true
+if and only if the message was generated correctly, i.e. by receiving a
+set of PREVOTE messages which would trigger that PRECOMMIT
+message according to the protocol.
+6.2.2 Slashing Functionality. If any messages/ proofs are not valid
+in Tenderstake, players trigger the Slashing functionality and send a
+SLASHmessage (line 89), which contains a proof that the offending
+message was indeed invalid (described in detail in Section 6.2.3).
+SLASHmessages, alongwith proofs-of-transition, are a key addition
+9
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+to Tenderstake in order to prove ByRa SMR, as players identified
+as deviating by a correct player through a SLASH message will
+eventually be seen by all correct players. When a player is identified
+as deviating, their proof-of-deviation is added to the local DevProofs
+vector of the observing player. Then when a player is selected as
+proposer, and validValue𝑖 = 𝑛𝑖𝑙 , they add all deviation proofs not
+already identified in C𝑖 to their proposed value (line 24). After being
+seen by all correct players, any deviator will eventually be added to
+a correct player’s proposed value and removed from the protocol
+through the adjustForSlashing function (line 94).
+The adjustForSlashing function takes as input new decided devi-
+ators, deletes their stakes (lines 96, 99), adjusts the remaining player
+shares to sum to 1 (line 97), recalibrates the per-block reward to keep
+the per player reward constant throughout a Tenderstake instance
+(line 98), and distributes the initial reward Genesis.reward() times
+the initial shares of the deviating players among the remaining
+players in proportion to their stake (line 100).
+6.2.3 Proof-of-Deviation. Crucial to the slashing functionality are
+the proofs-of-deviation which can be generated upon the recep-
+tion of any invalid message. As invalid messages can take various
+forms, we explicitly define each form of invalid message and how
+to generate the corresponding proof-of-deviation. Invalid messages
+in Tenderstake can (1) contradict another message from the same
+sender, (2) propose invalid values, (3) contain an invalid proof-of-
+deviation or (4) contain an invalid proof-of-transition.
+Any message which does not contain one or more of the de-
+viations outlined in this section is valid. As we require a valid,
+non-contradictory proof-of-transition with every signed non proof-
+of-deviation message, there is only a small finite combination of
+valid step𝑖 , ℎ𝑖 , epoch𝑖 and proposed/locked values that will be valid
+with respect to such a proof-of-transition. As such, the deviations
+outlined in this section are exhaustive.
+We do not explicitly encode proofs-of-deviation in this paper.
+Upon a precise specification of Tenderstake, message validity will
+be verifiable using a finite set of rules, and therefore any messages
+not following these rules can be provided as proof-of-deviation.
+However, we now describe the maximum amount of information
+necessary to prove that a player has deviated, which can then be
+represented in some, possibly condensed form within a SLASH
+message to prove a player has deviated. In the following we assume
+a player 𝑃𝑖 performs the corresponding deviation.
+(1) Contradictory messages: If a player sends two messages𝑚
+and𝑚′ such that they both contain valid proofs-of-transition,
+but it is not possible to transition from either of the messages
+to the other, these messages together constitute a proof of
+deviation. For example, if there are two messages 𝑚 and
+𝑚′ from 𝑃𝑖 with the same ℎ𝑖 , epoch𝑖 and step𝑖 tags, or if
+𝑃𝑖 proposes a newly generated getValue() after sending a
+PRECOMMIT message in a preceeding epoch at the same
+height for a different value (which would mean validValue𝑖 ≠
+𝑛𝑖𝑙).
+(2) Invalid proposed values: As the blockchain value validity
+predicate is shared by all parties and known a priori, any
+message from 𝑃𝑖 containing an invalid proposed value 𝑣 can
+be used as a proof of deviation.
+(3) Invalid slashing: A slash message is invalid if the accompany-
+ing proof-of-deviation is not valid. If the proof-of-deviation is
+not valid, the corresponding slash message/ proposed value
+(if it first appears in a proposed value) stands as a proof of
+deviation.
+(4) Invalid proof-of-transition: If a message𝑚 is received from
+a player 𝑃𝑖 , where 𝑃𝑖 has not attached (a proof of) messages
+with tag, height, epoch and value variables which validly
+trigger the logical conditions necessary to send𝑚, this con-
+stitutes an invalid proof-of-transition. These messages, or
+lack thereof, constitute a proof-of-deviation. As 𝑃𝑖 signs𝑚,
+the contents of𝑚 can be verified, and as such 𝑃𝑖 ’s attempted
+proof-of-transition can be proved to belong to 𝑃𝑖 (as the
+signature must correspond to 𝑚 and the contained proof-
+of-transition), and proved to be invalid by all players. Any
+message sent by 𝑃𝑖 which does not adhere to one of the
+protocol-specified broadcast formats
+7
+is considered to con-
+tain an invalid proof-of-transition. This is because there is
+no protocol-specified transition that would create such a
+message.
+6.2.4 Life-Cycle of an Epoch. Every epoch starts by a proposer sug-
+gesting a value in a Tenderstake message (line 25). If validValue𝑖 =
+𝑛𝑖𝑙 , this proposed value is generated by the external getValue()
+function (line 24), as in Tendermint. In Tenderstake, players also
+include in their newly generated propose values any deviation
+proofs they have received that are not currently in C𝑖 . Otherwise if
+validValue𝑖 ≠ 𝑛𝑖𝑙 , the proposer proposes validValue𝑖 . The proposer
+attaches validEpoch𝑖 to the message so other processes are informed
+of the last epoch in which the proposer observed validValue𝑖 as a
+possible decision value.
+Upon receiving a valid ⟨PROPOSAL, ℎ𝑖 , epoch𝑖 , 𝑣, validEpoch,
+proofProposal⟩ message, a correct player 𝑃𝑖 accepts the proposed
+value 𝑣 if both the external function valid(𝑣) returns TRUE and
+either 𝑃𝑖 has not locked any value (lockEpoch𝑖 = −1) or 𝑃𝑖 has locked
+on 𝑣 (line 29). For a valid proposed value 𝑣 with validEpoch ≥ 0,
+if validEpoch > validEpoch𝑖 (the proposed value was more recent
+than 𝑃𝑖 ’s locked value) or lockValue𝑖 = 𝑣 , 𝑃𝑖 will accept 𝑣 (line 36).
+Otherwise, 𝑃𝑖 rejects the proposal by sending a PREVOTE message
+for 𝑛𝑖𝑙 . 𝑃𝑖 will also send a PREVOTE message for 𝑛𝑖𝑙 if the timeout
+triggered in line 27 expires and they have not sent a PREVOTE
+message for any other value during this epoch yet (line 78).
+If a correct player 𝑃𝑖 receives a PROPOSAL message for a valid
+value 𝑣 and PREVOTEmessages for 𝑣 from players controlling more
+than
+2
+3
+of the share as described by 𝑣 , then it sends a PRECOMMIT
+message for 𝑣 . Otherwise, they send a PRECOMMIT message for
+𝑛𝑖𝑙 . A correct process will also send a PRECOMMIT message for
+𝑛𝑖𝑙 if the timeout triggered in line 43 expires and they have not
+sent a PRECOMMIT message for their current epoch yet (line 82).
+A correct player decides on a value 𝑣 if it receives in some epoch
+epoch a PROPOSAL message for 𝑣 and PRECOMMIT messages for
+𝑣 from players controlling more than
+2
+3
+of the share as described by
+𝑣 . On a decision, 𝑣 , including proof of the PRECOMMIT messages
+allowing 𝑃𝑖 to decide on 𝑣 , are appended to C𝑖 (line 68). Otherwise,
+7
+Can be thought of as junk, but also includes attempted communication between
+players such as, perhaps, to coordinate collusion.
+10
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+Figure 1: A state diagram representation of Tenderstake
+to ensure progression, if the timeout triggered at line 59 expires,
+the player proceeds to the next epoch (line 86).
+7 PROVING TENDERSTAKE ACHIEVES BYRA
+SMR
+In this section we prove that Tenderstake achieves SMR in the ByRa
+model. To this end, we first prove that it is an SMR protocol when
+more than
+2
+3
+of the share is controlled by honest players at all times.
+Lemma 7.1. It is not possible to generate a valid deviation proof
+for an honest player.
+Proof. A valid deviation proof for some player 𝑃𝑖 must identify
+a message from 𝑃𝑖 that is invalid according to one of the meth-
+ods listed in Section 6.2.3. By definition, honest players follow all
+protocol rules and only send valid messages. We also know that
+honest player messages cannot be forged under our threat model
+assumption regarding unforgeable signatures from Section 6.1. Fur-
+thermore, asA is static, every message signed by a currently honest
+player must have been generated honestly (by that same player)
+at some point in the protocol. Therefore, all honest player mes-
+sages are valid, and as such, no valid proof-of-deviation described
+in Section 6.2.3 can be generated for honest players. ⊠
+Lemma 7.2. Tenderstake achieves SMR when players controlling
+more than
+2
+3
+of the stake are honest.
+Proof. (Sketch) We outline a proof demonstrating that proposed
+values (line 24) satisfy safety and liveness in Tenderstake. An ini-
+tialisation of Tenderstake is equivalent to a standard Tendermint
+initialisation, in addition to the proof-of-transition and slash func-
+tionalities as described in Sections 6.2.1 and 6.2.2 respectively. For
+deciding on a value at a particular height 𝐻 > 1, voting share
+is described by the value decided at height 𝐻 − 1, or the current
+proposed value (line 24) if it is valid and contains newly identified
+deviators. From Lemma 7.1, we know no valid proof of deviation
+can be generated for an honest player. Therefore, honest players
+can never be included as prospective deviators in valid proposed
+values in line 24. This ensures that any valid value proposed will
+maintain honest voting share of more than
+2
+3
+.
+Proof-of-transition values are simply additional pieces of infor-
+mation attached to standard Tendermint messages. Identically to
+Tendermint, Tenderstake does not consider invalid messages for
+any of the steps needed to decide on a block (lines 29, 44, 62, 34).
+Consider an epoch during synchrony, with timeouts larger than
+the message delivery delta Δ for all honest players (necessary to
+ensure liveness, as in Tendermint) and an honest proposer. This
+epoch occurs eventually at every height (if no decision has been
+reached in earlier epochs) as the network communication model
+and proposer rotation are identical to Tendermint, and the timeout
+function is increasing and unbounded in the number of epochs. As
+more than
+2
+3
+of the voting share is controlled by honest players at
+all times, honest players will decide on the proposed value during
+that epoch. This holds for any height 𝐻 > 1, and the safety and
+liveness of Tenderstake follows. ⊠
+With Tenderstake as an SMR protocol under an honest major-
+ity, we now need to prove Tenderstake achieves ByRa SMR. To do
+this, we will prove that Tenderstake is SINCE and fair in the ByRa
+model, and apply Theorem 5.8. To prove SINCE, we first need some
+results that bound the reward a player can achieve for deciding
+on a value. As each decided value requires an accompanying > 2
+3
+PRECOMMIT messages to be valid, the maximum amount of val-
+ues a player can attempt to decide on at once is 1, as the proceeding
+value will need to point to the decided value and the value’s > 2
+3
+PRECOMMIT messages. By bounding the reward a player can get
+for deciding on values and deviators (the only rewarding actions)
+sufficiently low, we are able to prove that this reward is negligi-
+ble compared to the potential punishment for being caught, thus
+preventing rational players from sending invalid messages.
+Lemma 7.3. In any instance of Tenderstake, 𝑃𝑖 receives less than
+𝑠1
+𝑖
+Genesis.reward() in total for identifying deviators from the ad-
+justForSlashing function.
+Proof. We can see that the rewards for deciding on new devia-
+tors at height 𝐻 are distributed at line 100. We will prove that the
+sum of the rewards distributed by calling line 100 throughout an
+instance of Tenderstake are less than 𝑠1
+𝑖
+Genesis.reward().
+Let there be a set of players newDevs𝐻 controlling slashedShare
+at height 𝐻 − 1 identified as deviating for the first time in the
+value at height 𝐻 . In the adjustForSlashing function, this results
+in 𝑃𝑖 ’s share being updated according to line 97, which implies
+𝑠𝐻
+𝑖
+=
+𝑠𝐻−1
+𝑖
+1−slashedShare . Furthermore, letting Reward𝐻−1 be the total
+reward after deciding on a value at height 𝐻 − 1, the new total
+reward for height 𝐻 is Reward𝐻 = (1 − slashedShare)Reward𝐻−1
+(line 98), while the total stake before distributing rewards for height
+𝐻 is adjusted to (1 − slashedShare)Stake𝐻−1 (line 99), preserving
+the total stake of non-deviators. We then have to add the slash
+bonus of
+∑
+𝑗 ∈newDevs𝐻 Genesis.shares() [ 𝑗]Reward𝐻 (line 100).
+First observe that:
+𝑠𝐻𝑖 Reward𝐻 =
+𝑠𝐻−1
+𝑖
+1 − slashedShare (1 − slashedShare)Reward
+𝐻−1
+= 𝑠𝐻−1𝑖 Reward𝐻−1 .
+(3)
+Secondly, notice that when no new deviators are identified, and
+adjustForSlashing is not called, both 𝑠𝑖 and Reward𝑖 are unchanged
+11
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+from the previous height, as they are only adjusted in adjustForSlash-
+ing. This means:
+𝑠𝐻𝑖 Reward𝐻 = 𝑠1𝑖 Reward
+1 = 𝑠1𝑖 Genesis.reward(), ∀ 𝐻 ≥ 1. (4)
+We know for a set of new deviators newDevs𝐻 at height 𝐻 ,
+𝑃𝑖 receives 𝑠
+𝐻
+𝑖
+Reward𝐻
+∑
+𝑗 ∈newDevs𝐻 Genesis.shares() [ 𝑗](line 100).
+Furthermore, from Equation 4, we have that 𝑠𝐻
+𝑖
+Reward𝐻 = 𝑠1
+𝑖
+Genesis.reward() for all 𝐻 ≥ 1. This implies 𝑃𝑖 receives an identi-
+fying deviator bonus from adjustForSlashing of 𝑠1
+𝑖
+Genesis.reward()·∑
+𝑗 ∈newDevs𝐻 Genesis.shares() [ 𝑗] at height 𝐻 . Summing over all
+heights up to and including 𝐻 gives a total reward of 𝑠1
+𝑖
+Genesis.reward() ·∑𝐻
+𝑘=1
+( ∑
+𝑗 ∈newDevs𝑘 Genesis.shares() [ 𝑗]
+)
+for iden-
+tifying deviators through adjustForSlashing.
+As ∪
+1≤𝑘≤𝐻newDevs𝑘 ⊂ {1, ..., 𝑛} for all 𝐻 > 1, it must be that∑𝐻
+𝑘=1
+( ∑
+𝑗 ∈newDevs𝑘 Genesis.shares() [ 𝑗]
+)
+< 1 for all 𝐻 > 1. This
+means the total reward for identifying deviators in Tenderstake
+from the adjustForSlashing function is less than 𝑠1
+𝑖
+Genesis.reward(),
+as required. ⊠
+Lemma 7.4. In addition to any rewards from the adjustForSlashing
+function, 𝑃𝑖 receives 𝑠
+1
+𝑖
+Genesis.reward() for every decided value in
+Tenderstake.
+Proof. The only reward received by 𝑃𝑖 not in adjustForSlashing
+is distributed at line 69. Letting Reward𝐻 be the total reward dis-
+tributed at line 69 for height 𝐻 , 𝑃𝑖 receives 𝑠
+𝐻
+𝑖
+Reward𝐻 . We have
+already seen in Equation 4 that 𝑠𝐻
+𝑖
+Reward𝐻 = 𝑠1
+𝑖
+Genesis.reward(),
+for all 𝐻 ≥ 1, which is the required result. ⊠
+Remark 7.5. In Tenderstake, share increases are counteracted by
+reward decreases to keep per-decision rewards constant (Lemma
+7.4). This avoids a common, critical, mistake in incentive compati-
+ble reward mechanisms where early share increases permanently
+increase the size of per-decision rewards a player receives.
+Lemma 7.6. Tenderstake is SINCE in the ByRa model.
+Proof. To prove SINCE in the ByRa model, we require that
+every protocol action strictly dominates all other possible actions
+in expectation for rational players assuming all other players are
+rational. We do this by proving the following:
+(1) Rational players do not send invalid messages.
+(2) Rational players send valid messages when possible.
+(3) Rational players obey a timeout function which is increasing
+and unbounded in epochs at every height.
+Firstly, consider invalid protocol messages. As an invalidmessage
+takes one of the forms described in Section 6.2.3, it can eventually
+be identified by all players and the offending player stake destroyed
+through the Slashing functionality (Section 6.2.2). As identifying
+deviations of other players is strictly increasing in stake (line 100)
+and does not affect proceeding rewards due to Lemma 7.4, all ra-
+tional players prefer to eventually identify valid deviations than
+not identify valid deviations. As stake is only meaningful with re-
+spect to a valid blockchain, 𝑃𝑖 must construct C𝑖 sequentially in it’s
+height. Therefore, for ℎ𝑖 the height of C𝑖 , 𝑃𝑖 ’s messages can only
+refer to a value at a height less than or equal to ℎ𝑖 + 1.
+Combining Lemmas 7.3 and 7.4, for any height 𝐻 > 1, the maxi-
+mum additional reward achievable by sending an invalid message
+up to that height is less than 2𝑠1
+𝑖
+Genesis.reward(). This is because
+by Lemma 7.3, the additional reward for identifying deviators is
+less than 𝑠1
+𝑖
+Genesis.reward(), and by Lemma 7.4, the per-decided
+value reward excluding any reward for identifying deviators is
+𝑠1
+𝑖
+Genesis.reward(), a constant. Therefore, attempting to decide
+on a value and/ or deviators (the only ways to be rewarded in
+Tenderstake) with an invalid message results in a payoff of less than
+2𝑠1
+𝑖
+Genesis.reward(). Due to Lemma 7.4, the rewards for proceeding
+value-decisions remain constant, while all rewards for identifying
+deviators must sum up to less than 𝑠1
+𝑖
+Genesis.reward() from Lemma
+7.3. Given proofs-of-deviation can be provided at any time and all
+rational players will send SLASH messages when possible, the cost
+of sending an invalid message, full destruction of stake (line 96)
+and effective removal from the protocol, dominates these once-off
+and bounded potential rewards for sending an invalid message. As
+such, no rational player will send an invalid message.
+Given no rational player will send an invalid message, we now
+need to check that rational players will send messages when valid
+messages can be sent, as per the protocol. The alternative is not
+sending messages. Given the arbitrary scheduling of message deliv-
+ery in any distributed network where other players have unknown
+timeouts, and the positive reward for deciding on a block, sending
+messages strictly increases the expected rate of messages received
+by all other players. This in turn strictly increases the expected rate
+of player progression through the protocol, as progression can only
+occur when proofs can be generated. This strictly increases the
+expected number of blocks, and rewards, added to the blockchain.
+Lastly, we must ensure that rational players obey a timeout
+function which tends to infinity in the number of epochs at each
+height. To do this we first show that rational players obey some
+non-zero timeout, and then that this timeout is increasing and
+unbounded in number of epochs.
+If a rational player does not wait for messages to be delivered,
+they will never be able to contribute to prevotes for valid values
+unless they are a proposer. After entering a new epoch they will
+call line 27, immediately followed by line 76, sending a nil prevote.
+Moreover, given they send a nil prevote and advance to the prevote
+step, they will also send a nil precommit (line 80) as when they
+receive more than
+2
+3
+prevotes it includes their own 𝑛𝑖𝑙 prevote, trig-
+gering line 41 before it is possible to receive more than
+2
+3
+prevotes
+for a valid value. By the same argumentation, they will never be
+able to decide on a value in the epoch it is proposed as they will first
+receive more than
+2
+3
+precommits for inconsistent values given their
+nil precommit message, triggering line 57 and then immediately line
+84, preventing a decision. Compare this to obeying some timeout
+for messages to be delivered. Waiting for some number of rounds
+strictly increases the probability of receiving valid proposed values,
+and sending a prevote for a valid value. This subsequently increases
+the probability of all players sending valid precommits. By further
+obeying a timeout for precommits it increases the probability of
+receiving the quorum of precommits needed to decide on a value.
+Therefore, rational players prefer to wait some number of rounds
+for messages to be delivered.
+Now we must ensure rational players do not wait indefinitely for
+messages. Recall that in Tenderstake, rational players are modelled
+as assuming for some unknown but fixedΔ, they are inΔ-synchrony
+12
+Achieving State Machine Replication without Honest Players AFT ’21, September 26–28, 2021, Arlington, VA, USA
+with some subset of players. At any round 𝑟 , in order to calculate
+expected utility for some future round, 𝑃𝑖 will have a private dis-
+tribution of expected message delivery times from other players
+in synchrony
+8
+, and thus an expected number of decisions up until
+that future round. Let 𝜏𝑟
+𝑖
+be such that according to 𝑃𝑖 ’s private
+information, messages taking longer than 𝜏𝑟
+𝑖
+are sent by players
+out of synchrony with 𝑃𝑖 with statistical significance
+9
+.
+If the subset of players in synchrony with 𝑃𝑖 , including 𝑃𝑖 , do
+not control more than
+2
+3
+of the total stake, 𝑃𝑖 is indifferent to timing
+out, as no decision is possible. Otherwise, consider the subset of
+players in synchrony with 𝑃𝑖 , including 𝑃𝑖 , controlling more than
+2
+3
+of the total stake. As messages sent by players out of synchrony
+with 𝑃𝑖 take arbitrarily long to deliver, the number of decisions
+that can be made by using a timeout of 𝜏𝑟
+𝑖
+and transitioning to a
+proposer in synchrony with 𝑃𝑖 is arbitrarily large. Furthermore, as
+𝑃𝑖 is unaware of how many players are in synchrony with 𝑃𝑖 , the
+probability of that subset controlling more than
+2
+3
+of the stake will
+be positive. This implies 𝑃𝑖 has positive expectancy to obey such
+a timeout 𝜏𝑟
+𝑖
+. Therefore, rational players obey some timeout, and
+will not wait indefinitely for messages.
+We finally need to show that for a rational 𝑃𝑖 at any given height,
+𝑃𝑖 will follow increasing, unbounded timeouts in the number of
+epochs at every height. For a maximum message delivery time of Δ
+rounds during synchrony, if 𝑃𝑖 follows a timeout of 𝜏𝑖 < Δ, 𝑃𝑖 is not
+necessarily able to contribute to deciding on a value. Assume players
+controlling more than
+2
+3
+of the stake are in Δ-synchrony (if this is
+not the case, no information can be gained) and no decision has
+been made for some number of epochs. As players behave honestly
+in all non-timeout actions (points 1 and 2), the only variable which
+can affect the probability of deciding for this height is 𝜏𝑖 . Assume
+for all rational players there is a value 𝜏max > 0, such that they
+choose timeouts less than 𝜏max for all epochs.
+If 𝜏max < Δ, it is possible that players may always timeout, send-
+ing nil messages and not contributing to decisions. Given there has
+been epoch epochs of not deciding on a value, and all other actions
+are being followed (which we have shown to be the case), it must
+be that 𝑃 (𝜏max < Δ|epoch → ∞) → 1. This implies choosing a
+timeout up to and including 𝜏max after sufficiently many epochs of
+no decision results in decision with negl(^) probability for proceed-
+ing epochs. Therefore, rational players will eventually only follow
+timeouts greater than 𝜏max if no value has been decided, for any
+value of 𝜏max.
+This is sufficient to say rational players follow increasing, un-
+bounded timeouts, and as such, the recommended protocol. ⊠
+Lemma 7.7. Tenderstake is fair in the ByRa model.
+Proof. As all rational players follow the protocol, and 𝑠1A < 1
+3
+,
+no rational player decides on another rational player as deviating.
+Therefore, the share of stake controlled by rational players is only
+8
+The distribution of expected message delivery times will be a function of some starting
+estimate at initialisation (perhaps based on a Genesis suggested value, as in [14]), and
+the observed responsiveness of all other players up until round 𝑟 .
+9
+This statistical significance can be with respect to a function negl(^) , although
+rational players may perceive a higher utility by choosing a weaker significance level.
+This optimisation is unnecessary for the proof.
+increasing (line 97), meaning the adversary’s share is only decreas-
+ing, upperbounded by their starting share. This implies 𝑠𝐻A ≤ 𝑠1A
+for all𝐻 ≥ 1, which is precisely the definition of a fair protocol. ⊠
+Theorem 7.8. Tenderstake achieves ByRa SMR.
+Proof. Follows by applying Lemma 7.6 and Lemma 7.7 to Theo-
+rem 5.8. ⊠
+8 CONCLUSION
+We provide a game-theoretic framework for analysing SMR proto-
+cols. Although many previous attempts have been made, we are, to
+the best of our knowledge, the first to formally treat SMR protocols
+as games involving only rational and adversarial players. We detail
+the ByRa model for player characterisation in SMR protocols, an
+update to the legacy BAR model, removing the dependency on
+altruistic players in an era of unprecedented market capitalisation
+of tokenised SMR protocols. We demonstrate that the properties
+of strong incentive compatibility in expectation and fairness as de-
+scribed in this paper, are both necessary, and together sufficient to
+achieve SMR in the ByRa model. We then provide the Tenderstake
+protocol as an example of a protocol that achieves ByRa SMR, which
+is of independent interest both as a strong incentive compatible
+in expectation and fair protocol in the ByRa model, but also as a
+yardstick for addressing the shortcomings of current protocol guar-
+antees in the ByRa model. The proof techniques we use provide
+several methodologies with which SMR protocols can be analysed
+in this new game-theoretic framework. The improvements wemake
+to the Tendermint protocol as described in Section 6 have immedi-
+ate practical implications given the current industrial deployment
+of Tendermint-style protocols, such as in Cosmos
+10
+.
+The application of our framework to all proceeding SMR protocol
+analysis and development serves as critical future work. Addition-
+ally, there are several avenues for future work that arise from our
+choice of threat model in Section 6.1. Although we provide a new
+foundation for the game-theoretic analysis of SMR protocols, player
+coalitions are an important consideration from a distributed system
+security standpoint. Further research is required to establish the
+limitations of ByRa SMR protocol guarantees in the presence of
+coalitions. Another important consideration is that of the ByRa
+model under an adaptive adversary. Investigating the effect of an
+adaptive adversary whose stake can increase or decrease based on
+protocol events makes for interesting future work.
+Regarding the joining and leaving of players within the current
+version of Tenderstake, we envisage the necessity for stronger net-
+work communication model assumptions to ensure a player leaving
+the protocol has, at the very least, not sent any deviating messages
+that have not been resolved (and punished) within the protocol.
+Further research on this will be useful, especially when applying
+our work to more practical settings.
+Acknowledgements. This article is part of a project that has
+received funding from the European Union’s Horizon 2020 research
+and innovation programme under grant agreement number 814284.
+10
+Cosmos. https://cosmos.network/ Accessed: 25/05/2021
+13
+https://cosmos.network/
+AFT ’21, September 26–28, 2021, Arlington, VA, USA Conor McMenamin, Vanesa Daza, and Matteo Pontecorvi
+REFERENCES
+[1] Ittai Abraham, Srinivas Devadas, Danny Dolev, Kartik Nayak, and Ling Ren. 2017.
+Efficient Synchronous Byzantine Consensus. https://eprint.iacr.org/2017/307.
+Retrieved: 18/05/2021.
+[2] Ittai Abraham, Dahlia Malkhi, Kartik Nayak, Ling Ren, and Alexander Spiegel-
+man. 2018. Solida: A Blockchain Protocol Based on Reconfigurable Byzantine
+Consensus. In 21st International Conference on Principles of Distributed Systems
+(OPODIS 2017) (Leibniz International Proceedings in Informatics (LIPIcs), Vol. 95),
+James Aspnes, Alysson Bessani, Pascal Felber, and João Leitão (Eds.). Schloss
+Dagstuhl–Leibniz-Zentrum fuer Informatik, Dagstuhl, Germany, 25:1–25:19.
+https://doi.org/10.4230/LIPIcs.OPODIS.2017.25
+[3] Amitanand S. Aiyer, Lorenzo Alvisi, Allen Clement, Mike Dahlin, Jean-Philippe
+Martin, and Carl Porth. 2005. BAR Fault Tolerance for Cooperative Services.
+SIGOPS Oper. Syst. Rev. 39, 5 (Oct. 2005), 45–58. https://doi.org/10.1145/1095809.
+1095816
+[4] Humoud Alsabah and Agostino Capponi. 2020. Pitfalls of Bitcoin’s Proof-of-Work:
+R&D Arms Race and Mining Centralization. https://ssrn.com/abstract=3273982.
+Retrieved: 18/05/2021.
+[5] Yackolley Amoussou-Guenou, Bruno Biais, Maria Potop-Butucaru, and Sara
+Tucci-Piergiovanni. 2020. Rational vs Byzantine Players in Consensus-Based
+Blockchains. In Proceedings of the 19th International Conference on Autonomous
+Agents and MultiAgent Systems (Auckland, New Zealand) (AAMAS ’20). Interna-
+tional Foundation for Autonomous Agents and Multiagent Systems, Richland,
+SC, 43–51.
+[6] Yackolley Amoussou-Guenou, Bruno Biais, Maria Potop-Butucaru, and Sara
+Tucci-Piergiovanni. 2021. Rational Behaviors in Committee-Based Blockchains.
+In 24th International Conference on Principles of Distributed Systems (OPODIS
+2020) (Leibniz International Proceedings in Informatics (LIPIcs), Vol. 184), Quentin
+Bramas, Rotem Oshman, and Paolo Romano (Eds.). Schloss Dagstuhl–Leibniz-
+Zentrum für Informatik, Dagstuhl, Germany, 12:1–12:16. https://doi.org/10.4230/
+LIPIcs.OPODIS.2020.12
+[7] Yackolley Amoussou-Guenou, Antonella Del Pozzo, Maria Potop-Butucaru, and
+Sara Tucci-Piergiovanni. 2018. Correctness and Fairness of Tendermint-core
+Blockchains. https://arxiv.org/pdf/1805.08429. arXiv:1805.08429 Retrieved:
+18/05/2021.
+[8] Yackolley Amoussou-Guenou, Antonella Del Pozzo, Maria Potop-Butucaru, and
+Sara Tucci-Piergiovanni. 2021. On Fairness in Committee-Based Blockchains. In
+2nd International Conference on Blockchain Economics, Security and Protocols (Toke-
+nomics 2020) (Open Access Series in Informatics (OASIcs), Vol. 82), Emmanuelle An-
+ceaume, Christophe Bisière, Matthieu Bouvard, Quentin Bramas, and Catherine
+Casamatta (Eds.). Schloss Dagstuhl–Leibniz-Zentrum für Informatik, Dagstuhl,
+Germany, 4:1–4:15. https://doi.org/10.4230/OASIcs.Tokenomics.2020.4
+[9] Nick Arnosti and S. Matthew Weinberg. 2019. Bitcoin: A natural oligopoly. In
+10th Innovations in Theoretical Computer Science, ITCS 2019 (Leibniz International
+Proceedings in Informatics, LIPIcs), Avrim Blum (Ed.). Schloss Dagstuhl- Leibniz-
+Zentrum fur Informatik GmbH, Dagstuhl Publishing, Germany. https://doi.org/10.
+4230/LIPIcs.ITCS.2019.5 Funding Information: Supported by NSF CCF-1717899.;
+10th Innovations in Theoretical Computer Science, ITCS 2019 ; Conference date:
+10-01-2019 Through 12-01-2019.
+[10] Sarah Azouvi and Alexander Hicks. 2020. SoK: Tools for Game Theoretic
+Models of Security for Cryptocurrencies. https://arxiv.org/abs/1905.08595.
+arXiv:1905.08595 Retrieved: 19/05/2021.
+[11] Shehar Bano, Alberto Sonnino, Mustafa Al-Bassam, Sarah Azouvi, Patrick Mc-
+Corry, Sarah Meiklejohn, and George Danezis. 2019. SoK: Consensus in the Age
+of Blockchains. In Proceedings of the 1st ACM Conference on Advances in Financial
+Technologies (Zurich, Switzerland) (AFT ’19). Association for Computing Machin-
+ery, New York, NY, USA, 183–198. https://doi.org/10.1145/3318041.3355458
+[12] Bruno Biais, Christophe Bisière, Matthieu Bouvard, and Catherine Casamatta.
+2017. The blockchain folk theorem. IDEI Working Papers 873. Institut d’Économie
+Industrielle (IDEI), Toulouse. Retrieved: 19/05/2021.
+[13] Georgios Birmpas, Elias Koutsoupias, Philip Lazos, and Francisco J. Marmolejo-
+Cossío. 2020. Fairness and Efficiency in DAG-Based Cryptocurrencies. In Financial
+Cryptography and Data Security. Springer International Publishing, Cham, 79–96.
+[14] Ethan Buchman, Jae Kwon, and Zarko Milosevic. 2019. The latest gossip on
+BFT consensus. https://arxiv.org/abs/1807.049385. arXiv:1807.04938 Retrieved:
+21/05/2021.
+[15] Eric Budish. 2018. The Economic Limits of Bitcoin and the Blockchain. Working
+Paper 24717. National Bureau of Economic Research. https://doi.org/10.3386/
+w24717
+[16] Vitalik Buterin, Daniel Reijsbergen, Stefanos Leonardos, and Georgios Piliouras.
+2019. Incentives in Ethereum’s Hybrid Casper Protocol. In 2019 IEEE International
+Conference on Blockchain and Cryptocurrency (ICBC). IEEE, Seoul, South Korea,
+236–244. https://doi.org/10.1109/BLOC.2019.8751241
+[17] Philip Daian, Steven Goldfeder, Tyler Kell, Yunqi Li, Xueyuan Zhao, Iddo Ben-
+tov, Lorenz Breidenbach, and Ari Juels. 2019. Flash Boys 2.0: Frontrunning,
+Transaction Reordering, and Consensus Instability in Decentralized Exchanges.
+https://arxiv.org/abs/1904.05234. arXiv:1904.05234 Retrieved: 19/05/2021.
+[18] Phil Daian, Rafael Pass, and Elaine Shi. 2019. Snow White: Robustly Reconfig-
+urable Consensus and Applications to Provably Secure Proof of Stake. In Financial
+Cryptography and Data Security. Springer International Publishing, Cham, 23–41.
+https://doi.org/10.1007/978-3-030-32101-7_2
+[19] Cynthia Dwork, Nancy Lynch, and Larry Stockmeyer. 1988. Consensus in the
+Presence of Partial Synchrony. J. ACM 35, 2 (April 1988), 288–323. https:
+//doi.org/10.1145/42282.42283
+[20] Ittay Eyal and Emin Gün Sirer. 2018. Majority is Not Enough: Bitcoin Mining is
+Vulnerable. Commun. ACM 61, 7 (June 2018), 95–102. https://doi.org/10.1145/
+3212998
+[21] Giulia Fanti, Leonid Kogan, Sewoong Oh, Kathleen Ruan, Pramod Viswanath, and
+Gerui Wang. 2019. Compounding of Wealth in Proof-of-Stake Cryptocurrencies.
+In Financial Cryptography and Data Security, Ian Goldberg and Tyler Moore (Eds.).
+Springer International Publishing, Cham, 42–61.
+[22] Aggelos Kiayias, Alexander Russell, Bernardo David, and Roman Oliynykov. 2017.
+Ouroboros: A Provably Secure Proof-of-Stake Blockchain Protocol. In Advances
+in Cryptology – CRYPTO 2017, Jonathan Katz and Hovav Shacham (Eds.). Springer
+International Publishing, Cham, 357–388.
+[23] Abhiram Kothapalli, Andrew Miller, and Nikita Borisov. 2017. SmartCast: An
+incentive compatible consensus protocol using smart contracts. In Financial
+Cryptography and Data Security - FC 2017 InternationalWorkshops, Revised Selected
+Papers, Andrew Miller, Michael Brenner, Kurt Rohloff, Joseph Bonneau, Vanessa
+Teague, Andrea Bracciali, Massimiliano Sala, Federico Pintore, Markus Jakobsson,
+and Peter Y.A. Ryan (Eds.). Springer-Verlag Berlin Heidelberg, Sliema, Malta,
+536–552. https://doi.org/10.1007/978-3-319-70278-0_34
+[24] Jae Kwon. 2014. Tendermint: Consensus without Mining. https://tendermint.
+com/static/docs. Retrieved: 19/05/2021.
+[25] Kfir Lev-Ari, Alexander Spiegelman, Idit Keidar, and Dahlia Malkhi. 2020.
+FairLedger: A Fair Blockchain Protocol for Financial Institutions. In 23rd In-
+ternational Conference on Principles of Distributed Systems (OPODIS 2019) (Leibniz
+International Proceedings in Informatics (LIPIcs), Vol. 153), Pascal Felber, Roy Fried-
+man, Seth Gilbert, and Avery Miller (Eds.). Schloss Dagstuhl–Leibniz-Zentrum
+fuer Informatik, Dagstuhl, Germany, 4:1–4:17. https://doi.org/10.4230/LIPIcs.
+OPODIS.2019.4
+[26] Ziyao Liu, Nguyen Cong Luong, Wenbo Wang, Dusit Niyato, Ping Wang, Ying-
+Chang Liang, and Dong In Kim. 2019. A Survey on Blockchain: A Game Theoret-
+ical Perspective. IEEE Access 7 (2019), 47615–47643.
+[27] Anna Lysyanskaya and Nikos Triandopoulos. 2006. Rationality and Adversarial
+Behavior in Multi-party Computation. In Advances in Cryptology - CRYPTO 2006,
+Cynthia Dwork (Ed.). Springer Berlin Heidelberg, Berlin, Heidelberg, 180–197.
+[28] Thomas Moscibroda, Stefan Schmid, and Roger Wattenhofer. 2006. When Selfish
+Meets Evil: Byzantine Players in a Virus Inoculation Game. https://doi.org/10.
+1145/1146381.1146391. In Proceedings of the Twenty-Fifth Annual ACM Symposium
+on Principles of Distributed Computing (Denver, Colorado, USA) (PODC ’06).
+Association for Computing Machinery, New York, NY, USA, 35–44.
+[29] Thomas Moscibroda, Stefan Schmid, and Roger Wattenhofer. 2009. The Price
+of Malice: A Game-Theoretic Framework for Malicious Behavior. https://doi.
+org/10.1080/15427951.2009.10129181. Internet Mathematics 6, 2 (2009), 125–156.
+https://doi.org/10.1080/15427951.2009.10129181
+[30] Satoshi Nakamoto. 2008. Bitcoin: A Peer-to-Peer Electronic Cash System. https:
+//bitcoin.org/bitcoin.pdf. Retrieved: 19/05/2021.
+[31] Kevin Alarcón Negy, Peter R. Rizun, and Emin Gün Sirer. 2020. Selfish Mining
+Re-Examined. In Financial Cryptography and Data Security, Joseph Bonneau and
+Nadia Heninger (Eds.). Springer International Publishing, Cham, 61–78.
+[32] Noam Nisan, Tim Roughgarden, Eva Tardos, and Vijay V. Vazirani. 2007. Algo-
+rithmic Game Theory. Cambridge University Press, Cambridge.
+[33] Rafael Pass and Elaine Shi. 2017. FruitChains: A Fair Blockchain. In Proceedings
+of the ACM Symposium on Principles of Distributed Computing (Washington, DC,
+USA) (PODC ’17). Association for Computing Machinery, New York, NY, USA,
+315–324. https://doi.org/10.1145/3087801.3087809
+[34] Ioanid Rosu and Fahad Saleh. 2020. Evolution of Shares in a Proof-of-Stake
+Cryptocurrency. http://dx.doi.org/10.2139/ssrn.3377136. Retrieved: 19/05/2021.
+[35] Tim Roughgarden. 2020. Transaction Fee Mechanism Design for the Ethereum
+Blockchain: An Economic Analysis of EIP-1559. https://arxiv.org/pdf/2012.00854.
+arXiv:2012.00854 Retrieved: 18/05/2021.
+[36] Fahad Saleh. 2020. Blockchain Without Waste: Proof-of-Stake. http://dx.doi.
+org/10.2139/ssrn.3183935. In Review of Financial Studies, Vol. 34. March, 2021,
+1156–1190.
+[37] Jakub Sliwinski and Roger Wattenhofer. 2020. Blockchains Cannot Rely on
+Honesty. https://disco.ethz.ch/courses/fs19/sirocco/honesty.pdf. Retrieved:
+21/05/2021.
+[38] Moti Yung. 2015. The "Mobile Adversary" Paradigm in Distributed Computation
+and Systems. Association for ComputingMachinery, New York, NY, USA, 171–172.
+https://doi.org/10.1145/2767386.2767453
+14
+https://eprint.iacr.org/2017/307
+https://doi.org/10.4230/LIPIcs.OPODIS.2017.25
+https://doi.org/10.1145/1095809.1095816
+https://doi.org/10.1145/1095809.1095816
+https://ssrn.com/abstract=3273982
+https://doi.org/10.4230/LIPIcs.OPODIS.2020.12
+https://doi.org/10.4230/LIPIcs.OPODIS.2020.12
+https://arxiv.org/pdf/1805.08429 
+https://arxiv.org/abs/1805.08429
+https://doi.org/10.4230/OASIcs.Tokenomics.2020.4
+https://doi.org/10.4230/LIPIcs.ITCS.2019.5
+https://doi.org/10.4230/LIPIcs.ITCS.2019.5
+https://arxiv.org/abs/1905.08595
+https://arxiv.org/abs/1905.08595
+https://doi.org/10.1145/3318041.3355458
+https://arxiv.org/abs/1807.049385
+https://arxiv.org/abs/1807.04938
+https://doi.org/10.3386/w24717
+https://doi.org/10.3386/w24717
+https://doi.org/10.1109/BLOC.2019.8751241
+https://arxiv.org/abs/1904.05234
+https://arxiv.org/abs/1904.05234
+https://doi.org/10.1007/978-3-030-32101-7_2
+https://doi.org/10.1145/42282.42283
+https://doi.org/10.1145/42282.42283
+https://doi.org/10.1145/3212998
+https://doi.org/10.1145/3212998
+https://doi.org/10.1007/978-3-319-70278-0_34
+https://tendermint.com/static/docs
+https://tendermint.com/static/docs
+https://doi.org/10.4230/LIPIcs.OPODIS.2019.4
+https://doi.org/10.4230/LIPIcs.OPODIS.2019.4
+https://doi.org/10.1145/1146381.1146391
+https://doi.org/10.1145/1146381.1146391
+https://doi.org/10.1080/15427951.2009.10129181
+https://doi.org/10.1080/15427951.2009.10129181
+https://doi.org/10.1080/15427951.2009.10129181
+https://bitcoin.org/bitcoin.pdf
+https://bitcoin.org/bitcoin.pdf
+https://doi.org/10.1145/3087801.3087809
+http://dx.doi.org/10.2139/ssrn.3377136
+https://arxiv.org/pdf/2012.00854 
+https://arxiv.org/abs/2012.00854
+http://dx.doi.org/10.2139/ssrn.3183935
+http://dx.doi.org/10.2139/ssrn.3183935
+https://disco.ethz.ch/courses/fs19/sirocco/honesty.pdf
+https://doi.org/10.1145/2767386.2767453
+	Abstract
+	1 Introduction
+	1.1 Our Contribution
+	1.2 Organisation of the paper
+	2 Related Work
+	3 Preliminaries
+	4 A Game-Theoretic Framework for SMR
+	5 Achieving SMR in the ByRa Model 
+	6 Tenderstake
+	6.1 Threat Model
+	6.2 Protocol Outline
+	7 Proving Tenderstake achieves ByRa SMR
+	8 Conclusion
+	References

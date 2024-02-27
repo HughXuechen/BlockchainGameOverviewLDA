@@ -1,0 +1,2076 @@
+An Empirical Study of DeFi Liquidations: Incentives, Risks, and Instabilities
+An Empirical Study of DeFi Liquidations:
+Incentives, Risks, and Instabilities
+Kaihua Qin
+kaihua.qin@imperial.ac.uk
+Imperial College London
+United Kingdom
+Liyi Zhou
+liyi.zhou@imperial.ac.uk
+Imperial College London
+United Kingdom
+Pablo Gamito
+pablo.gamito17@imperial.ac.uk
+Imperial College London
+United Kingdom
+Philipp Jovanovic
+p.jovanovic@ucl.ac.uk
+University College London
+United Kingdom
+Arthur Gervais
+a.gervais@imperial.ac.uk
+Imperial College London
+United Kingdom
+ABSTRACT
+Financial speculators often seek to increase their potential gains
+with leverage. Debt is a popular form of leverage, and with over
+39.88B USD of total value locked (TVL), the Decentralized Finance
+(DeFi) lending markets are thriving. Debts, however, entail the risks
+of liquidation, the process of selling the debt collateral at a discount
+to liquidators. Nevertheless, few quantitative insights are known
+about the existing liquidation mechanisms.
+In this paper, to the best of our knowledge, we are the first to
+study the breadth of the borrowing and lending markets of the
+Ethereum DeFi ecosystem. We focus on Aave, Compound, Mak-
+erDAO, and dYdX, which collectively represent over 85% of the
+lending market on Ethereum. Given extensive liquidation data mea-
+surements and insights, we systematize the prevalent liquidation
+mechanisms and are the first to provide a methodology to compare
+them objectively. We find that the existing liquidation designs well
+incentivize liquidators but sell excessive amounts of discounted
+collateral at the borrowers’ expenses. We measure various risks
+that liquidation participants are exposed to and quantify the in-
+stabilities of existing lending protocols. Moreover, we propose an
+optimal strategy that allows liquidators to increase their liquidation
+profit, which may aggravate the loss of borrowers.
+CCS CONCEPTS
+• General and reference→ Empirical studies;Measurement;
+• Applied computing→ Economics.
+KEYWORDS
+blockchain, DeFi, liquidation
+ACM Reference Format:
+Kaihua Qin, Liyi Zhou, Pablo Gamito, Philipp Jovanovic, and Arthur Ger-
+vais. 2021. An Empirical Study of DeFi Liquidations: Incentives, Risks, and
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than the
+author(s) must be honored. Abstracting with credit is permitted. To copy otherwise, or
+republish, to post on servers or to redistribute to lists, requires prior specific permission
+and/or a fee. Request permissions from permissions@acm.org.
+IMC ’21, November 2–4, 2021, Virtual Event, USA
+© 2021 Copyright held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-1-4503-9129-0/21/11. . . $15.00
+https://doi.org/10.1145/3487552.3487811
+Instabilities. In ACM Internet Measurement Conference (IMC ’21), Novem-
+ber 2–4, 2021, Virtual Event, USA. ACM, New York, NY, USA, 15 pages.
+https://doi.org/10.1145/3487552.3487811
+1 INTRODUCTION
+Cryptocurrencies are notoriously known to attract financial specu-
+lators who often seek to multiply their potential monetary upside
+and financial gains through leverage. Leverage is realized by bor-
+rowing assets to perform trades — commonly referred to as margin
+trading. It is apparent that margin trading, speculating with bor-
+rowed assets in general, is an incredibly risky endeavor. Yet, the
+borrowing and lending markets on blockchains are thriving and
+have reached a collective 39.88B USD of total value locked (TVL) at
+the time of writing
+1
+.
+Loans on a blockchain typically operate as follows. Lenders with
+a surplus of money provide assets to a lending smart contract.
+Borrowers then provide a security deposit, known as collateral,
+to borrow cryptocurrency. Because the lending and borrowing
+on blockchains lacks compulsory means on defaults, the amount
+of debt borrowers can take on is typically inferior to the secu-
+rity deposit in value — resulting in over-collateralized loans. Over-
+collateralized loans are interesting from a financial perspective, as
+they enable borrowers to take on leverage.
+If the collateral value decreases under a specific threshold (e.g.,
+below 150% of the debt value [20]), the associated debt can be
+recovered through three means: (1) a loan can be made available
+for liquidation by the smart contract. Liquidators then pay back
+the debt in exchange for receiving the collateral at a discount (i.e.,
+liquidation spread), or the collateral is liquidated through an auction.
+(2) Debt can also be rescued by “topping up” the collateral, such
+that the loan is sufficiently collateralized. (3) Finally, the borrower
+can repay parts of their debt. While users can repay their debts
+manually, this appears impractical for the average user, as it requires
+infrastructure to constantly monitor the blockchain, collateral price,
+and transaction fee fluctuations. For example, even professional
+liquidation bots from MakerDAO failed to monitor and act upon
+price variations during blockchain congestion [1].
+In this paper we make the following contributions.
+1
+https://defipulse.com/
+336
+https://doi.org/10.1145/3487552.3487811
+https://doi.org/10.1145/3487552.3487811
+https://defipulse.com/
+http://crossmark.crossref.org/dialog/?doi=10.1145%2F3487552.3487811&domain=pdf&date_stamp=2021-11-02
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+(1) Liquidation Models and Insights: We provide the first
+longitudinal study of the four major lending platforms Mak-
+erDAO, Aave, Compound, and dYdX, capturing collectively
+over 85% of the borrowing/lending market on the Ethereum
+blockchain. By focusing on the protocol’s liquidation mecha-
+nisms, we systematize their liquidation designs. MakerDAO,
+for instance, follows an auction-based liquidation process,
+while Aave, Compound, and dYdX operate under a fixed
+spread liquidation model.
+(2) Data Analytics: We provide on-chain data analytics cover-
+ing the entire existence of the four protocols (2 years). Our
+findings show how the accumulative liquidation proceeds
+amount to 807.46M USD, we identify 2,011 unique liquidator
+addresses and 28,138 liquidation events, of which 641 auc-
+tion liquidations are not profitable for the liquidators. We
+show how 73.97% of the liquidations pay an above average
+transaction fee, indicating competitive behavior. We find the
+existence of bad debts, the borrowing positions that do not
+financially incentivize borrowers to perform a close. Notably,
+Aave V2 has accumulated up to 87.4K USD of bad debts by
+the end of April, 2021. We quantify how sensitive debt be-
+haves to collateral price declines and find that, for example,
+a 43% reduction of the ETH price (analogous to the ETH
+price decline on the 13th of March, 2020) would engender
+liquidatable collateral volume of 1.07B USD on MakerDAO.
+(3) Objective LiquidationMechanismComparison:Wepro-
+vide a methodology to compare quantitatively whether a
+liquidation mechanism favors a borrower or a liquidator.
+We find evidence that fixed spread liquidation mechanisms
+favor liquidators over borrowers. That is, because existing
+DeFi systems are parameterized to allowmore collateral than
+necessary to be liquidated.
+(4) Optimal Fixed Spread Liquidation Strategy:Wepropose
+an optimal fixed spread liquidation strategy. This strategy
+allows liquidators to lift the restrictions of the close factor
+(the upper limit of repaid debts in a single liquidation, cf.
+Section 2.3) within two successive liquidations. We provide
+a case study of a past liquidation transaction and show that
+the optimal strategy could have increased the liquidation
+profit by 53.96K USD (1.36%), validated through concrete
+execution on the real blockchain state. This optimal strategy
+can further aggravate the loss of borrowers.
+The remainder of the paper is organized as follows. Section 2
+outlines the background on blockchain and lending, while we sys-
+tematize existing liquidation mechanisms in Section 3. Section 4
+provides liquidation data insights from empirical data. We discuss
+how to objectively compare liquidation mechanisms and the opti-
+mal liquidation strategy in Section 5. We outline related work in
+Section 6 and conclude the paper in Section 7.
+2 LENDING ON THE BLOCKCHAIN
+We proceed by outlining the required background on blockchain
+and DeFi for the remainder of the paper.
+2.1 Blockchain & Smart Contract
+Blockchains are distributed ledgers that enable peers to transact
+without the need to entrust third-party intermediaries. There ex-
+ist two categories of blockchains: (i) permissionless blockchains,
+where any entity is able to join and leave without permission; (ii)
+permissioned blockchains, which are typically composed of a group
+of authenticated participants. In this work, we only focus on per-
+missionless blockchains, on top of which DeFi is built.
+At its core, a blockchain is a hash-linked chain of blocks oper-
+ating over a peer-to-peer (P2P) network [11]. A block is a times-
+tamped data structure aggregating transactions, which record, e.g.,
+asset transfers. To transfer assets, users need to broadcast digitally
+signed transactions through the P2P network. The so-called min-
+ers then collect transactions, pack transactions into blocks, and
+append blocks to the blockchain. The whole network follows a
+consensus protocol (e.g., Nakamoto consensus [26]) allowing hon-
+est participants to agree on a consistent version of the blockchain.
+Transactions waiting to be confirmed on-chain are stored in the
+so-called mempool
+2
+. We refer the reader to [10, 11] for a more
+thorough background on blockchains.
+Some blockchains, for example, Ethereum [36], offer generic
+computation capabilities through smart contracts. In essence, an
+Ethereum smart contract is an account controlled by an immutable
+program (i.e., bytecode). One can trigger the execution of the byte-
+code by sending a transaction, which contains the executing pa-
+rameters specified by the transaction sender, to the smart contract
+account. The EVM, a quasi Turing-complete state machine [8],
+provides the runtime environment to the contract execution. Solid-
+ity [14], which can be compiled into bytecode, is to date the most
+prevalent high-level language for implementing Ethereum smart
+contracts. Smart contracts are widely used to create cryptocurren-
+cies (also known as tokens) on Ethereum in addition to the native
+coin ETH. Notably, WETH is a one-to-one equivalent token of ETH.
+To submit a transaction on-chain, a user is required to pay a
+transaction fee. On Ethereum, the transaction fee equals the product
+of the gas (i.e., an integer measuring the computation complexity
+of a transaction) and the gas price (i.e., the amount of ETH that the
+transaction sender is willing to pay for a single unit of gas). Due to
+the limited space of an Ethereum block (i.e., the total amount of gas
+consumed in on block), a financially rational miner may include
+the transactions with the highest gas prices from the mempool
+into the next block. The blockchain network congests when the
+mempool grows faster than the transaction inclusion speed due to,
+for example, traders place substantial orders in a market collapse.
+Under such circumstances, users have to increase gas prices or wait
+longer than average to confirm their transactions.
+2.2 Decentralized Finance (DeFi)
+Smart contracts allow, not only the creation of tokens, but fur-
+ther the construction of sophisticated on-chain financial systems,
+namely Decentralized Finance (DeFi). In DeFi, any entity can de-
+sign a financial protocol, implement in smart contracts, and deploy
+2
+Note that there is no universal mempool across all network participants. Every node
+maintains its own mempool depending on the received transactions.
+337
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+on-chain. Compared to traditional finance, DeFi presents promis-
+ing peculiarities, e.g., non-custody and public verifiability [28]. Al-
+though most DeFi protocols are mirrored services from traditional
+finance (e.g., exchanges), a proper redesign appears to be necessary
+considering the special settlement mechanisms of the underlying
+blockchains. For instance, due to the limited computation capacity,
+a limit order book with a matching engine, which has been adopted
+in centralized exchanges for decades, is, however, inefficient on
+blockchains. This leads to the invention of the automated market
+maker, where traders, instead trading against other traders, only
+need to interact with a pool of assets reserved in a smart contract.
+Since the rise of DeFi, we have observed numerous such innovative
+DeFi design, most of which, however, have not been thoroughly
+studied. As a result, the risks and threats that DeFi users are ex-
+posed to are still unclear, necessitating empirical research to provide
+objective insights.
+At the time of writing, Ethereum is the dominating permission-
+less blockchain hosting DeFi. The DeFi ecosystem on Ethereum
+reached a TVL of over 80B USD
+3
+, with more than 50% contributed
+by lending protocols. Lending and borrowing is a popular way to
+realize a leverage (amplifying the profit) in DeFi. A typical use
+case is outlined as follows. A trader collateralizes 5,000 USDT (a
+USD-pegged stablecoin, cf. Section 2.2.3) to borrow 1 ETH, when
+the ETH/USDT price is 1 ETH = 3,000USDT. The borrower then
+sells the borrowed 1 ETH for 3,000USDT. If the ETH price declines
+to, for example, 1 ETH = 2,000USDT, the trader can purchase 1
+ETH with 2,000USDT, repay the debt, redeem the collateral, and
+finally realize a profit of 1,000USDT. The trader at the same time
+bears the liquidation risk if the ETH price increases and the USDT
+collateral is insufficient to back the 1 ETH debt. In a liquidation,
+a liquidator repays the ETH debt for the trader and acquires the
+USDT collateral. The acquired collateral exceeds the rapid debt in
+value incurring a loss to the trader. Such repayment-acquisition liq-
+uidation mechanisms are adopted by most DeFi lending platforms.
+However, the incentives, risks (e.g., to what extend borrowers have
+lost in liquidation events), and stabilities of these protocols have
+not been thoroughly studied, which motivates this work.
+We outline the details of the liquidation mechanisms in Section 3.
+In the following, we introduce the essential components of DeFi
+that are relevant to lending protocols.
+2.2.1 Price Oracle. Because lending protocols aim to liquidate col-
+lateralized assets upon collateral price declines, the lending smart
+contract is required to know the price of the collateral asset. Prices
+can either be provided through an on-chain oracle, such as smart
+contract based exchanges (e.g., Uniswap [35]), or via an off-chain
+oracle (such as Chainlink [33]). On-chain price oracles are known
+to be vulnerable to manipulation [30].
+2.2.2 Flash Loan. The atomicity of blockchain transactions (exe-
+cutions in a transaction collectively succeed or fail) enables flash
+loans. A flash loan represents a loan that is taken and repaid within
+a single transaction [6, 30]. A borrower is allowed to borrow up to
+all the available assets from a flash loan pool and execute arbitrary
+3
+In comparison, the Binance Smart Chain (BSC), ranked the second in terms of TVL at
+the time of writing, reaches 20B USD (cf. https://debank.com/ranking/locked_value).
+We omit BSC in this work because BSC starts to grow from early 2021, which has not
+accumulated sufficient data.
+logic with the capital within a transaction. If the loan plus the re-
+quired interests are not repaid, the whole transaction is reverted
+without incurring any state change on the underlying blockchain
+(i.e., the flash loan never happened). Flash loans are shown to be
+widely used in liquidations [30].
+2.2.3 Stablecoin. Stablecoins are a class of cryptocurrencies de-
+signed to provide low price volatility [12]. The price of a stablecoin
+is generally pegged to some reference point (e.g., USD). The typical
+stablecoin mechanisms are reserve of the pegged asset (e.g., USDT
+and USDC), loans (e.g., DAI), dual coin, and algorithmic supply
+adjustments [25].
+2.3 Terminology
+We adhere to the following terminologies in this paper.
+Loan/Debt: A borrower, secured by a collateral deposit, temporar-
+ily takes capital from a lender. The collateral is the insurance
+of the lender against defaults.
+Interest Rate: A loan is repaid by repaying the lent amount, plus
+a periodic percentage of the loan amount. The interest rate
+can be governed by the scarcity/surplus of the available asset
+supply within the lending smart contract.
+Over/Under-collateralization: Blockchain based loans are typ-
+ically over-collateralized, i.e., the borrower has to provide
+collateral assets of higher total value than the granted loan. A
+loan is under-collateralized when the value of the collateral
+is inferior to the debt.
+Position: In this work, the collateral and debts are collectively
+referred to as a position. A position may consist of multiple-
+cryptocurrency collaterals and debts.
+Liquidation: In the event of a negative price fluctuation of the
+debt collateral (i.e., a move below the liquidation threshold),
+a position can be liquidated. In permissionless blockchains,
+anyone can repay the debt and claim the collateral.
+Liquidation Threshold (LT): Is the percentage at which the col-
+lateral value is counted towards the borrowing capacity (cf.
+Equation 3).
+Liquidation Spread (LS): Is the bonus, or discount, that a liquida-
+tor can collect when liquidating collateral (cf. Equation 1).
+This spread incentivises liquidators to act promptly once a
+loan crosses the liquidation threshold.
+𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐶𝑜𝑙𝑙𝑎𝑡𝑒𝑟𝑎𝑙 𝑡𝑜 𝐶𝑙𝑎𝑖𝑚
+= 𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐷𝑒𝑏𝑡 𝑡𝑜 𝑅𝑒𝑝𝑎𝑦 × (1 + LS) (1)
+Close Factor (CF): Is the maximum proportion of the debt that is
+allowed to be repaid in a single liquidation.
+Collateralization Ratio (CR): Is the ratio between the total value
+of collateral and debt (cf. Equation 2) where 𝑖 represents the
+index of collateral or debt if the borrower owns collateral or
+owes debt in multiple cryptocurrencies.
+CR =
+∑
+𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐶𝑜𝑙𝑙𝑎𝑡𝑒𝑟𝑎𝑙𝑖∑
+𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐷𝑒𝑏𝑡𝑖
+(2)
+A debt is under-collateralized if CR < 1, otherwise the debt
+is over-collateralized.
+Borrowing Capacity (BC): Refers to the total value that a bor-
+rower is allowed to request from a lending pool, given its
+338
+https://debank.com/ranking/locked_value
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+Price Oracle
+Lending PoolLenders / Borrowers
+Collateralize / Withdraw
+Liquidators
+Atomic Liquidation
+Non-atomic Liquidation
+(a) Initiate Liquidation
+(b) Operations
+(c) Finalize Liquidation
+Feed Price
+Borrow / Repay
+Figure 1: High-level system diagram of a lending pool sys-
+tem.
+collateral amount. For each collateral asset 𝑖 of a borrower,
+its borrowing capacity is defined in Equation 3.
+BC =
+∑
+𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐶𝑜𝑙𝑙𝑎𝑡𝑒𝑟𝑎𝑙𝑖 × LT𝑖 (3)
+Health Factor (HF): The health factor measures the collateraliza-
+tion status of a position, defined as the ratio of the borrowing
+capacity over the outstanding debts (cf. Equation 4).
+HF =
+BC∑
+𝑉𝑎𝑙𝑢𝑒 𝑜 𝑓 𝐷𝑒𝑏𝑡𝑖
+(4)
+If HF < 1, the collateral becomes eligible for liquidation.
+3 SYSTEMATIZATION OF LENDING AND
+LIQUIDATION PROTOCOLS
+In this section, we systematize how the current borrowing mecha-
+nisms and their specific liquidation processes operate.
+3.1 Borrowing and Lending System Model
+The following aims to summarize the different actors engaging in
+borrowing and lending on a blockchain (cf. Figure 1).
+A lender is an actor with surplus capital who would like to earn
+interest payments on its capital by lending funds to a third party,
+e.g., a borrower.
+A borrower provides collateral to borrow assets from a lender.
+The borrower is liable to pay regular interest fees to the lender (typi-
+cally measured as percentage of the loan). As lending in blockchains
+is typically performed without KYC, the borrower has to collater-
+alize a value that is greater than the borrowed loan. In pure lend-
+ing/borrowing platforms such as Aave, Compound and dYdX, the
+collateral from borrowers is also lent out as loans. Borrowers hence
+automatically act as lenders.
+While lending could be performed directly on a peer-to-peer
+basis, blockchain-based lending protocols often introduce a lend-
+ing pool governed by a smart contract. A pool can hold several
+cryptocurrencies, and users can interact with the pool to deposit
+or withdraw assets according to the rules defined by the smart
+contract code.
+A liquidator observes the blockchain for unhealthy positions
+(i.e., the health factor is below 1) to be liquidated. Liquidators typi-
+cally operate bots, i.e., automated tools which perform a blockchain
+lookup, price observation, and liquidation attempt, if deemed prof-
+itable. Liquidators are engaging in a competitive environment,
+where other liquidators may try to front-run each other [13]. No-
+tably, an atomic liquidation (e.g., a fixed spread liquidation) is settled
+in one blockchain transaction, while non-atomic liquidation mech-
+anisms (e.g., auctions) generally require liquidators to interact with
+the lending pool in multiple transactions.
+3.2 Systematization of Liquidation
+Mechanisms
+We observe that existing lending platforms mainly adopt two dis-
+tinct liquidation mechanisms. One mechanism is based on a non-
+atomic English auction [24] process, and the other follows an atomic
+fixed spread strategy. We formalize the two existing dominating
+mechanisms as follows.
+3.2.1 Auction Liquidation. An auction based liquidation mecha-
+nism follows the subsequent methodology:
+(1) A loan becomes eligible for liquidation (i.e., the health factor
+drops below 1).
+(2) A liquidator starts the auction process (which can last several
+hours).
+(3) Interested liquidators provide their bids (e.g., the highest bid
+receives the loan collateral).
+(4) The auction ends according to the rules set forth in the
+auction contract.
+tend dent
+auction length
+Initiate Terminate
+bid —— 
+Finalize
+Figure 2: Two-phase liquidation auction of MakerDAO. Any
+actor can invoke the public function bite to initiate the col-
+lateral auction and invoke the public function deal to final-
+ize the liquidation after the auction terminates.
+MakerDAO tend-dent auction. Specifically, MakerDAO employs
+a two-phase auction process, which we term tend-dent auction (cf.
+Figure 2). When a position with 𝐷 value of debt and 𝐶 value of
+collateral is eligible for liquidation, i.e., HF < 1, a liquidator is able
+to initiate the tend-dent auction. A liquidator is required to bid
+at a higher price than the last bid in the auction. The two-phase
+workflow is described as follows.
+Tend: In the tend phase, liquidators compete by bidding to repay
+parts of the debt in exchange for the entire collateral. We denote
+the amount of debt committed to repay in each bid by 𝑑𝑖 , s.t. 𝑑𝑖 ≤
+𝐷 and 𝑑𝑖 > 𝑑𝑖−1. If the auction terminates in the tend phase,
+the winning bidder receives all the collateral (i.e., 𝐶). When 𝑑𝑖
+reaches 𝐷 , the auction moves into the dent phase.
+Dent: In the dent phase, liquidators compete by bidding to accept
+decreasing amounts of collateral in exchange for the full debt
+(i.e., 𝐷) they will end up repaying. We denote the amount of
+collateral committed in each bid by 𝑐𝑖 , s.t. 𝑐𝑖 ≤ 𝐶 and 𝑐𝑖 <
+𝑐𝑖−1. The winning bidder repays the full debt and receives the
+339
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+partial collateral (denoted by 𝑐win). The remaining collateral (i.e.,
+𝐶 − 𝑐win) is returned to the position owner (i.e., the borrower).
+The auction terminates when any of the following two conditions
+is satisfied. Note that the auction can terminate in the tend phase.
+(1) AuctionLengthCondition: the configurable auction length
+(e.g., 6 hours) has passed since the initiation of the auction.
+(2) Bid Duration Condition: the configurable bid duration
+(e.g., 5 hours) has passed since the last bid.
+After the termination of an auction, the winning liquidator is
+allowed to finalize the liquidation to claim the proposed collateral.
+3.2.2 Fixed Spread Liquidation. Instead of allowing multiple liq-
+uidators to bid over a time-frame, a liquidatable loan can be instantly
+liquidated with a pre-determined discount (cf. Figure 1). Aave, for
+instance, allows liquidators to purchase the loan collateral at up to a
+15% discount of the current market price. This discount, or liquida-
+tion spread, is known upfront, and the liquidators can hence locally
+decide whether to engage in a liquidation opportunity. Following a
+fixed spread model avoids hour-long liquidation auctions, which
+cost time and transaction fees. Liquidators, moreover, can choose
+to liquidate collateral with the use of atomic flash loans [30]. While
+flash loans increase the transaction costs of the liquidators, they
+reduce the currency exposure risk of holding the assets required
+for liquidation.
+Fixed Spread Liquidation Example. In the following, we provide
+an example of a fixed spread liquidation:
+(1) Currency values: We assume an initial price of 3,500 US-
+D/ETH.
+(2) Collateral Deposit: A user deposits 3 ETH, and hence has
+10,500USD worth of collateral. If we assume a liquidation
+threshold (LT, cf. Section 2.3) of 0.8, the resulting borrowing
+capacity of the user is BC = 10,500USD × LT = 8,400USD.
+(3) Borrowing: In the next step the user borrows, for instance,
+8,400USDC worth 8,400USD.
+(4) ETH price decline: We now assume that the ETH value
+declines to 3,300USD/ETH, which means that the collateral
+value declines to 9,900USD with BC = 7,920USD. The price
+oracle updates the ETH price on the lending smart contract.
+The health factor of the loan now drops to HF =
+7,920USD
+8,400USD
+≈
+0.94 < 1 and thus the collateral is available for liquidation.
+(5) Liquidation: A liquidator submits a liquidation transaction
+to repay 50% (close factor CF, cf. Section 2.3) of the debt, i.e.,
+4,200USDC. In return, the liquidator is allowed to purchase
+collateral at the price of
+3,300USD/ETH
+1+LS = 3,000USD/ETH (we
+assume that the liquidation spread LS is 10%, cf. Section 2.3).
+In this liquidation, the liquidator receives
+4,200USD
+3,000USD/ETH ×
+3,300 USD/ETH = 4,620USD worth of ETH and realizes a
+profit of 420USD.
+3.3 Studied Lending Protocols
+Within this work we focus on the biggest lending protocols, mea-
+sured by total value locked, notably MakerDAO (12.49B USD), Aave
+(11.20B USD), Compound (10.15B USD), and dYdX (247.6M USD).
+Aave is a pool-based lending and borrowing protocol [4]. Lenders
+deposit assets into a pool governed by open-source smart contracts,
+and borrowers can then take loans out of this pool. The interest rate
+of an Aave pool is decided algorithmically by the smart contract and
+depends on the available funds within the lending pool. The more
+users borrow an asset, the higher its interest rate rises. A lending
+pool can consist of several cryptocurrency assets, for instance ETH,
+DAI, and USDC. In Aave, when the health factor drops below 1,
+any liquidator can call the public pool function liquidationCall, by
+repaying parts or all of the outstanding debt, while profiting from
+the liquidation spread. Aave specifies that only a maximum of 50%
+of the debt can be liquidated within one liquidationCall execution
+(referred to as a close factor). The liquidation spread on Aave ranges
+from 5% to 15%, depending on the considered markets. Aave bases
+its pricing feed on the external Chainlink oracle [33]. Aave was
+upgraded to a newer version in December 2020 while the core
+protocols remained nearly unchanged. In this work, we distinguish
+the two versions with Aave V1 and Aave V2.
+Compound [19] launched before Aave and operates in a similar
+fashion. Users deposit assets and earn interests based on the amount
+of interests paid by borrowers. When a borrower exceeds the bor-
+rowing capacity, at most 50% of outstanding debt can be repaid at
+once by a liquidator (same as the close factor in Aave). The liqui-
+dation may continue until the collateral guarantees a health factor
+superior to one. The liquidator in exchange receives the collateral
+at the current market price minus the liquidation spread.
+dYdX [17] is divided into two sub-protocols, one for trading,
+borrowing, lending and one that also supports futures markets.
+Similar to Aave and Compound, dYdX operates at a fixed spread
+of 5% for the WETH/USDC, WETH/DAI and USDC/DAI markets,
+at the time of writing. dYdX’s close factor is 100%, allowing the
+liquidators to liquidate the entire collateral within one liquidation.
+Contrary to the aforementioned borrowing/lending protocols,
+MakerDAO provides a decentralized stablecoin called DAI that is
+pegged to the US dollar, while still functioning financially similar
+to a borrowing/lending platform. A user can collateralize at least,
+e.g., 150% of a crypto asset (for instance ETH) to mint 100% DAI.
+Creating DAI opens a so-called collateralized debt position (CDP),
+which can be liquidated if the collateralized value drops below the
+fixed collateralization ratio. MakerDAO adopts an auction-based
+liquidation mechanism (cf. Section 3.2).
+4 LIQUIDATION INSIGHTS
+By observing the publicly readable Ethereum blockchain we com-
+piled the following insights on liquidation events.
+4.1 Measurement Setup
+Our measurement setup is outlined in Figure 3. We gather our data
+by crawling blockchain events (e.g., liquidation events) and reading
+blockchain states (e.g., oracle prices) from an Ethereum full archive
+Ethereum
+P2P Network Archive Node
+Download historical block states 
+Custom Client
+Filter events
+Figure 3: Measurement setup overview.
+340
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+8000000
+(2019-06-21)
+9000000
+(2019-11-25)
+10000000
+(2020-05-04)
+11000000
+(2020-10-06)
+12000000
+(2021-03-08)
+Block
+(YYYY-MM-DD)
+$0
+$50M
+$100M
+$150M
+$200M
+$250M
+$300M
+$350M
+A
+cc
+um
+ul
+at
+iv
+e
+A
+m
+ou
+nt
+(U
+SD
+) Aave V1
+Aave V2
+Compound
+dYdX
+MakerDAO
+Figure 4: From the inception of each considered lending pro-
+tocol, we plot the accumulative collateral sold through liqui-
+dation (April, 2019 to April, 2021).
+node, on an AMD Ryzen Threadripper 3990X with 64 cores, 256
+GB of RAM and 2 × 8 TB NVMe SSD in Raid 0 configuration. An
+Ethereum archive node stores not only the blockchain data but also
+the chain state at every historical block, which supports efficient
+historical state query (e.g., the borrowing position debt amount at
+a specific block). At the time of writing, an Ethereum archive node
+requires over 4 TB disk space.
+The Ethereum events are essentially EVM logs, which are also
+recorded on-chain. An event is indexed by its signature, a 256-bit
+hash, and the contract address emitting this event. We hence can
+filter the liquidation events emitted from the studied lending pools.
+We also build our own custom Ethereum client based on the
+golang-based geth client
+4
+to execute transactions on a specific
+block (the block state is downloaded from the archive node) when
+necessary. For instance, in Section 5.2, we validate our optimal fixed
+spread liquidation strategy through concrete executions on past
+blockchain states.
+4.2 Overall Statistics
+In total, we observe 28,138 successful liquidations from the incep-
+tion
+5
+of the four platforms to block 12344944, the last block in the
+month of April, 2021. We normalize the values of different cryp-
+tocurrencies to USD according to the prices given by the platforms’
+on-chain price oracles at the block when the liquidation is settled.
+We crawl this data on-chain, and do not rely on an external price
+oracle, or API.
+In Figure 4, we present the accumulative collateral sold through
+liquidation in terms of USD. The overall liquidated collateral on
+the four platforms Aave, Compound, dYdX, and MakerDAO ac-
+cumulates to a total of 807.46M USD. We notice an increase on
+Compound in November, 2020. This is caused by an irregular DAI
+price provided by the Compound price oracle, which triggers a
+large volume of cryptocurrencies to be liquidated [2]. Another re-
+markable boost on Compound in February, 2021 is caused by the
+drastic fluctuations in prices of cryptocurrencies [3].
+4
+https://github.com/ethereum/go-ethereum
+5
+The inception blocks of Aave, Compound, dYdX and MakerDAO are 9241022, 7710733,
+7575711 and 8040587 respectively.
+Table 1: Number of the liquidations and liquidators on Aave,
+Compound, dYdX, MakerDAO and their average profit. We
+measure the number of liquidators based on their unique
+Ethereum address. We notice that some liquidators operate
+on multiple lending markets.
+Platform Liquidations Liquidators Average Profit
+Aave V1 3,809 665 10.76K USD
+Aave V2 1,039 125 43.12K USD
+Compound 6,766 657 39.94K USD
+dYdX 9,762 600 14.30K USD
+MakerDAO 6,762 140 115.84K USD
+Total 28,138 2,011 31.62K USD
+4.3 Incentives and Participation
+In the following, we measure how liquidators are incentivized to
+engage in liquidations and elaborate on the status quo of liquidator
+participation.
+4.3.1 Liquidator Profit & Loss. To measure the profit of each liqui-
+dation event, we assume that the purchased collateral is immedi-
+ately sold by the liquidator at the price given by the price oracle.
+The total profit by the 28,138 liquidations sums up to a total of
+63.59M USD. To better understand the temporal evolution of liqui-
+dation profits, we show the monthly collective profit yielded from
+each platform in Figure 5.
+MakerDAO notably shows an outlier in March, 2020, when the
+MarkerDAO monthly profit reached 13.13M USD. This outlier is
+due to the Ethereum network congestion caused by the 43% ETH
+price market collapse on the 13th March, 2020 [1]. The liquidation
+bots were not acting accordingly, which caused the liquidation
+transactions to not be swiftly included in the blockchain. This delay
+allowed other capable liquidators to manually win the auctions at
+a negligible cost.
+In November, 2020, an irregular DAI price provided by the Com-
+pound price oracle [2] allowed liquidators to profit in total 8.38MUSD.
+We also observe that Compound contributes a strong liquidation
+profit of 9.61M USD in February, 2021, which, however, does not
+seem related to any bot failure or oracle irregularity.
+To study the number of liquidators, we assume that each unique
+Ethereum address represents one liquidator. We then identify a
+total of 2,011 unique liquidators. On average the liquidators yield
+a profit of 31.62K USD each. We show the number of liquidators
+and their average profit on the four considered platforms in Table 1.
+Remarkably, the most active liquidator performs 2,482 liquidations
+alone, which yield a total profit of 741.75K USD. The most profitable
+liquidator generates 5.84M USD in only 112 liquidations.
+We also discover 641MakerDAO liquidations that are not prof-
+itable and incur a total loss of 467.44K USD. After manually inspect-
+ing those non-profitable liquidation transactions, we can confirm
+that the liquidation losses are caused by collateral price fluctuations
+during the auctions.
+341
+https://etherscan.io/block/12344944
+https://github.com/ethereum/go-ethereum
+https://etherscan.io/block/9241022
+https://etherscan.io/block/7710733
+https://etherscan.io/block/7575711
+https://etherscan.io/block/8040587
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+$13M
+$9.0M
+20
+19
+-0
+4
+20
+19
+-0
+5
+20
+19
+-0
+6
+20
+19
+-0
+7
+20
+19
+-0
+8
+20
+19
+-0
+9
+20
+19
+-1
+0
+20
+19
+-1
+1
+20
+19
+-1
+2
+20
+20
+-0
+1
+20
+20
+-0
+2
+20
+20
+-0
+3
+20
+20
+-0
+4
+20
+20
+-0
+5
+20
+20
+-0
+6
+20
+20
+-0
+7
+20
+20
+-0
+8
+20
+20
+-0
+9
+20
+20
+-1
+0
+20
+20
+-1
+1
+20
+20
+-1
+2
+20
+21
+-0
+1
+20
+21
+-0
+2
+20
+21
+-0
+3
+20
+21
+-0
+4
+YYYY-MM
+$0
+$1.0M
+$2.0M
+M
+on
+th
+ly
+L
+iq
+ui
+da
+tio
+n
+Pr
+ofi
+t(
+U
+SD
+)
+Aave V1
+Aave V2
+Compound
+dYdX
+MakerDAO
+Figure 5: Monthly accumulated liquidator profit. We observe an outlier for MakerDAO inMarch, 2020, because theMakerDAO
+liquidation bots were faulty due to an excessive price decline of ETH. The outlier for Compound in November, 2020 is caused
+by an irregular price reported by a price oracle.
+8000000
+(2019-06-21)
+8500000
+(2019-09-07)
+9000000
+(2019-11-25)
+9500000
+(2020-02-17)
+10000000
+(2020-05-04)
+10500000
+(2020-07-21)
+11000000
+(2020-10-06)
+11500000
+(2020-12-22)
+12000000
+(2021-03-08)
+Block
+(YYYY-MM-DD)
+1
+10
+100
+1000
+10000
+100000
+G
+as
+Pr
+ic
+e
+(G
+W
+ei
+)
+Aave
+Compound
+dYdX
+Average Gas Price
+Figure 6: Gas prices paid by liquidators. We also report the 6000-blocks (1 day) moving average of the block median measured
+on-chain. Interestingly, several liquidations are below the average gas price.We notice a gas price spike inMarch, 2020 because
+of a collapse of ETH price [1]. There is an uptrend of gas price since May, 2020 due to the growing popularity of DeFi.
+4.3.2 Fixed Spread Liquidations. We observe 3,809, 1,039, 6,766 and
+9,762 settled liquidations on Aave V1, Aave V2, Compound and
+dYdX respectively.
+Liquidator Participation. In Figure 6, we show the gas price of
+every fixed spread liquidation transaction along with the average
+gas price. Note that we show the 6000-block moving average of
+the block gas price medians in the figure to smooth the curve for
+readability. The data in Figure 6 shows that many liquidators pay
+significant gas fees (the y-axis is a log scale). We find that 73.97%
+of the liquidations pay an above average transaction fee, and hence
+allows the conclusion that liquidation events are competitive.
+4.3.3 Auction Liquidations. Out of the recorded 6,762 MakerDAO
+liquidations, 3,377 auctions terminate in the tend phase and the
+other 3,385 auctions terminate in the dent phase. The average num-
+ber of bidders participating in a liquidation is only 1.99. We notice
+that 2.63± 1.96 bids (1.58± 0.95 tend bids and 1.06± 1.62 dent bids),
+are placed per auction.
+Duration. We define the duration of a MakerDAO liquidation
+auction, as the time difference between the auction initiation and
+finalization. To capture time, we resort to the block timestamps. We
+visualize the duration of the MakerDAO liquidations in Figure 7. On
+average, an liquidation lasts for 2.06 ± 6.43 hours (mean±standard
+deviation). There are 4,173 auctions terminating within one hour.
+We observe that few liquidations last longer than intended, which
+can be explained by that fact that the respective liquidators did not
+finalize the auction and hence didn’t claim the liquidation proceeds.
+For example, the longest auction lasts for 346.67 hours, while its
+last bid is placed 344.60 hours prior to the termination.
+342
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+9000000
+(2019-11-25)
+10000000
+(2020-05-04)
+11000000
+(2020-10-06)
+12000000
+(2021-03-08)
+Block
+(YYYY-MM-DD)
+1
+10
+100
+D
+ur
+at
+io
+n
+(H
+ou
+rs
+)
+Auction Duration
+Configured Bid Duration
+Configured Auction Length
+Figure 7: Duration of the MakerDAO liquidations. Interest-
+ingly, auctions last longer than they’re configured to. We
+can observe a change in system auction parameters after the
+13th March, 2020 event (the MakerDAO liquidation inci-
+dent).
+Bid Intervals. To better understand the bidding process of the
+various liquidators, we study the number of bids, and their re-
+spective intervals. We note that the first bid is placed on aver-
+age 4.12 ± 25.52 minutes after the auction initiation. Given that
+an auction can last several hours, it appears that most bidders
+engage early in the auction process. We observe that 4,537 auc-
+tions terminate with more than one bid placed. It also appears that
+bids come close together, as the average interval between bids is
+38.97 ± 89.34 minutes.
+4.4 Risks
+We proceed to discuss the risks that the participants of a lending
+pool (i.e., borrowers, lenders and liquidators) bear in liquidations.
+4.4.1 The Problem of Over-Liquidation. We observe that the liqui-
+dation mechanisms of Aave and Compound grant a liquidator the
+right to liquidate up to 50% of the collateral (i.e., the close factor)
+once a debt becomes liquidatable. dYdX even allows a liquidator to
+purchase 100% of the collateral at the fixed spread discount.
+Such design decision favor the liquidators over the borrowers,
+as a debt can likely be rescued by selling less than 50% of its value.
+Choosing an appropriate close factor is challenging, because the
+liquidation mechanism should minimize the number of liquida-
+tion events and overall transactions due to the limited transaction
+throughput of blockchains.
+Auction mechanisms do not specify a close factor and hence offer
+a more granular method to liquidate collateral. In return, auction
+liquidators are exposed to the risk of loss due to the price fluc-
+tuations of the collateral during the liquidation (cf. Appendix A).
+The MakerDAO tend-dent auction, is to the best of our knowledge,
+the only auction mechanism that is widely adopted in blockchain
+liquidations. Yet, the liquidation bots must remain robust and vig-
+ilant under blockchain congestion, otherwise the borrowers may
+endure excessive losses [1]. Some alternative auction mechanisms
+(e.g., Vickrey auction [9] and Dutch reverse auctions [22]) may
+have potential in mitigating the over-liquidation problem and could
+Table 2: Statistics of Type I/II bad debts on Aave, Compound
+and dYdX at block 12344944 (30th Apr 2021). For instance, if
+it costs 100 USD for a borrower to repay its debt, then 2, 550
+(32.0%) of the lending position are classified as Type II bad
+debts on Compound, which causes 14.3K USD collateral
+value to be locked.
+Type I Type II
+Transaction fee - ≤ 10 USD ≤ 100 USD
+Aave V2
+28 (0.5%)
+25,379 USD collateral
+102 (1.9%)
+4,793 USD collateral
+255 (4.7%)
+62,017 USD collateral
+Compound
+333 (4.2%)
+27,473 USD collateral
+1,681 (21.1%)
+675 USD collateral
+2,550 (32.0%)
+14,399 USD collateral
+dYdX -
+411 (36.3%)
+1,287 USD collateral
+720 (63.5%)
+18,019 USD collateral
+prove more resilient to network congestion. We leave an objective
+comparison of different auction designs for future work.
+4.4.2 Bad Debts. We define a borrowing position as a bad debt if
+it is financially rationale for neither the borrowers nor the lending
+platform to close the position. In the following we introduce two
+types of bad debts.
+(1) Type I bad debt (Under-collateralized position): If the
+collateral value falls below the value of the debt, then either
+the borrower or the lending platform will suffer a loss if the
+corresponding position is closed. Type I bad debt is typically
+caused by overdue liquidations. An overdue liquidation can,
+e.g., occur when the collateral/debt asset suffers a severe
+price fluctuation or the blockchain network is congested.
+(2) Type II bad debt (Excessive Transaction Fees): When
+an over-collateralized position is closed, the borrower will
+regain the excess asset used for over-collateralization. How-
+ever, if the value of the excess asset cannot cover the transac-
+tion fee, then there is no incentive for the borrower to repay
+and close this position.
+Because the value of the debt plus transaction fee is superior
+to the value of the bad debt collateral, repaying bad debt is not a
+financially rational endeavor for a borrower. The accumulation of
+bad debt reduces the total liquidity in a lending protocol, which
+necessarily leads to higher interest rates for borrowers. If the lend-
+ing pool maintains exclusively bad debts, lenders will not be able
+to withdraw funds.
+In the following we quantitatively measure the amount of bad
+debts present in existing lending protocols. To that end, we first
+have to assume a somewhat random cost which a borrower would
+need to bear, when repaying debt. For the sake of the example here,
+we choose a cost of 100 USD to repay the debt, and consider the
+blockchain state at block 12344944 (30th Apr 2021). Given this cost,
+we have identified in total 351/3,525 Type I/II bad debts (cf. Table 2).
+Remarkably, the liquidity of Aave V2 is reduced by 87.4K USD due
+to existing bad debts. It is worth mentioning that dYdX does not
+have any Type I bad debt at block 12344944. This is, because dYdX
+apparently uses an external insurance fund, to write off bad debts
+of Type I.
+4.4.3 Unprofitable Liquidations. We define a liquidation opportu-
+nity as unprofitable if the bonus collected by the liquidator cannot
+343
+https://etherscan.io/block/12344944
+https://etherscan.io/block/12344944
+https://etherscan.io/block/12344944
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+Table 3: Statistics of unprofitable liquidation opportuni-
+ties on Aave, Compound and dYdX at block 12344944
+(30th Apr 2021). For instance, Aave configures a 50% liqui-
+dation threshold with at most 15% liquidation spread. Based
+on our measurement, at least 59.1% of the Aave liquidation
+opportunities are not profitable if the liquidation process
+costs 100.
+Transaction Fee ≤ 10 USD ≤ 100 USD
+Aave V2 LT = 50%, LS ≤ 15%
+≥ 6 (27.2%)
+398 USD collateral
+≥ 13 (59.1%)
+3,404 USD collateral
+Compound LT = 50%, LS = 8%
+325 (14.8%)
+34,025 USD collateral
+350 (15.9%)
+125,722 USD collateral
+dYdX LT = 100%, LS = 5% - -
+cover the transaction fee. Unprofitable liquidations imply that the
+lending position’s health cannot be restored in time, which nec-
+essarily leads to an accumulation of Type I bad debt. We measure
+the number of unprofitable liquidation opportunities in Table 3.
+Given the average transaction fee at the time of writing, we choose
+a transaction cost of 100 USD for a single liquidation. Remarkably,
+by block 12344944 (30th Apr 2021), we have identified 350 unprof-
+itable liquidation opportunities on Compound, which corresponds
+to 125,722 USD worth of collateral. Rational liquidators will not
+attempt to liquidate unprofitable lending positions. Therefore, these
+positions will inevitably become Type I bad debts, if their health
+factor continues to fall.
+4.4.4 Flash Loan Usages. Fixed spread liquidations can be con-
+ducted in one transaction alone, which reduces the complexity and
+risk for the liquidators. For instance, liquidators do not need to
+hold any assets ready to repay debt for a liquidation. Instead, the
+liquidators can resort to flash loan pools, lend the required capital
+to repay debt, and pay back the flash loan interests by the end of
+the liquidation call. A typical flow of a flash loan liquidation works
+as follows:
+(1) The liquidator borrows a flash loan in currency 𝑋 to repay
+the debt.
+(2) The liquidator repays the borrower’s debt with a flash loan
+and receives collateral in currency 𝑌 at a premium.
+(3) The liquidator exchanges parts of the purchased collateral
+in exchange for currency 𝑋 .
+(4) To conclude the flash loan, the liquidator repays the flash
+loan together with flash loan interest. The remaining profit
+lies with the liquidator. If the liquidation is not profitable,
+the flash loan would not succeed.
+To understand to what degree liquidators engage in flash loans,
+we study the flash loan pools of Aave and dYdX (which also act as
+lending pools). We therefore filter the relevant events in the liqui-
+dation transactions that apply to flash loans. For our observation
+window, we observe a total of 623 flash loans, that are borrowed
+for liquidations. The accumulative flash loan amount lent sums
+up to 483.83M USD. We summarize further details in Table 4. In
+the table, we include the flash loans that are borrowed before and
+repaid after liquidation. We notice that in terms of accumulative
+amounts, dYdX flash loans are more popular than Aave, likely due
+to the low interest rate of dYdX flash loans.
+Table 4: Flash loan usages for liquidations.
+Liquidation
+Platform
+Flash Loan
+Platform Flash Loans Accumulative
+Amount
+Aave V1 dYdX 320 93.57M USD
+Aave V2
+Aave V2 61 1.27M USD
+dYdX 97 317.29M USD
+Compound
+Aave V1 114 32.49K USD
+dYdX 31 71.67M USD
+4.5 Instabilities
+In this section, we discuss the lending platform instabilities due to
+cryptocurrency price fluctuations.
+4.5.1 Liquidation Sensitivity. To understand how the lending plat-
+forms respond to price declines of different currencies, we quantify
+the liquidation sensitivity, i.e., the amount of collateral that would
+be liquidated, if the price of the collateral would decline by up to
+100%.We again capture Aave V2, Compound, MakerDAO, and dYdX
+in the snapshot state at block 12344944
+6
+to provide an exhaustive
+understanding of borrower risk profiles.
+We detail how we measure the liquidation sensitivity in Al-
+gorithm 1. Specifically, we examine whether each debt becomes
+liquidatable because of the price decline of the given cryptocur-
+rency. Note that when counting the liquidatable collateral value,
+we consider the value decrease due to the price decline. We then
+present the sensitivity results in Figure 8. We find that all of the
+four lending platforms are sensitive to the price decline of ETH. For
+example, an immediate 43% decline of the ETH price (analogous to
+the ETH price decline on the 13th of March, 2020), would result in
+up to 1.07B USD collateral to become liquidatable on MakerDAO.
+To our surprise, although Aave V2 and Compound follow similar
+liquidation mechanisms and have similar TVL, Aave V2 is more
+stable to price declines in terms of liquidatable collateral. By manu-
+ally inspecting, we find that this is because Aave V2 users prefer
+adopting a multiple-cryptocurreny collateral. Hence, the positions
+in Aave V2 are less likely to become liquidatable due to the price
+decline of a single cryptocurrency.
+4.5.2 Stability of Stablecoins. We observe that certain borrow-
+ers collateralize one stablecoin and borrow another stablecoin.
+Through such strategy, a borrower reduces the likelihood of liq-
+uidations, because the prices of stablecoins are deemed stable (cf.
+Section 2.2.3). To measure the stability of this stablecoin borrowing
+strategy, we collect the prices of three popular stablecoins, DAI,
+USDC, and USDT, reported by the price oracle Chainlink [33], from
+block 9976964 (May-01-2020) to 12344944 (Apr-30-2021). We find
+that the price differences among the three stablecoins is within 5%
+in 99.97% of the measured 2,367,981 blocks (1 year). This indicates
+that the aforementioned stablecoin borrowing strategy could have
+been stable for most of the time in 2020. However, we remark that
+6
+We ignore Aave V1 in the sensitivity measurement because the majority of the
+liquidity of Aave V1 had been migrated to Aave V2 at block 12344944.
+344
+https://etherscan.io/block/12344944
+https://etherscan.io/block/12344944
+https://etherscan.io/block/12344944
+https://etherscan.io/block/9976964
+https://etherscan.io/block/12344944
+https://etherscan.io/block/12344944
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+0% 20% 40% 60% 80% 100%
+Price Decline in Percentage
+$0
+$20M
+$40M
+$60M
+$80M
+L
+iq
+ui
+da
+ta
+bl
+e
+C
+ol
+la
+te
+ra
+l(
+U
+SD
+)
+Collateral Cryptocurrency
+WBTC
+ETH
+YFI
+ZRX
+UNI
+AAVE
+BAT
+DAI
+ENJ
+KNC
+LINK
+MANA
+MKR
+REN
+SNX
+TUSD
+USDC
+CRV
+BAL
+xSUSHI
+(a) Aave V2
+0% 20% 40% 60% 80% 100%
+Price Decline in Percentage
+$0
+$200M
+$400M
+$600M
+$800M
+$1B
+$1.2B
+$1.4B
+$1.6B
+L
+iq
+ui
+da
+ta
+bl
+e
+C
+ol
+la
+te
+ra
+l(
+U
+SD
+)
+Collateral
+Cryptocurrency
+BAT
+DAI
+ETH
+REP
+USDC
+WBTC
+ZRX
+UNI
+COMP
+(b) Compound
+0% 20% 40% 60% 80% 100%
+Price Decline in Percentage
+$0
+$5M
+$10M
+$15M
+$20M
+$25M
+L
+iq
+ui
+da
+ta
+bl
+e
+C
+ol
+la
+te
+ra
+l(
+U
+SD
+)
+Collateral
+Cryptocurrency
+ETH
+USDC
+DAI
+(c) dYdX
+0% 20% 40% 60% 80% 100%
+Price Decline in Percentage
+$0
+$250M
+$500M
+$750M
+$1B
+$1.25B
+$1.5B
+$1.75B
+$2B
+L
+iq
+ui
+da
+ta
+bl
+e
+C
+ol
+la
+te
+ra
+l(
+U
+SD
+)
+Collateral Cryptocurrency
+ZRX
+USDC
+USDT
+LRC
+WBTC
+TUSD
+PAX
+ETH
+LINK
+COMP
+MANA
+KNC
+BAT
+BAL
+FYI
+GUSD
+UNI
+renBTC
+AAVE
+UNIV2DAIETH
+UNIV2WBTCETH
+UNIV2USDCETH
+UNIV2DAIUSDC
+UNIV2ETHUSDT
+UNIV2LINKETH
+UNIV2UNIETH
+UNIV2WBTCDAI
+UNIV2AAVEETH
+UNIV2DAIUSDT
+(d) MakerDAO
+Figure 8: Liquidation sensitivity to price decline in four lending platforms. Liquidation sensitivity denotes the amount of
+collateral that would be liquidated, if the price of the collateral would decline by up to 100%. We find that all of the four
+lending platforms are sensitive to the price decline of ETH. Although Aave V2 and Compound follow similar liquidation
+mechanisms and have similar TVL, Aave V2 is more stable to price declines.
+liquidation risks still remain. The maximum price difference we
+detect is 11.1% between USDC and DAI at block 10578280.
+4.6 Remarks
+Our measurements and analysis provide the following insights on
+DeFi liquidation mechanisms.
+(1) Existing liquidation mechanisms generate remarkable finan-
+cial rewards for liquidators (cf. Section 4.3.1). Liquidators
+are well incentivized to actively perform liquidations. This
+is confirmed by the severe gas price competition among
+liquidation transactions (cf. Section 4.3.2) and short bid inter-
+vals in auction liquidations (cf. Section 4.3.3). However, the
+fixed spread liquidation allows liquidators to over-liquidate
+a borrowing position, which incurs unnecessary losses to
+the borrowers (cf. Section 4.4.1).
+(2) Excessive transaction fees necessarily lead to unprofitable
+liquidation opportunities and Type II bad debt. Overdue liq-
+uidations increase the likelihood of Type I bad debt (cf. Sec-
+tion 4.4.2 and Section 4.4.3).
+(3) Fixed spread liquidators can use flash loans to eliminate the
+risk of holding a specific asset (cf. Section 4.4.4). Auction
+liquidators are exposed to the risk of price fluctuations during
+auctions, and may hence suffer a loss (cf. Appendix A).
+(4) We show that at the time of writing, the studied lending
+platforms in this work (Aave V2, Compound, dYdX, and
+MakerDAO) are sensitive (i.e., the amount of the liquidatable
+collateral due to the price decline of a cryptocurrency) to the
+price decline of ETH (cf. Section 4.5.1).
+(5) We evaluate the lending and borrowing practice when fo-
+cussing exclusively on stablecoins. We show that such strat-
+egy mitigates the risk of liquidations for most of the time,
+while liquidations can still occur (cf. Section 4.5.2).
+5 TOWARDS BETTER LIQUIDATION
+MECHANISMS
+In this section, we objectively compare the studied liquidationmech-
+anisms and present an optimal fixed spread liquidation strategy
+that aggravates the loss of borrowers.
+345
+https://etherscan.io/block/10578280
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+Algorithm 1: Sensitivity measurement algorithm.
+Input :Target currency ℭ; Price decline percentage 𝑑%; The set of
+borrowers {B𝑖 };
+Output :Liquidatable collateral LC;
+Function Col(B, 𝑐):
+return The value of collateral in currency 𝑐 owned by B;
+end
+Function Debt(B, 𝑐):
+return The value of debt in currency 𝑐 owed by B;
+end
+LC← 0;
+foreach B ∈ {B𝑖 } do
+if B owns collateral in currency ℭ then
+// The collateral value of B
+// after the price decline
+C← ∑
+𝑐Col(B, 𝑐)−Col(B, ℭ)×𝑑%;
+// The borrowing capacity of B
+// after the price decline
+BC← ∑
+𝑐Col(B, 𝑐)×LT𝑐−Col(B, ℭ)×LTℭ × 𝑑%;
+// The debt value of B
+// after the price decline
+D← ∑
+𝑐Debt(B, 𝑐);
+if B owes debt in currency ℭ then
+D← D−Debt(B, ℭ)×𝑑%;
+end
+if BC < D then
+LC← LC + C;
+end
+end
+end
+return LC;
+5.1 Objectively Comparing Liquidation
+Mechanisms
+Defining the optimality of a liquidation mechanism is challenging,
+because a liquidation process is a zero-sum game: the liquidator
+wins, what the borrower loses. As such, we can rather quantitatively
+reason about which liquidation mechanism is likely advantageous
+to a liquidator, or to a borrower.
+Based on our empirical data, we proceed by comparing the afore-
+mentioned liquidation mechanisms. We define the monthly profit-
+volume ratio as the ratio between the monthly accumulated liqui-
+dation profit and the monthly average collateral volume. To avoid
+that our results are biased by the asset price fluctuations of different
+cryptocurrencies, we only study the liquidations repaid in DAI and
+collateralized in ETH, which are available across all the studied
+lending platforms. We present the monthly profit-volume ratios of
+the four platforms from November, 2019 to April, 2021 in Figure 9.
+Our results show that dYdX has a higher profit-volume ratio
+than the other four platforms, meaning that dYdX is in expectation
+favorable to liquidators and worse for borrowers. This observa-
+tion matches the fact that dYdX does not set a close factor, which
+means that a debt can be fully liquidated once its health factor
+declines below 1. We further observe that MakerDAO consistently
+shows a smaller ratio than Compound, except for the outlier in
+Algorithm 2: Optimal fixed spread liquidation strategy.
+Input :A liquidatable position POS = ⟨𝐶,𝐷 ⟩, where𝐶
+represents the collateral value, while 𝐷 represents the
+debt value; Liquidation threshold LT; Liquidation spread
+LS; Close factor CF.
+Output :Amount of debt to repay in the two optimal successive
+liquidations, 𝑟𝑒𝑝𝑎𝑦1 and 𝑟𝑒𝑝𝑎𝑦2.
+Function Liquidatable(POS):
+return POS.𝐶×LTPOS.𝐷 > 1;
+end
+Function Liquidate(POS, 𝑟𝑒𝑝𝑎𝑦):
+POS′ ← ⟨𝐶 − 𝑟𝑒𝑝𝑎𝑦 × (1 + LS), 𝐷 − 𝑟𝑒𝑝𝑎𝑦⟩;
+return POS′;
+end
+𝑟𝑒𝑝𝑎𝑦1 ← argmax𝑟 Liquidatable(Liquidate(POS, 𝑟));
+POS′ ← Liquidate(POS, 𝑟𝑒𝑝𝑎𝑦1);
+𝑟𝑒𝑝𝑎𝑦2 ← POS′.𝐷 × CF;
+March, 2020 (cf. Section 4). Surprisingly, while Aave follows the
+same liquidation mechanism of Compound, the profit-volume ratio
+of Aave, especially Aave V1, remains below Compound. We infer
+that this is because the number of DAI/ETH liquidations events on
+Aave are rare (cf. Table 8, Appendix B) — we hence believe that the
+Aave market is not sufficiently indicative to draw a representative
+conclusion. Overall our results suggest that the auction mechanism
+favors the borrowers more than a fixed spread liquidation with a
+close factor beyond 50%.
+5.2 Optimal Fixed Spread Liquidation Strategy
+The configuration of a close factor (cf. Section 2.3) restricts the
+profit of the liquidator (i.e., the loss of the borrower) in a single fixed
+spread liquidation. We denote the strategy of liquidating up to the
+close factor limit within a single liquidation as the up-to-close-factor
+strategy. Intuitively, a liquidator is rational to perform the up-to-
+close-factor strategy, because the profit is positively correlated to
+the liquidation amount. However, we find that a liquidator can lift
+the restriction of the close factor by performing two successive
+liquidations. The optimal strategy leverages the rule that a position
+remains liquidatable as long as it is in an unhealthy state, no matter
+this position has been liquidated or not previously.
+In this optimal strategy, instead of pushing to close factor limit,
+the liquidator liquidates as much as possible but still keeps the
+position in an unhealthy state in the first liquidation. Then, in the
+second liquidation, the liquidator liquidates the remaining collateral
+up to the close factor. We detail the optimal fixed spread liquidation
+strategy in Algorithm 2.
+5.2.1 Optimality Analysis. Given a liquidatable borrowing position
+with 𝐶 collateral value and 𝐷 debt (cf. Equation 5), we proceed to
+analyze the profit of our optimal strategy.
+POS = ⟨𝐶, 𝐷⟩ (5)
+LT, LS, CR denote the liquidation threshold, liquidation spread and
+close factor respectively (cf. Section 2.3).
+346
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+20
+19
+-1
+1
+20
+19
+-1
+2
+20
+20
+-0
+1
+20
+20
+-0
+2
+20
+20
+-0
+3
+20
+20
+-0
+4
+20
+20
+-0
+5
+20
+20
+-0
+6
+20
+20
+-0
+7
+20
+20
+-0
+8
+20
+20
+-0
+9
+20
+20
+-1
+0
+20
+20
+-1
+1
+20
+20
+-1
+2
+20
+21
+-0
+1
+20
+21
+-0
+2
+20
+21
+-0
+3
+20
+21
+-0
+4
+YYYY-MM
+10−8
+10−7
+10−6
+10−5
+10−4
+10−3
+10−2
+M
+on
+th
+ly
+Pr
+ofi
+t-
+Vo
+lu
+m
+e
+R
+at
+io
+Aave V1
+Aave V2
+Compound
+dYdX
+Maker
+Figure 9: Comparison of the monthly liquidation profit over the monthly average collateral volume for the DAI/ETH lending
+markets. The lower the profit-volume ratio is, the better the liquidation protocol is for borrower.
+Following Algorithm 2, the repaid debt amounts in the two suc-
+cessive liquidations are given in Equation 6 and 7. Note that the
+𝐷 − LT · 𝐶 > 0 because POS is liquidatable (i.e., the debt is
+greater than the borrowing capacity). We show in Appendix C
+that a reasonable fixed spread liquidation configuration satisfies
+1 − LT(1 + LS) > 0.
+𝑟𝑒𝑝𝑎𝑦1 = argmax𝑟
+LT(𝐶 − 𝑟 (1 + LS))
+𝐷 − 𝑟 ≥ 1
+=
+𝐷 − LT ·𝐶
+1 − LT(1 + LS)
+(6)
+𝑟𝑒𝑝𝑎𝑦2 = CF (𝐷 − 𝑟𝑒𝑝𝑎𝑦1) = CF
+(
+𝐷 − 𝐷 − LT ·𝐶
+1 − LT(1 + LS)
+)
+(7)
+The overall profit of the two liquidations is shown in Equation 8.
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜 = (𝑟𝑒𝑝𝑎𝑦1 + 𝑟𝑒𝑝𝑎𝑦2) × LS
+= LS · CF · 𝐷 + LS(1 − CF)
+(
+𝐷 − LT ·𝐶
+1 − LT(1 + LS)
+)
+(8)
+If the liquidator instead chooses to perform the up-to-close-factor
+strategy, the repay amount isCF·𝐷 and the profit hence is 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐 =
+LS·CF·𝐷 . Therefore, the optimal strategy can yield more profit than
+the up-to-close-factor strategy. The increase rate of the liquidation
+profit is shown in Equation 9.
+Δ𝑅𝑝𝑟𝑜 𝑓 𝑖𝑡 =
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜 − 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐
+=
+CF
+1 − CF ·
+1 − LT · CR
+1 − LT(1 + LS) (9)
+where CR = 𝐶
+𝐷
+is the collateralization ratio (cf. Section 2.3). We
+notice that the optimal strategy is more effective when CR is low.
+5.2.2 Case Study. In the following, we study the most profitable
+fixed spread liquidation transaction (4.04M USD)
+7
+we detect and
+showcase how the optimal fixed spread liquidation strategy in-
+creases the profit of a liquidator. In this Compound liquidation, the
+liquidator first performs an oracle price update
+8
+, which renders a
+7
+Transaction hash: 0x53e09adb77d1e3ea593c933a85bd4472371e03da12e3fec853b5bc7fa
+c50f3e4
+8
+Compound allows any entity to update the price oracle with authenticated messages
+signed by, for example, off-chain price sources.
+Table 5: Status of the borrowing position (0x909b443761b
+bD7fbB876Ecde71a37E1433f6af6f). Note we ignore the tiny
+amount of collateral and debt in USDT that the borrower
+owns and owes. The liquidation thresholds (i.e., LT) of DAI
+and USDC are both 0.75.
+Token Collateral Debt Price (USD)
+Block 11333036 After Price Update
+DAI 108.51M 93.22M 1.08 1.095299
+USDC 17.88M 506.64k 1 1
+Total Collateral (USD) 135.07M 136.73M
+Borrowing Capacity (USD) 101.30M 102.55M
+Total Debt (USD) 101.18M 102.61M
+borrowing position liquidatable. The liquidator then liquidates the
+position within the same transaction. In Table 5, we present the
+status change of the position following the price update. Before the
+price update (block 11333036), the position owns a total collateral
+of 135.07M USD (with a borrowing capacity of 101.30M USD), and
+owes a debt of 101.18M USD. After the price of DAI increases from
+1.08 to 1.095299 USD/DAI, the total debt reaches 102.61M USD,
+while the borrowing capacity is only 102.55M USD. The health
+factor drops below 1, and hence the position becomes liquidatable.
+To evaluate the up-to-close-factor strategy and our optimal liq-
+uidation strategy, we implement the original liquidation and the
+two liquidation strategies
+9
+in Solidity v0.8.4
+10
+. We execute them
+on the corresponding blockchain states
+11
+and present the results
+in Table 6. We find that the optimal strategy is superior to the up-
+to-close-factor strategy and can generate an additional profit of
+49.26K DAI (53.96K USD) compared to the original liquidation.
+9
+We publish the smart contract code at https://anonymous.4open.science/r/An-Empiri
+cal-Study-of-DeFi-Liquidations-Anonymous/CompoundLiquidationCaseStudy.sol.
+10
+https://docs.soliditylang.org/en/v0.8.4/
+11
+We fork the Ethereum mainchain locally from block 11333036 and apply all the
+transactions executed prior to the original liquidation transaction in block 11333037.
+We then execute the liquidation strategies to ensure that they are validated on the
+exact same state of the original liquidation.
+347
+https://etherscan.io/tx/0x53e09adb77d1e3ea593c933a85bd4472371e03da12e3fec853b5bc7fac50f3e4
+https://etherscan.io/tx/0x53e09adb77d1e3ea593c933a85bd4472371e03da12e3fec853b5bc7fac50f3e4
+https://etherscan.io/address/0x909b443761bbD7fbB876Ecde71a37E1433f6af6f
+https://etherscan.io/address/0x909b443761bbD7fbB876Ecde71a37E1433f6af6f
+https://etherscan.io/block/11333036
+https://etherscan.io/block/11333036
+https://anonymous.4open.science/r/An-Empirical-Study-of-DeFi-Liquidations-Anonymous/CompoundLiquidationCaseStudy.sol
+https://anonymous.4open.science/r/An-Empirical-Study-of-DeFi-Liquidations-Anonymous/CompoundLiquidationCaseStudy.sol
+https://docs.soliditylang.org/en/v0.8.4/
+https://etherscan.io/block/11333036
+https://etherscan.io/block/11333037
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+Table 6: The depiction of liquidation strategies. At the time
+of the original liquidation, the price of DAI is 1.095299 US-
+D/DAI. The close factor is 50%. The optimal strategy is the
+most profitable liquidation mechanism for the liquidator.
+Original liquidation
+Repay 46.14M USD
+Receive 49.83M DAI
+Profit 3.69M DAI
+Up-to-close-factor strategy
+Repay 46.61M DAI
+Receive 50.34M DAI
+Profit 3.73M DAI
+Optimal strategy
+Liquidation 1 Liquidation 2
+Repay 296.61K DAI
+Receive 320.34K DAI
+Profit 23.73K DAI
+Repay 46.46M DAI
+Receive 50.18M DAI
+Profit 3.72M DAI
+5.2.3 Mitigation. The aforementioned optimal strategy defeats
+the original intention of a close factor, which incurs undesirably
+additional losses to borrowers. A possible mitigation solution is
+that for every position only one liquidation is permitted within one
+block. Such a setting enforces a liquidator adopting the optimal
+strategy to settle the two liquidations in two blocks, which decreases
+the success probability.
+We proceed to assume the existence of a mining liquidator with
+a mining power 𝛼 . Given a liquidation opportunity, the up-to-close-
+factor strategy produces a profit of 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐 , while the optimal strat-
+egy yields 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜1 and 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜2 respectively in the two successive
+liquidations. We further assume that there is no ongoing consensus
+layer attack (e.g., double-spending), implying that a miner with an
+𝛼 fraction mining power mines the next block is with a probability
+of 𝛼 . We hence derive the the expected profit of the two strategies
+as shown in Equation 10 and 11
+12
+.
+E[up-to-close-factor] = 𝛼 · 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐 (10)
+E[optimal] = 𝛼 · 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜1 + 𝛼2 · 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜2 (11)
+The liquidator is incentivized to perform the optimal strategy only
+when E[optimal] > E[up-to-close-factor], leading to Equation 12.
+𝛼 >
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐 − 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜1
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜2
+(12)
+Intuitively, 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜1 is relatively small compared to 𝑝𝑟𝑜 𝑓 𝑖𝑡𝑐 and
+𝑝𝑟𝑜 𝑓 𝑖𝑡𝑜2 because the liquidator needs to keep the position un-
+healthy after the first liquidation. The expected profit in the second
+liquidation then should be sufficient to cover the opportunity cost
+in the first one, which is typically unattainable. Instantiating with
+our case study liquidation (cf. Table 5), we show that a rational
+mining liquidator would attempt the optimal strategy in two con-
+secutive blocks only if its mining power is over 99.68%. Therefore,
+we conclude that the one liquidation in one block effectively reduces
+the expected profit of the optimal liquidation strategy, protecting
+borrowers from a further liquidation losses.
+12
+To ease understanding, we assume other competing liquidators adopt the up-to-
+close-factor strategy.
+6 RELATEDWORK
+Blockchains and DeFi: There is a growing body of literature on
+blockchains and DeFi. Qin et al. [30] study flash loan attacks and
+present an optimization approach to maximize the profit of DeFi
+attacks. Zhou et al. [39] analyze sandwich attacks in decentral-
+ized exchanges. Eskandari et al. [18] provide an overview of the
+blockchain front-running attacks. Daian et al. [13] investigate the
+front-running attacks in decentralized exchanges and propose the
+concept of Miner Extractable Value (MEV), a financial revenue min-
+ers can extract through transaction order manipulation. Qin et
+al. [29] quantify the extracted MEV on the Ethereum blockchain,
+including fixed spread liquidations, and present a generalized front-
+running algorithm, transaction replay. Zhou et al. [38] propose a
+framework called DeFiPoser that allows to automatically create
+profit-generating transactions given the blockchain state.
+Blockchain Borrowing and LendingMarkets: Darlin et al. [15]
+study the MakerDAO liquidation auctions. The authors optimize
+the costs for participating in the auctions and find that most auc-
+tions conclude at higher than optimal prices. The work appears
+real-world relevant, as it considers the transaction fees, conver-
+sion costs and cost of capital, yet it does not consider potential
+gas bidding contests by the end of MakerDAO auctions [13]. Kao
+et al. [23] and ZenGo [37] are to our knowledge the first to have
+investigated Compound’s liquidation mechanism (the third biggest
+lending protocol in terms of USD at the time of writing). Perez et
+al. [27] follow up with a report that focuses on additional on-chain
+analytics of the Compound protocol. DragonFly Research provides
+a blog post [16] about the liquidator profits on Compound, dYdX
+and MakerDAO. Minimizing financial deposit amounts in cryptoe-
+conomic protocols, while maintaining the same level of security is
+studied in Balance [21].
+Liquidations in Traditional Finance: Liquidations are essential
+to traditional finance (TradFi) and are well studied in the related
+literature [5, 7, 31, 32, 34].We remark that liquidations in blockchain
+systems are fundamentally different from those in TradFi in terms
+of high-level designs and settlement mechanisms.
+7 CONCLUSION
+Due to their significant volatility when compared to alternative
+financial vehicles cryptocurrencies are attracting speculators. Fur-
+thermore, because speculators seek to further their risk exposure,
+non-custodial lending and borrowing protocols on blockchains are
+thriving. The risks of borrowing, however, manifests themselves in
+the form of liquidation profits claimed by liquidators.
+In this paper we study the lending platforms that capture 85%
+of the blockchain lending market. We systematize the most preva-
+lent liquidation mechanisms and find that many liquidations sell
+excessive amounts of borrower’s collateral. In this work we pro-
+vide extensive data analytics covering over 2 years the prevalent 4
+lending protocols.We systematize their respective liquidationmech-
+anisms and show that most liquidation systems are unfavorable
+to the borrowers. We finally show an optimal liquidation strategy
+which we have not yet observed in the wild.
+348
+IMC ’21, November 2–4, 2021, Virtual Event, USA Qin et al.
+REFERENCES
+[1] 2020. The Market Collapse of March 12-13, 2020: How It Impacted MakerDAO.
+https://blog.makerdao.com/the-market-collapse-of-march-12-2020-how-it-
+impacted-makerdao/.
+[2] 2020. Oracle Exploit Sees $89 Million Liquidated on Compound - Decrypt. https:
+//decrypt.co/49657/oracle-exploit-sees-100-million-liquidated-on-compound.
+[3] 2021. Over $117M in Loans via DeFi Platforms Compound, Maker Liquidated
+on Feb 22, Marking Largest Liquidations in Market History: Report. https:
+//www.crowdfundinsider.com/2021/02/172687-over-117m-in- loans-via-
+defi-platforms-compound-maker- liquidated-on-feb-22-marking- largest-
+liquidations-in-market-history-report/.
+[4] Aave. 2020. Aave Protocol. https://github.com/aave/aave-protocol.
+[5] Michael J Alderson and Brian L Betker. 1995. Liquidation costs and capital
+structure. Journal of Financial Economics 39, 1 (1995), 45–69.
+[6] Sarah Allen, Srđjan Čapkun, Ittay Eyal, Giulia Fanti, Bryan A Ford, James Grim-
+melmann, Ari Juels, Kari Kostiainen, Sarah Meiklejohn, Andrew Miller, et al.
+2020. Design Choices for Central Bank Digital Currency: Policy and Technical
+Considerations. Technical Report. National Bureau of Economic Research.
+[7] Robert Almgren and Neil Chriss. 1999. Value under liquidation. Risk 12, 12 (1999),
+61–63.
+[8] Nicola Atzei, Massimo Bartoletti, and Tiziana Cimoli. 2017. A survey of attacks
+on ethereum smart contracts (sok). In International conference on principles of
+security and trust. Springer, 164–186.
+[9] Lawrence M Ausubel, Paul Milgrom, et al. 2006. The lovely but lonely Vickrey
+auction. Combinatorial auctions 17 (2006), 22–26.
+[10] Shehar Bano, Alberto Sonnino, Mustafa Al-Bassam, Sarah Azouvi, Patrick Mc-
+Corry, Sarah Meiklejohn, and George Danezis. 2019. SoK: Consensus in the age
+of blockchains. In Proceedings of the 1st ACM Conference on Advances in Financial
+Technologies. 183–198.
+[11] Joseph Bonneau, Andrew Miller, Jeremy Clark, Arvind Narayanan, Joshua A
+Kroll, and Edward W Felten. 2015. Sok: Research perspectives and challenges for
+bitcoin and cryptocurrencies. In Security and Privacy (SP), 2015 IEEE Symposium
+on. IEEE, 104–121.
+[12] Jeremy Clark, Didem Demirag, and Seyedehmahsa Moosavi. 2020. Demystifying
+Stablecoins: Cryptography meets monetary policy. Queue 18, 1 (2020), 39–60.
+[13] Philip Daian, Steven Goldfeder, Tyler Kell, Yunqi Li, Xueyuan Zhao, Iddo Bentov,
+Lorenz Breidenbach, and Ari Juels. 2019. Flash Boys 2.0: Frontrunning, Transac-
+tion Reordering, and Consensus Instability in Decentralized Exchanges. arXiv
+preprint arXiv:1904.05234 (2019).
+[14] Chris Dannen. 2017. Introducing Ethereum and solidity. Vol. 318. Springer.
+[15] Michael Darlin, Nikolaos Papadis, and Leandros Tassiulas. 2020. Optimal Bidding
+Strategy for Maker Auctions. arXiv preprint arXiv:2009.07086 (2020).
+[16] DragonFly Research. 2020. Liquidators: The SecretWhales Helping DeFi Function.
+https://medium.com/dragonf ly-research/liquidators- the-secret-whales-
+helping-defi-function-acf132fbea5e
+[17] dYdX. 2020. dYdX. https://dydx.exchange/.
+[18] Shayan Eskandari, Seyedehmahsa Moosavi, and Jeremy Clark. 2019. Sok: Trans-
+parent dishonesty: front-running attacks on blockchain. In International Confer-
+ence on Financial Cryptography and Data Security. Springer, 170–189.
+[19] Compound Finance. 2019. Compound Finance. https://compound.finance/
+[20] The Maker Foundation. 2019. MakerDAO. https://makerdao.com/en/.
+[21] Dominik Harz, Lewis Gudgeon, Arthur Gervais, and William J Knottenbelt. 2019.
+Balance: Dynamic adjustment of cryptocurrency deposits.
+[22] Joe Horlen, Neil Eldin, and Yashambari Ajinkya. 2005. Reverse auctions: Contro-
+versial bidding practice. Journal of Professional Issues in Engineering Education
+and Practice 131, 1 (2005), 76–81.
+[23] Hsien-Tang Kao, Tarun Chitra, Rei Chiang, and John Morrow. 2020. An analysis
+of the market risk to participants in the compound protocol. In Third International
+Symposium on Foundations and Applications of Blockchains.
+[24] Vijay Krishna. 2009. Auction theory. Academic press.
+[25] Amani Moin, Kevin Sekniqi, and Emin Gun Sirer. 2020. SoK: A classification
+framework for stablecoin designs. In International Conference on Financial Cryp-
+tography and Data Security. Springer, 174–197.
+[26] Satoshi Nakamoto. 2008. Bitcoin: A peer-to-peer electronic cash system. (2008).
+[27] Daniel Perez, Sam MWerner, Jiahua Xu, and Benjamin Livshits. 2021. Liquida-
+tions: DeFi on a Knife-edge. In International Conference on Financial Cryptography
+and Data Security. Springer.
+[28] Kaihua Qin, Liyi Zhou, Yaroslav Afonin, Ludovico Lazzaretti, and Arthur Gervais.
+2021. CeFi vs. DeFi–Comparing Centralized to Decentralized Finance. arXiv
+preprint arXiv:2106.08157 (2021).
+[29] Kaihua Qin, Liyi Zhou, and Arthur Gervais. 2021. Quantifying Blockchain Ex-
+tractable Value: How dark is the forest? arXiv preprint arXiv:2101.05511 (2021).
+[30] Kaihua Qin, Liyi Zhou, Benjamin Livshits, and Arthur Gervais. 2021. Attack-
+ing the DeFi Ecosystem with Flash Loans for Fun and Profit. In International
+Conference on Financial Cryptography and Data Security. Springer.
+[31] Carmen M Reinhart and M Belen Sbrancia. 2011. The liquidation of government
+debt. Technical Report. National Bureau of Economic Research.
+[32] Andrei Shleifer and Robert W Vishny. 1992. Liquidation values and debt capacity:
+A market equilibrium approach. The Journal of Finance 47, 4 (1992), 1343–1366.
+[33] Sergey Nazarov Steve Ellis, Ari Juels. 2017. Chainlink: A decentralized oracle
+network.
+[34] Sheridan Titman. 1984. The effect of capital structure on a firm’s liquidation
+decision. Journal of financial economics 13, 1 (1984), 137–151.
+[35] Uniswap.io. 2018. accessed 12 November, 2019, https://docs.uniswap.io/.
+[36] GavinWood et al. 2014. Ethereum: A secure decentralised generalised transaction
+ledger. Ethereum project yellow paper 151, 2014 (2014), 1–32.
+[37] ZenGo. 2019. ZenGo - Understanding Compound’s Liquidation. https://zengo.
+com/wp-content/uploads/Understanding-Compound%E2%80%98s-Liquidation-
+3.pdf
+[38] Liyi Zhou, Kaihua Qin, Antoine Cully, Benjamin Livshits, and Arthur Gervais.
+2021. On the Just-In-Time Discovery of Profit-Generating Transactions in DeFi
+Protocols. In 2021 IEEE Symposium on Security and Privacy (SP). IEEE.
+[39] Liyi Zhou, Kaihua Qin, Christof Ferreira Torres, Duc V Le, and Arthur Gervais.
+2021. High-Frequency Trading on Decentralized On-Chain Exchanges. In 2021
+IEEE Symposium on Security and Privacy (SP). IEEE.
+A POST-LIQUIDATION PRICE MOVEMENT
+MEASUREMENT
+Auction liquidators are exposed to the risk that the price of collateral
+further declines during the auction, which may cause a loss to
+the liquidator. In the following, we study the price movement of
+collateral with respect to the debt currency after the settlement
+of a fixed spread liquidation and after the initiation of an auction
+liquidation. For each observed liquidation, we record the block-by-
+block oracle prices for a duration of 1,440 blocks, which corresponds
+to about 6 hours. We summarize the following patterns of the post-
+liquidation price movement.
+• Horizontal: The collateral price does not change after liq-
+uidation (e.g., the oracle price is not updated).
+• Rise:Within 1,440 blocks, the collateral price remains higher
+than the liquidation price.
+• Fall: Within 1,440 blocks, the collateral price remains lower
+than the liquidation price.
+• Rise-Fall Within 1,440 blocks, the collateral price first rises
+beyond the liquidation price, then falls below the liquidation
+price.
+• Fall-RiseWithin 1,440 blocks, the collateral price declines
+below the liquidation price, and then rises above the liquida-
+tion price.
+• Rise-Fluctuation: Within 1,440 blocks, the collateral price
+first rises beyond, then declines below the liquidation price,
+and repeats such movement more than twice.
+• Fall-Fluctuation:Within 1,440 blocks, the collateral price
+first declines below, then rises beyond the liquidation price,
+and repeats such movement more than twice.
+We observe that the collateral price remains below the liquidation
+price by the end of the observation window for only 19.07% of the
+28,138 observed liquidations. If those liquidations would have been
+conducted through an auction, the liquidator might have suffered a
+loss.
+B MONTHLY DAI/ETH LIQUIDATIONS
+In Table 8, we show the number of monthly liquidations that are
+repaid in DAI and collateralized in ETH on Aave V1, Aave V2,
+Compound, dYdX, and MakerDAO.
+349
+https://blog.makerdao.com/the-market-collapse-of-march-12-2020-how-it-impacted-makerdao/
+https://blog.makerdao.com/the-market-collapse-of-march-12-2020-how-it-impacted-makerdao/
+https://decrypt.co/49657/oracle-exploit-sees-100-million-liquidated-on-compound
+https://decrypt.co/49657/oracle-exploit-sees-100-million-liquidated-on-compound
+https://www.crowdfundinsider.com/2021/02/172687-over-117m-in-loans-via-defi-platforms-compound-maker-liquidated-on-feb-22-marking-largest-liquidations-in-market-history-report/
+https://www.crowdfundinsider.com/2021/02/172687-over-117m-in-loans-via-defi-platforms-compound-maker-liquidated-on-feb-22-marking-largest-liquidations-in-market-history-report/
+https://www.crowdfundinsider.com/2021/02/172687-over-117m-in-loans-via-defi-platforms-compound-maker-liquidated-on-feb-22-marking-largest-liquidations-in-market-history-report/
+https://www.crowdfundinsider.com/2021/02/172687-over-117m-in-loans-via-defi-platforms-compound-maker-liquidated-on-feb-22-marking-largest-liquidations-in-market-history-report/
+https://github.com/aave/aave-protocol
+https://medium.com/dragonfly-research/liquidators-the-secret-whales-helping-defi-function-acf132fbea5e
+https://medium.com/dragonfly-research/liquidators-the-secret-whales-helping-defi-function-acf132fbea5e
+https://dydx.exchange/
+https://compound.finance/
+https://makerdao.com/en/
+https://docs.uniswap.io/
+https://zengo.com/wp-content/uploads/Understanding-Compound%E2%80%98s-Liquidation-3.pdf
+https://zengo.com/wp-content/uploads/Understanding-Compound%E2%80%98s-Liquidation-3.pdf
+https://zengo.com/wp-content/uploads/Understanding-Compound%E2%80%98s-Liquidation-3.pdf
+An Empirical Study of DeFi Liquidations IMC ’21, November 2–4, 2021, Virtual Event, USA
+Table 7: Observed collateral price movements, measured in
+relation to the liquidation price.
+Price Movement Liquidations Maximum Price Minimum Price
+Horizontal 789 - -
+Rise 6,142 7.33% ± 7.26% -
+Fall 5,365 - −6.70% ± 6.50%
+Rise-Fall 2,142 1.46% ± 1.38% −8.35% ± 7.90%
+Fall-Rise 4,513 5.70% ± 5.78% −3.14% ± 4.70%
+Rise-Fluctuation 4,582 7.85% ± 7.80% −4.52% ± 4.73%
+Fall-Fluctuation 4,605 3.49% ± 4.66% −5.07% ± 5.86%
+Table 8: Number of monthly liquidations for the DAI/ETH
+lending markets to compare the five platforms on Figure 9.
+Year-Month Number of Liquidations
+Aave V1 Aave V2 Compound dYdX MakerDAO
+2019-11 0 0 0 0 119
+2019-12 0 0 29 203 118
+2020-01 0 0 21 25 12
+2020-02 7 0 63 467 105
+2020-03 31 0 712 1124 4222
+2020-04 1 0 27 57 9
+2020-05 7 0 29 241 24
+2020-06 7 0 24 127 45
+2020-07 6 0 22 0 20
+2020-08 9 0 37 98 42
+2020-09 25 0 99 192 105
+2020-10 2 0 16 39 11
+2020-11 8 0 95 144 31
+2020-12 6 1 23 226 20
+2021-01 22 20 76 570 62
+2021-02 13 41 108 334 246
+2021-03 2 10 15 58 11
+2021-04 5 16 33 28 212
+C REASONABLE FIXED SPREAD
+LIQUIDATION CONFIGURATIONS
+In the following, we analyze reasonable configurations of the liq-
+uidation threshold LT and the liquidation spread LS (cf. Section 2).
+We assume a borrowing position POS = ⟨𝐶, 𝐷⟩, where 𝐶 is the
+value of the collateral while 𝐷 is the value of the debt. We con-
+sider the situation that the health factor of POS drops below 1 (cf.
+Equation 13), i.e., POS becomes liquidatable.
+HF =
+𝐶 · LT
+𝐷
+< 1 (13)
+A liquidator then liquidates POS by repaying a debt of 𝑟 . In
+return the liquidator receives a collateral of 𝑟 · (1 + LS). After the
+liquidation, the health factor becomes Equation 14.
+HF′ =
+(𝐶 − 𝑟 · (1 + LS))LT
+𝐷 − 𝑟 (14)
+Ideally, a liquidation should help to increase the health factor of
+a borrowing position (cf. Equation 15).
+HF′ > HF (15)
+Following Equation 13, 14, and 15, we obtain Equation 16.
+1 + LS <
+𝐶
+𝐷
+(16)
+Note that LS is positive. Therefore, whenPOS is under-collateralized
+(i.e.,
+𝐶
+𝐷
+< 1), Equation 16 can never be satisfied. This implies that
+a fixed spread liquidation never increase the health factor of a
+under-collateralized position.
+In the case that POS is over-collateralized (i.e.,
+𝐶
+𝐷
+> 1) but liqui-
+datable (cf. Equation 13), if we configure LT and LS satisfying that
+LT(1 + LS) ≥ 1, this configuration then conflicts with Equation 16
+because following Equation 16 we obtain Equation 17.
+LT(1 + LS) < 𝐶 · LT
+𝐷
+= HF < 1 (17)
+We therefore conclude that 1−LT(1+LS) > 0 is the prerequisite
+such that a fixed spread liquidation can increase the health factor
+of an over-collateralized liquidatable borrowing position.
+350
+	Abstract
+	1 Introduction
+	2 Lending on the Blockchain
+	2.1 Blockchain & Smart Contract
+	2.2 Decentralized Finance (DeFi)
+	2.3 Terminology
+	3 Systematization of Lending and Liquidation Protocols
+	3.1 Borrowing and Lending System Model
+	3.2 Systematization of Liquidation Mechanisms
+	3.3 Studied Lending Protocols
+	4 Liquidation Insights
+	4.1 Measurement Setup
+	4.2 Overall Statistics
+	4.3 Incentives and Participation
+	4.4 Risks
+	4.5 Instabilities
+	4.6 Remarks
+	5 Towards Better Liquidation Mechanisms
+	5.1 Objectively Comparing Liquidation Mechanisms
+	5.2 Optimal Fixed Spread Liquidation Strategy
+	6 Related Work
+	7 Conclusion
+	References
+	A Post-Liquidation Price Movement Measurement
+	B Monthly DAI/ETH Liquidations
+	C Reasonable Fixed Spread Liquidation Configurations

@@ -1,0 +1,2399 @@
+<sc>iQuery</sc>: A Trustworthy and Scalable Blockchain Analytics Platform
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 1
+IQUERY: A Trustworthy and Scalable Blockchain
+Analytics Platform
+Lingling Lu, Zhenyu Wen, Member, IEEE, Ye Yuan, Binru Dai, Peng Qian, Changting Lin, Qinming He,
+Member, IEEE, Zhenguang Liu, Jianhai Chen, Member, IEEE, Rajiv Ranjan, Senior Member, IEEE
+Abstract—Blockchain, a distributed and shared ledger, provides a credible and transparent solution to increase application auditability
+by querying the immutable records written in the ledger. Unfortunately, existing query APIs offered by the blockchain are inflexible and
+unscalable. Some studies propose off-chain solutions to provide more flexible and scalable query services. However, the query service
+providers (SPs) may deliver fake results without executing the real computation tasks and collude to cheat users. In this paper, we
+propose a novel intelligent blockchain analytics platform termed IQUERY, in which we design a game theory based smart contract to
+ensure the trustworthiness of the query results at a reasonable monetary cost. Furthermore, the contract introduces the second
+opinion game that employs a randomized SP selection approach coupled with non-ordered asynchronous querying primitive to prevent
+collusion. We achieve a fixed price equilibrium, destroy the economic foundation of collusion, and can incentivize all rational SPs to act
+diligently with proper financial rewards. In particular, IQUERY can flexibly support semantic and analytical queries for generic
+consortium or public blockchains, achieving query scalability to massive blockchain data. Extensive experimental evaluations show that
+IQUERY is significantly faster than state-of-the-art systems. Specifically, in terms of the conditional, analytical, and multi-origin query
+semantics, IQUERY is 2 ×, 7 ×, and 1.5 × faster than advanced blockchain and blockchain databases. Meanwhile, to guarantee 100%
+trustworthiness, only two copies of query results need to be verified in IQUERY, while IQUERY’s latency is 2 ∼ 134 × smaller than the
+state-of-the-art systems.
+Index Terms—Blockchain, second opinion smart contract, game theory, data analytics, query platform
+F
+1 INTRODUCTION
+B LOCKCHAIN revolutionizes the traditional centralized
+application mode and overcomes the trust challenges
+in multiple application scenarios [1], [2], [3]. For example,
+once a payment system writes user payment behaviors into
+a blockchain network, any authorized user is capable of
+querying the immutable records in the blockchain to achieve
+accountability and transparency of transactions. Nowadays,
+employing a smart contract to query ledger data from
+bookkeeping nodes is a general method for blockchain data
+query. However, existing query methods struggle to search
+for accurate and comprehensive ledger data due to their lack
+of flexibility and scalability [4], [5].
+Prior works [6], [7], [8] concentrated on improving
+the analysis capability of bookkeeping nodes for querying
+ledger data. Yet, these works have difficulties in providing
+rich semantics for blockchain data query and yielding poor
+performance in handling large-scale data [9], [10]. For ex-
+L. Lu, P. Qian, Q. He, Z. Liu, J. Chen are with the College of Computer
+Science and Technology, Zhejiang University, Hangzhou, China, E-mail:
+lulingling@email.cufe.edu.cn, pqian@zju.edu.cn, hqm@zju.edu.cn, liuzhen-
+guang2008@gmail.com, chenjh919@zju.edu.cn
+Z. Wen is the corresponding author and is with the Institute of Cy-
+berspace Security, Zhejiang University of Technology, China, E-mail:
+zhenyuwen@zjut.edu.cn
+Y. Yuan is with Beijing Institute of Technology, China, E-mail:
+yuanye@mail.neu.edu.cn
+B. Dai is with the School of Economics, Zhejiang University, China, E-mail:
+ddbr1997@163.com
+C. Lin is with Binjiang Institute of Zhejiang University, China, E-mail:
+linchangting@gmail.com
+R. Ranjan is with Newcastle University, United Kingdom, E-mail: Ra-
+jiv.Ranjan@newcastle.ac.uk
+ample, Nathan et al. [7] leverage the serializable snapshot
+isolation (SSI) to design a blockchain relational database
+for permissioned blockchain query. Cai et al. [11] propose
+a SGX-based public blockchain query framework that sup-
+ports single keyword and boolean queries. Nevertheless,
+such blockchain relational databases and query frameworks
+suffer from the flexibility issue due to a lack of fine-grained
+query semantics. Additionally, they are ungeneralized, de-
+signed explicitly for consortium or public blockchain, and
+therefore cannot adapt to flexible application scenarios.
+Furthermore, SEBDB [8] optimizes the SQL-like query
+semantics with novel indices, while LineageChain [6] en-
+ables provenance queries by storing provenance in a Merkle
+DAG structure. Unfortunately, SEBDB and LineageChain
+still suffer from the scalability issue and struggle to deal
+with the query demand of massive application data. Al-
+though these efforts enrich blockchain query semantics,
+the query service is tightly coupled with the blockchain
+transaction system. Executing too many query transactions
+at the blockchain layer will result in consensus performance
+degradation and lower transaction throughput for book-
+keeping.
+After scrutinizing the existing related works [11], [12],
+[13], we found that the rich semantic query service in
+bookkeeping nodes can be extracted for supporting the
+ledger data query. Heuristically, we consider decoupling the
+rich semantic query service from bookkeeping nodes into a
+blockchain query layer, expecting to make a breakthrough in
+the technology of blockchain data query. Towards the goal
+of solving the flexibility and scalability issues mentioned
+above, we further identify some key requirements to be ful-
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 2
+SP Query service provider
+Block data authorization
+Bookkeeping nodeNode
+Blockchain Query Layer
+…………
+Efficiency: Thousands
+of queriesFlexibility: Rich 
+Semantic Query APIs
+Trustworthiness: 
+Query results1
+2 3
+……
+Smart Contract
+SP Query service provider
+Block data authorization
+Bookkeeping nodeNode
+Smart Contract
+SP Query service provider
+Block data authorization
+Bookkeeping nodeNode
+Node Node
+Node Node Node
+SP SP SP
+Fig. 1. Trustworthiness, flexibility and efficiency requirements for
+IQUERY.
+filled when designing a decoupled blockchain query layer.
+Trustworthiness of Query (R1): We first need to guaran-
+tee the trustworthiness of queries when designing a scal-
+able and decoupled blockchain query layer. Specifically,
+suppose a user doubts the transactions on the blockchain;
+the user can verify them by submitting a query request to
+an authorized query service provider (SP), who listens to
+bookkeeping nodes (Fig. 1). SP will receive rewards from the
+user for providing the query service requested by the user.
+Unfortunately, the integrity of some blockchain query ser-
+vice providers is relatively low. In order to maximize their
+benefits, some SPs may deliver fake information instead of
+making efforts to query the blockchain data. Thus, to ensure
+the trustworthiness of queries, it is best for users to send the
+same requests to multiple SPs and verify the consistency of
+their returned results. If users only choose a limited number
+of SPs, some providers may conspire together to provide
+fake information. Existing solutions [14], [15] overcome this
+issue by sending query requests to all providers, which is
+costly and impractical. Therefore, a scalable and economical
+solution for ensuring query trustworthiness is much cov-
+eted.
+Flexibility of Query (R2): We propose to build a query
+layer that flexibly supports running generic, user-defined
+consortium or public blockchain. Additionally, the query
+service needs to support queries with sufficient semantics to
+address the flexibility issue. For instance, the fine-grained
+query semantic GetPayment($in(price:[𝑛𝑢𝑚𝑠 , 𝑛𝑢𝑚𝑒])) gets
+all payments within a price window, and the analytical
+query semantic GetTotal($𝑒𝑞(𝑢𝑠𝑒𝑟 𝐼𝑑 :?)) gets the total pay-
+ment value of a particular user.
+Efficiency of Query (R3): A more efficient query service
+is desired for both flexibility and scalability issues because a
+real-time analysis is essential for blockchain query services.
+However, according to the prior research [10], Fabric can
+only handle less than 200 queries per second. Ethereum
+transactions have a gas limit and cannot perform complex
+queries in one transaction [3]. Consequently, consortium and
+public blockchain both fail to support a substantial number
+of application users simultaneously performing thousands
+of queries to access the blockchain transactions [5].
+In this paper, we propose IQUERY, a truly distributed
+blockchain query platform. To guarantee the trustworthi-
+ness of queries (R1), we design a game theory based method
+that employs a second opinion mechanism to ensure the
+correctness of query results while minimizing the number
+of query SPs. To tackle the inflexibility of query (R2), we
+introduce a set of rich semantic query APIs that utilize log-
+ical operators, condition parameters and Select-Aggregate
+functions to answer complex queries in off-chain databases.
+Finally, we maintain these databases that extract key infor-
+mation from blocks to improve query efficiency (R3).
+According to Bernoulli analysis, when the proportion of
+honest SPs in the network is 80%, our second opinion mech-
+anism only needs to compare two copies of query results
+to ensure 100% trustworthiness. In contrast, state-of-the-art
+systems require four copies of query results to achieve query
+confidence of 95%. Furthermore, empirical results show that
+the latency of IQUERY is at millisecond level and 2 ∼ 134 ×
+smaller than the state-of-the-art methods. In summary, the
+contributions are:
+• We propose a decentralized and scalable blockchain
+analytics platform IQUERY. Specifically, rich query
+semantics, including conditional, analytical, and
+multi-origin query methods, are introduced to offer
+flexible, efficient, and verifiable query services for
+generic types of blockchain users (§3 and §4).
+• We design a second opinion smart contract to min-
+imize the number of query SPs while guaranteeing
+the trustworthiness of query results. In particular, the
+game theory based method that combines incentive
+mechanisms and auditable smart contract is formally
+verified (§5).
+• We categorize SPs into three different types with var-
+ious abilities matching realistic scenarios and present
+corresponding countermeasures to prevent collusion
+in IQUERY. Specifically, the randomized SP selection
+approach coupled with a non-ordered asynchronous
+querying primitive makes it impossible for the first
+colluder to infer who the user will choose next, thus
+motivating rational SPs to be honest. Additionally,
+the self-interest hypothesis can easily prove the im-
+practicality of SPs colluding together and the repu-
+tation mechanism removes malicious irrational SPs
+from the system (§5.3).
+• Extensive experiments demonstrate the effectiveness
+and performance advantages of IQUERY compared
+with state-of-the-art systems (§6). IQUERY is released
+on Github for public use1.
+The rest of the paper is organized as follows. In section 2,
+we give a brief introduction of blockchain data query and
+game theory models. Then, we describe the design and
+architecture of IQUERY in section 3, followed by query
+methods with rich semantics in section 4. In section 5, we
+give the details of how the second opinion smart contract
+guarantees the trustworthiness in IQUERY. In section 6, we
+conduct extensive experiments to evaluate the performance
+of IQUERY. Finally, we conclude our paper in section 7.
+2 RELATED WORK
+2.1 Blockchain Data Query
+Blockchain. Ethereum [16] is the first public blockchain
+to introduce the smart contract. Users can read and
+1. https://github.com/lulinglingcufe/iQuery
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+3IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING
+TABLE 1
+Comparison of Query in Blockchain Systems
+Catalog Representative Decoupled Semantic Analytical Authenticated
+Systems Query Query Query Query
+Blockchain Fabric [5], Ethereum [16], × Weak Weak ×
+FISCO BCOS [17]
+Blockchain LineageChain [6], Blockchain Blockchain relational
+Database relational database [7], × Strong Weak database: ×, Others: X
+SEBDB [8], FalconDB [18]
+Public Blockchain Etherscan [19], EthScope [20], Blocksci [21], Etherscan, Blocksci Etherscan, SGX-based query framework,
+Query Layer EtherQL [22], vChain [2], GEM2 [23] X EtherQL: Strong Blocksci: Strong vChain, GEM2, VQL:X
+VQL [24], SGX-based query framework [11] Others: Weak Others: Weak Others:×
+Generic Block-
+IQUERY X Strong Strong
+Flexible and efficient methods
+chain Query Layer to ensure trustworthiness
+write blockchain data via the smart contract. Consor-
+tium blockchains, e.g., Fabric [5] and FISCO BCOS [17],
+achieve better performance while meeting security require-
+ments in commercial scenarios. Nevertheless, these popular
+blockchain systems lack rich query semantics.
+Blockchain Database. Some works leverage rich features
+in relational databases to enhance blockchain systems, thus
+directly handling query requests. LineageChain [6] enables
+fine-grained and secure provenance queries in the smart
+contract via Merkle DAG. Blockchain relational database
+[7] and SEBDB [8] apply SQL-like language to access data.
+FalconDB [18] and SEBDB employ authenticated data struc-
+tures (ADS) to ensure the correctness of queries. Unfor-
+tunately, these databases lack optimization methods for
+blockchain data analysis.
+Public Blockchain Query Layer. Some works leverage
+the query layer decoupled from the blockchain transaction
+system to improve query efficiency. Etherscan [19] is a
+widely-used Ethereum explorer. EthScope [20] is an efficient
+query framework for Ethereum attack replays. However,
+they do not support authenticated queries. The SGX-based
+query framework [11] relies on trusted hardware to deliver
+authenticated queries, while other works depend on ADS
+to achieve authenticated queries. Besides, these works only
+support public blockchain, lacking a solution for consortium
+blockchain. These works have two limitations: (1) high cost
+for users to verify the integrity of query transactions and (2)
+limited query semantics. Specifically, vChain [2] and GEM2
+[23] change the block structure, construct ADS, embed them
+into each block and use off-chain SPs to answer queries.
+Despite making progress in query throughput, the cost
+for users to cryptographically verify the query results is
+excessive. Precisely, the latency of users verifying query
+results in vChain and GEM2 is at the second level. In contrast,
+the latency of users verifying query results in IQUERY is
+at the microsecond level. VQL [24] requires miners to verify
+the query layer’s data consistency, which significantly takes
+up miners’ computing power. Furthermore, authenticated
+query semantics are limited to boolean range queries and
+time-window queries in vChain, GEM2 and VQL. Compared
+with existing works [2], [11], [23], IQUERY offers a game
+theory based authenticated query method that improves the
+trustworthiness of any query semantics.
+Comparison. Table 1 compares blockchain systems,
+blockchain databases, public blockchain query layer and
+IQUERY. Among these state-of-the-art systems, IQUERY is
+the first off-chain query platform that achieves semantic,
+analytic and authenticated query methods, significantly im-
+proving trustworthiness, flexibility and efficiency for query-
+ing generic types of blockchains.
+2.2 Game Theory Models in Trustworthy Queries
+Many works use game theory in replication based verifiable
+computation. We compare the second opinion model with
+other game theory models used in trustworthy queries
+regarding (1) threat models (the number of chosen SPs),
+(2) querying primitive, (3) monetary cost, and (4) protocol
+implementation.
+The Prisoner’s Dilemma Game. Dong et al. [14] proposed
+a contract that induces the Prisoner’s Dilemma game be-
+tween two SPs. The contract employs synchronized query-
+ing primitive, thus giving dishonest SPs a chance to collude
+before returning query results. To prevent collusion, the
+incentive mechanism in the contract encourages colluders to
+report collusion to the client user. If another SP does cheat,
+the reporting SP will get another SP’s deposit.
+The Multi-Player Outsourcing Game. Alptekin [25] pro-
+posed a multi-player outsourced computation game to en-
+sure the outsourced job is computed correctly. The game
+motivates rational SPs to be honest and enforces a bound on
+the damage malicious SPs can cause. We remove malicious
+irrational SPs from the IQUERY pool via the reputation
+mechanism in the second opinion model.
+Comparison. (1) Threat Model: Both [14] and IQUERY
+present a two-player game aiming at minimizing the num-
+ber of SPs while guaranteeing the trustworthiness of query
+results. [25] proposed a multi-player game. The multi-player
+threat model is less efficient than IQUERY in the blockchain
+query scenarios. Because the cost of querying multiple SPs
+is a great economic burden for users. (2) Querying Prim-
+itive: Because [14] and [25] employ synchronized query-
+ing primitive, rewards and fines are required to prevent
+collusion. The second opinion model employs non-ordered
+asynchronous querying primitive, making it impossible for
+the first SP to infer who the user will choose next and
+collude. (3) Monetary Cost: The second opinion contract
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 4
+Blockchain Network
+2
+1
+5
+……
+2
+5
+2
+……
+Decentralized and Scalable IQUERY Pool
+IQUEYR 2 IQUEYR NIQUERY 1
+Corresponding 
+Smart Contract
+Second Opinion 
+Smart Contract
+iquery
+4
+5
+1
+3 3
+Fig. 2. The life-cycle for querying ledger data via IQUERY.
+does not require deposits from SPs, making it a more at-
+tractive design for SPs who offer services for thousands of
+users. In this situation, the deposits will be a prohibitively
+high financial cost for SPs. (4) Protocol Implementation: [25]
+relies on a trusted centralized bank to execute the payment
+protocol, while IQUERY and [14] implement the protocol in
+the smart contract for self-enforcing payment.
+3 DESIGN AND ARCHITECTURE OF IQUERY
+In this section, we describe the overview of how users get
+trustworthy query results form IQUERYS, followed by the
+main components of the IQUERY system.
+3.1 System Overview
+Fig. 2 illustrates the lifecycle of querying ledger data via
+IQUERY. Each IQUERY has a SP to offer blockchain query
+service and we design the blockchain analytics platform as
+a decentralized and scalable IQUERY pool. First, we write
+transactions into blockchain (¬, more details in §3.2). Then,
+users select an IQUERY from the decentralized IQUERY pool.
+IQUERY is able to answer complex queries with rich query
+APIs (­). Next, in order to ensure the trustworthiness of
+query results, SP utilizes a contract manager for two types
+of smart contracts (®). (i) if users want to query the ledger
+directly, the contract manager will employ APIs of the
+corresponding smart contract to execute simple queries on-
+chain and retrieve trustworthy results, (ii) users utilize the
+rich query APIs to perform fine-grained query semantics
+off-chain while executing the game theory based second
+opinion smart contract to ensure trustworthiness. Afterwards,
+IQUERY returns query results with its attached signature
+(¯). Finally, if users confirm the correctness of query results,
+the second opinion smart contract will give the reward honest
+IQUERYS (°).
+3.2 Write Transactions to Blockchain
+We prepare transactions in advance for queries by writing
+transactions to blockchain. Note that IQUERY can flexibly
+support both consortium and public blockchain. Therefore,
+We adopt Fabric [5], the most widely used consortium
+blockchain platform, and Ethereum [16], the largest decen-
+tralized application platform, to write payment transaction
+records in step ¬ of system overview in §3.1. Besides,
+the payment transactions are also example transactions for
+queries in §4 and datasets in §6.1.
+Payment transactions. Table 2 shows the transactions in
+a simple payment scenario. First, a user initializes his/her
+blockchain identity by submitting 𝑡𝑥𝑖𝑛𝑖𝑡𝑈𝑠𝑒𝑟 . There are two
+TABLE 2
+Examples of Payment Transactions Used in §4 (Queries) and §6.1
+(Dataset)
+Transaction Type Correlated User Identity
+initUser (𝑇1) user@company.cn
+user@supermarket.com
+initCommodity (𝑇2) user@company.cn
+rechargeToken (𝑇3) user@supermarket.com
+commodityConsumption (𝑇4) user@supermarket.com
+.…IQUERY 2 IQUERY N
+IQUERY 3
+Decentralized IQUERY Pool
+Docs
+Select
+Aggregate
+Query Engine
+Provider Rich Query APIs
+Analytical
+Query
+Conditional
+Query
+Multi‐origin 
+Query
+Database
+Maintainer
+Block
+Listener
+Query
+Certificate
+Merkel 
+Bucket Tree
+Authenticated Query Module
+VO Generation 
+and Verification
+Access
+Control
+Security and Trustfulness
+Chaincode
+Manager
+Semantic Query Module
+(K, V)
+Audit
+Queries TransactionsIQUERY 1
+Select1 Select2 Select3
+Aggregate1 Aggregate2
+Fig. 3. Architecture of IQUERY.
+types of users: company (𝑢𝑠𝑒𝑟@𝑐𝑜𝑚𝑝𝑎𝑛𝑦.𝑐𝑛) and super-
+market (𝑢𝑠𝑒𝑟@𝑠𝑢𝑝𝑒𝑟𝑚𝑎𝑟𝑘𝑒𝑡.𝑐𝑜𝑚). If the user belongs to the
+company organization, the user will have a unique id
+in the blockchain generated from 𝑢𝑠𝑒𝑟@𝑐𝑜𝑚𝑝𝑎𝑛𝑦.𝑐𝑛. Sec-
+ondly, this user submits 𝑡𝑥𝑖𝑛𝑖𝑡𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 to init commodities
+with price and id. Then, the commodities attached with
+RFID tags and provided by the company user are shipped
+to the supermarket for sale. Next, a user identified as
+𝑢𝑠𝑒𝑟@𝑠𝑢𝑝𝑒𝑟𝑚𝑎𝑟𝑘𝑒𝑡.𝑐𝑜𝑚 submits 𝑡𝑥𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛 to recharge
+his/her smart card. Finally, the user of the supermarket
+applies a smart card to buy these commodities through
+𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛.
+Blockchain consensus. Fabric uses a practical byzantine
+fault tolerance (PBFT) consensus [5], and Ethereum employs
+proof of work (POW) or proof of stake (POS) consensus
+[16]. Notably, the blockchain transaction system consists
+of the application, execution, data, and consensus layers
+[9]. We implement a game theory based query protocol in
+the second opinion smart contract, incentivizing IQUERY
+to deliver honest query services. Regardless of how we
+implement the application logic in a smart contract, the
+underlying consensus layer guarantees the secure execution
+of smart contract transactions, ensuring that the IQUERY
+analytics platform is trustworthy.
+3.3 Query Service Provider
+The decentralized IQUERY pool in Fig. 2 is composed of a
+set of IQUERY entities for parallel query processing. To be
+precise, Fig. 3 illustrates that each IQUERY entity consists of
+a query service provider and an off-chain database maintainer.
+The audit query requests are first handled by a provider
+as shown in Fig. 3. The provider guarantees secure and
+trustworthy query services through Access Control and Con-
+tract Manager. The Access Control defines users’ query per-
+missions to protect the privacy of our blockchain analytics
+platform [21], [26]. For example, an ordinary user can only
+query transactions related to him/herself, but a VIP user
+such as a bank can query its customers’ transactions. The
+second opinion smart contract is a game theory based
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 5
+mechanism that incentivizes each IQUERY to deliver query
+services and ensure the trustworthiness of query results (see
+§5).
+The requests that pass the security and trustworthiness
+check can call rich query APIs. These APIs provide users
+with flexible query methods including conditional, analyti-
+cal and multi-origin queries. A query engine is responsible
+for improving query efficiency and supporting rich query
+semantics. Specifically, Select-Aggregate functions support
+conditional query (see §4.1) and analytical query (see §4.2).
+In order to support results verification among multiple
+SPs, Merkle Bucket Tree based authenticated query module
+supports multi-origin query (see §4.3).
+3.4 Off-Chain Database Maintainer
+There are two reasons for maintaining an off-chain database:
+1) the inflexibility of blockchain database affects the query
+efficiency (e.g., attributes in the value field cannot be in-
+dexed in blockchain 𝑆𝑡𝑎𝑡𝑒𝐷𝐵𝑝𝑒𝑒𝑟 [9]), 2) it is a significant
+burden for the transaction processing lifecycle to directly
+perform queries via the smart contract [5], [24]. Thus, we
+design an off-chain database maintainer that reads ledger
+data using a valid certificate or public key in the blockchain
+network.
+Maintain Off-Chain Database. IQUERY maintains two
+local data-bases, i.e., 𝑆𝑡𝑎𝑡𝑒𝐷𝐵𝑖𝑄𝑢𝑒𝑟 𝑦 and 𝐻𝑖𝑠𝑡𝑜𝑟𝑦𝐷𝐵𝑖𝑄𝑢𝑒𝑟 𝑦
+that extract key information from blockchain network to
+improve query efficiency. IQUERY obtains transactions from
+the blockchain network by a Blocklistener. In particular, it
+registers a 𝐵𝑙𝑜𝑐𝑘𝐸𝑣𝑒𝑛𝑡 ( ) SDK API [27] to read raw block data
+from a peer node and inserts the update (i.e., 𝑆𝑡𝑎𝑡𝑒4) to local
+databases.
+4 QUERY METHODS WITH RICH SEMANTICS
+In this section, we use the payment transactions as an
+example to illustrate the technical details of rich query APIs
+including conditional, analytical and multi-origin query
+methods.
+4.1 Conditional Query Method
+IQUERY improves query flexibility with general, practical
+and sufficient condition parameters [28], [29], [30] for target
+records queries.
+In conditional queries, users can add additional con-
+straints in the query selector. 𝑞 = 〈𝑜𝑝{𝑐1, 𝑐2...𝑐𝑛}, 𝑑𝑏〉 is
+an example of a conditional query, where 𝑜𝑝 is the logical
+operator, and 𝑐𝑛 is the condition parameter. The logical
+operators include $𝑎𝑛𝑑, $𝑜𝑟 , $𝑒𝑞 and $𝑔𝑡, etc.
+Temporal Query is a special case of conditional query
+which allows users to query records within a certain
+time period, i.e., 𝑞 = 〈[𝑡𝑠𝑡𝑎𝑟𝑡 , 𝑡𝑒𝑛𝑑], 𝑑𝑏〉. With the increas-
+ing block number, we formalize the temporal query as:
+𝑞 = 〈[𝑏𝑠𝑡𝑎𝑟𝑡 , 𝑏𝑒𝑛𝑑], 𝑑𝑏〉. [𝑡𝑠𝑡𝑎𝑟𝑡 , 𝑡𝑒𝑛𝑑] is the time interval
+parameters (e.g., 𝑡𝑠𝑡𝑎𝑟𝑡 ≤ 𝑟𝑒𝑐𝑜𝑟𝑑.𝑡𝑖𝑚𝑒𝑠𝑡𝑎𝑚𝑝 ≤ 𝑡𝑒𝑛𝑑) and
+[𝑏𝑠𝑡𝑎𝑟𝑡 , 𝑏𝑒𝑛𝑑] is the block interval parameter (e.g., 𝑏𝑠𝑡𝑎𝑟𝑡 ≤
+𝑟𝑒𝑐𝑜𝑟𝑑.𝑛𝑢𝑚𝑏𝑙𝑜𝑐𝑘 ≤ 𝑏𝑒𝑛𝑑). Note that 𝑑𝑏 is the target database
+table applied with indexes to improve query efficiency.
+We use conditional query 𝑄1 to illustrate how IQUERY
+improves query performance with correlated read set.
+Example 1: 𝑄1 is a join query that searches the com-
+plete 𝑡𝑥 𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛 with detailed commodity and
+user information. To perform the query, client users send
+a logical query selector in the form of 𝑄1 but spec-
+ifies commodityId to IQUERY. Then it will search the
+𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 table in 𝐻𝑖𝑠𝑡𝑜𝑟𝑦𝐷𝐵IQUERY with
+a customized index to improve query speed and return
+qualified records.
+𝑄1 : 〈$𝑒𝑞(𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦𝑖𝑑 :?), 𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦〉
+Although, 𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛 in Table 2 only records
+commodityID and userID instead of the detailed com-
+modity and user information. To improve the per-
+formance of 𝑄1, when updating IQUERY databases,
+we first identify the correlated read set [31] 𝑟𝑠 =
+{(𝑘𝑒𝑦𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐼𝐷 , 𝑣𝑒𝑟𝑠𝑖𝑜𝑛), (𝑘𝑒𝑦𝑢𝑠𝑒𝑟 𝐼𝐷 , 𝑣𝑒𝑟𝑠𝑖𝑜𝑛)} in 𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑
+𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛. We assign the former element in rs 𝑘1 and
+the latter 𝑘2. Then we search the value of 𝑘1 and 𝑘2
+from 𝑆𝑡𝑎𝑡𝑒IQUERY. The response (𝑘𝑒𝑦𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐼𝐷 , 𝑣𝑎𝑙𝑢𝑒) and
+(𝑘𝑒𝑦𝑢𝑠𝑒𝑟 𝐼𝐷 , 𝑣𝑎𝑙𝑢𝑒) are combined together to form a more
+user-readable record. Besides, IQUERY also attaches the
+basic information of transactions, i.e., timestamp, Txid,
+𝑏𝑙𝑜𝑐𝑘𝑛𝑢𝑚 and 𝑡𝑥𝑛𝑢𝑚. The record will be inserted into
+𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 of 𝐻𝑖𝑠𝑡𝑜𝑟𝑦𝐷𝐵IQUERY.
+4.2 Analytical Query Method
+In analytical queries, users can send logical query selectors
+to IQUERY for elaborate blockchain data analysis. Moreover,
+IQUERY enhances the performance of ledger data analytics
+by using Select-Aggregate style query functionalities.
+Select Records to View. In the selection stage, IQUERY
+uses a customized 𝑆𝑒𝑙𝑒𝑐𝑡 (·) function to construct the view in
+CouchDB [32]. The record selection consists of the following
+steps. ¬ 𝑉𝑖𝑒𝑤𝑑𝑎𝑡𝑎 = {∑𝑛
+𝑖=1 (𝑘𝑖 , 𝑣𝑖) | (𝑘𝑖 , 𝑣𝑖) ∈ 𝑆𝑒𝑙𝑒𝑐𝑡 (𝑑𝑜𝑐𝑑𝑎𝑡𝑎)}:
+Let data view be an ordered collection of key value pairs,
+where 𝑆𝑒𝑙𝑒𝑐𝑡 (𝑑𝑜𝑐𝑟𝑒𝑐𝑜𝑟𝑑) function generates each (k,v). ­
+𝑆𝑒𝑙𝑒𝑐𝑡 (𝑑𝑜𝑐𝑟𝑒𝑐𝑜𝑟𝑑) → (𝑘𝑒𝑦𝑎𝑡𝑡𝑟𝑖𝑏𝑢𝑡𝑒1, 𝑣𝑎𝑙𝑢𝑒𝑎𝑡𝑡𝑟𝑖𝑏𝑢𝑡𝑒2): 𝑆𝑒𝑙𝑒𝑐𝑡 (·)
+function has a user-defined selection logic. It scans all the
+records in a database and returns a key-value pair where the
+key and value are attributes of the qualified records selected
+by the selection logic.
+Aggregate View by Feature. In the aggregation stage,
+IQUERY analyzes the blockchain data characteristics by
+calculating selected records’ features from aggregated
+𝑉𝑖𝑒𝑤𝑑𝑎𝑡𝑎. 𝐴𝑔𝑔𝑟𝑒𝑔𝑎𝑡𝑒(𝑘𝑒𝑦𝑠, 𝑣𝑎𝑙𝑢𝑒𝑠) → {∑𝑛
+𝑖=1 𝑓 𝑒𝑎𝑡𝑢𝑟𝑒𝑖}:
+𝐴𝑔𝑔𝑟𝑒𝑔𝑎𝑡𝑒 function takes selected (k,v) pairs in 𝑉𝑖𝑒𝑤𝑑𝑎𝑡𝑎,
+and outputs the features of these pairs.
+We use analytical query 𝑄2 to illustrate how IQUERY
+integrates Select-Aggregate style functionalities.
+Example 2: 𝑄2 is an analytical query that analyzes the
+total value of the recharge token in a specific time period
+[𝑡𝑠𝑡𝑎𝑟𝑡 , 𝑡𝑒𝑛𝑑]. To perform the query, client users send a logical
+query selector in the form of 𝑄2 but specifies the time period
+to IQUERY.
+𝑄2 : 𝐺𝑒𝑡𝑇𝑜𝑡𝑎𝑙 ($𝑖𝑛( [𝑡𝑠𝑡𝑎𝑟𝑡 , 𝑡𝑒𝑛𝑑]), 𝑑𝑏𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛)
+To answer 𝑄2, IQUERY forms the 𝑉𝑖𝑒𝑤𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛
+based on 𝑑𝑏𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛 in the selection stage. The Select
+function filters all valid transactions and sets the timestamp
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 6
+Bucket 2
+Node 2
+h(B3) h(B4)
+Node 1
+h(B1) h(B2)
+𝑷𝒂𝒚𝒎𝒆𝒏𝒕𝒊𝒅 𝑻𝒊𝒅 𝑻𝒊𝒎𝒆𝒔𝒕𝒂𝒎𝒑 𝑩𝒍𝒐𝒄𝒌𝒊𝒅
+payment1 𝟏𝟐𝟏𝒆𝟐𝟔𝟒𝒃𝒊𝒕 𝟐𝟎𝟐𝟏 − 𝟔 − 𝟐𝟕𝑻𝟎𝟗: 𝟒𝟑: 𝟒𝟐. 𝟒𝟐𝟗𝒁 10
+payment8 𝟏𝟗𝒄𝟗𝒆𝟔𝟒𝒃𝒊𝒕 𝟐𝟎𝟐𝟏 − 𝟔 − 𝟐𝟕𝑻𝟎𝟗: 𝟒𝟑: 𝟒𝟑. 𝟑𝟒𝟕𝒁 22
+𝑭𝒊𝒏𝒅𝑫𝒐𝒄𝒊𝒅 𝑷𝒓𝒊𝒄𝒆 𝑼𝒔𝒆𝒓𝒊𝒅 𝑪𝒐𝒎𝒎𝒐𝒅𝒊𝒕𝒚𝒊𝒅
+1 30 user1@supermarket.com #A1_pizza
+2 30 user9@supermarket.com #A1_pizza
+Query Results:
+… … 𝒐𝒕𝒉𝒆𝒓 𝒓𝒆𝒄𝒐𝒓𝒅𝒔
+Conditional query:
+25 30 user18@supermarket.com #A1_pizza
+Bucket 1 Bucket 3 Bucket 4
+Root
+h(N2) h(N3)
+𝑸𝟏 = {$𝒆𝒒 𝑪𝒐𝒎𝒎𝒐𝒅𝒊𝒕𝒚𝒊𝒅: #𝑨𝟏_𝒑𝒊𝒛𝒛𝒂  , 𝒅𝒃𝑪𝒐𝒏𝒔𝒖𝒎𝒑𝒕𝒊𝒐𝒏𝑱𝒐𝒊𝒏𝑪𝒐𝒎𝒎𝒐𝒅𝒊𝒕𝒚}
+1
+2
+3
+𝒒𝒖𝒆𝒓𝒚 𝒓𝒆𝒔𝒖𝒍𝒕𝒔 
+   𝒉𝒓𝒐𝒐𝒕1.
+𝒃𝒖𝒄𝒌𝒆𝒕 𝒉𝒂𝒔𝒉𝒆𝒔2.
+3.
+𝒏
+𝟏
+𝟐
+IQUYER n
+IQUYER 2
+IQUYER 1
+......
+Target IQUERY 
+Data Source
+ADS Construction VO Generation
+𝒒𝒖𝒆𝒓𝒚 𝒓𝒆𝒔𝒖𝒍𝒕𝒔 
+   𝒉𝒓𝒐𝒐𝒕1.
+𝒃𝒖𝒄𝒌𝒆𝒕 𝒉𝒂𝒔𝒉𝒆𝒔2.
+3.
+User Verification
+Is Consistent?
+
+
+
+Fig. 4. Target IQUERY𝑛 constructs a MBT-based ADS from rich query
+results and generates 𝑉𝑂𝑛.
+of a record as key and recharge token as value. When IQUERY
+receives 𝑄2 request, it forms a time window [𝑡𝑠𝑡𝑎𝑟𝑡 , 𝑡𝑒𝑛𝑑] to
+select the inputs for Aggregate function from 𝑉𝑖𝑒𝑤𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 .
+Finally, all token values are added by 𝑆𝑢𝑚(·) to obtain total
+values in the aggregation stage.
+4.3 Multi-Origin Query Method
+We design a multi-origin query method, allowing a client
+user to validate whether multiple IQUERYS have answered
+consistently. The multi-origin query method returns a
+set of data attached with a cryptographic proof, known
+as a verification object (VO), for client users to verify the
+completeness and soundness of query results from the target
+IQUERY data source. Example 3 indicates the usage of VO.
+ADS Construction. IQUERY applies Merkle Bucket Tree
+(MBT) for ADS constructions. The sequentiality of blocks
+and transactions contributes to the identical ADS compared
+in two distinct IQUERY data sources. We define the buckets
+in MBT as follows.
+Definition 1 (Records in a bucket). The query results of
+𝑄 〈𝑜𝑝{𝑐1, 𝑐2...𝑐𝑛}, 𝑑𝑏〉 are a set of records. The serial
+number of a record in the query results is 𝐹𝑖𝑛𝑑𝐷𝑜𝑐𝑖𝑑 and
+it is computed through Eq.1. We place these records in
+a set of buckets to construct MBT, and the capacity of a
+bucket is denoted as 𝑐𝑎𝑝. The serial number of a bucket
+is 𝑏𝑢𝑐𝑘𝑒𝑡𝑖𝑑 and the position of the records in the bucket
+is 𝑝𝑜.
+𝐹𝑖𝑛𝑑𝐷𝑜𝑐𝑖𝑑 = 𝑐𝑎𝑝 × (𝑏𝑢𝑐𝑘𝑒𝑡𝑖𝑑 − 1) + 𝑝𝑜 (1)
+After all records in the query results are placed in the
+buckets, hash buckets are computed and served as leaf
+nodes of a MBT. Then MBT is constructed from bottom to
+up. Moreover, ℎ𝑟𝑜𝑜𝑡 is the root of a MBT and the internal
+nodes are formed by the cryptographic hashes computed
+from their intermediate children. Besides, the children of an
+internal node are called fanout [33].
+VO Generation. After constructing the ADS, IQUERY can
+generate VO from ADS. As shown in Fig. 4, VO consists
+of (1) ℎ𝑟𝑜𝑜𝑡 , (2) the bucket hashes in the MBT, and (3) the
+ordered query results set. A user can (i) recompute the
+bucket hashes based on the query results set to ensure the
+completeness of the query, (ii) compare the ℎ𝑟𝑜𝑜𝑡 from distinct
+IQUERY to check the soundness of query results, because
+ℎ𝑟𝑜𝑜𝑡 in VO is the digest of ADS.
+Example 3: 𝑄3 is a multi-origin query that sends 𝑄 to
+multiple IQUERY data sources in the decentralized IQUERY
+pool, e.g., IQUERY1, IQUERY2, ..., IQUERY𝑛. A user can
+decide to send 𝑄 to how many IQUERYS, which defines the
+𝑛 in 𝑄3. In this example, we set 𝑄 to 𝑄1, a conditional join
+query defined in §4.1. Then a client user sends the multi-
+origin query to target IQUERYS.
+𝑄3 : 〈IQUERY𝑛, 𝑄〉, 𝑛 = 1, 2, 3...
+In the IQUERY𝑛 server side, Fig. 4 shows how target
+IQUERY𝑛 constructs a MBT-based ADS from the rich query
+result of 𝑄1, then generates 𝑉𝑂𝑛. The fanout is 2, and the
+capacity is 8. In Example 3, IQUERY𝑛 receives a multi-origin
+query requests from the client user and finds that the query
+result of 𝑄1 contains 25 query records as shown in Query Re-
+sults (®) of Fig. 4. A record includes many fields: 𝑃𝑎𝑦𝑚𝑒𝑛𝑡𝑖𝑑 ,
+Txid, Timestamp, 𝐵𝑙𝑜𝑐𝑘𝑖𝑑 , Price, 𝑈𝑠𝑒𝑟𝑖𝑑 and 𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦𝑖𝑑 ,
+etc. More importantly, the returned doc has a 𝐹𝑖𝑛𝑑𝐷𝑜𝑐𝑖𝑑
+which identifies the serial number of the doc in the result
+set. IQUERY𝑛 uses the 𝐹𝑖𝑛𝑑𝐷𝑜𝑐𝑖𝑑 to compute which bucket
+to place the record. We take the last record in the query
+results with the 𝐹𝑖𝑛𝑑𝐷𝑜𝑐𝑖𝑑 25 as an example. According to
+Eq. 1, 25 = 8 × (4 − 1) + 1, so this record should be put
+in the 1st position of the 4th bucket. When all the records
+are placed in the bucket. IQUERY𝑛 computes hash buckets
+and can construct the MBT from bottom to up and establish
+ADS. IQUERY𝑛 then delivers 𝑉𝑂𝑛 to the client user.
+In the client user side, we show how to verify query
+results with 𝑉𝑂𝑛. We assume client users receive 𝑉𝑂𝑛 from
+IQUERY𝑛. If ℎ𝑟𝑜𝑜𝑡 in 𝑉𝑂1 and ℎ𝑟𝑜𝑜𝑡 in 𝑉𝑂2 are the same, the
+user can ensure the soundness of query results. Because the
+IQUERYS from distinct query origins return the same proof
+of query integrity to prove the query results are consistent.
+5 THE SECOND OPINION SMART CONTRACT
+We design a game theory based method to minimize the
+number of query SPs and reduce the monetary cost of users
+while guaranteeing the trustworthiness of query results. The
+proposed query protocol is implemented in an auditable
+self-enforcing blockchain smart contract and destroys the
+economic foundation of SP collusion.
+5.1 Threat Model
+IQUERY receives rewards from the user for providing correct
+query results requested by the user, but performing query
+computations incurs cost. There is a potential risk of IQUERY
+giving incomplete or fake results without executing real
+queries. To ensure the trustworthiness of query results, we
+can query multiple IQUERYS. If the majority of query results
+are consistent, we assume the result is correct. Unfortu-
+nately, users cannot query all available SPs to obtain the
+majority of query results due to excessive financial cost.
+Alternatively, users can sample some IQUERYS to obtain
+the required query results. In such circumstances, some
+IQUERYS may collude and deliver fake results to save cost
+as shown in Fig. 5. Therefore, we need a new query pro-
+tocal to ensure the trustworthiness of query results while
+minimizing the number of IQUERY.
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 7
+1a
+1b
+2a
+2b
+3b
+4b
+5a
+5b
+Selected IQUERY
+IQUERY n …….
+3a
+4c
+IQUERY n IQUERY Pool
+IQUERY 1 
+IQUERY 2 
+IQUERY N 
+……. Second 
+Opinion 
+Smart
+Contract
+Query Result Set
+Doc1 Doc2 Doc n
+…….
+IQUERY n2
+Fake results to maximize payoff ?
+Collude?
+4a
+Fig. 5. Protocol of the user and IQUERYS using the second opinion
+smart contract to complete the query procedure
+We also make the following assumptions.
+• Rational IQUERY always acts in a way that maximizes
+its benefit (reward).
+• We do not consider the incorrect query results caused
+by system failures, i.e., if an IQUERY is an honest
+provider, it should make the best efforts to deliver the
+correct query results. Otherwise, it is a conspirator.
+• An IQUERY will choose a high or low effort when
+computing the query results. A high effort will al-
+ways lead to a correct result. A low effort will lead to
+a wrong result.
+• If two IQUERYS return consistent query results, we
+consider other IQUERYS who give inconsistent results
+are cheating users.
+5.2 Protocol of Using the Contract for Queries
+We implement the mechanism of second opinion in the
+smart contract [1], [2], [24], achieving a protocol between
+users and IQUERYS to complete the query procedure. Based
+on our design, users only need to control incentive monetary
+parameters while selecting two IQUERYS for queries and
+then compares their query results to ensure trustworthiness.
+Moreover, the incentive mechanism encourages IQUERY to
+deliver correct results to maximize its benefits.
+Monetary Variables. 𝑐 is the cost for an IQUERY to compute
+a query request. 𝑑 is the amount that a user agrees to pay to
+IQUERY for computing the query task. A reward 𝑝 is sent to
+IQUERYS who make consistent query results. 𝑣 is user utility
+when the user gets a correct query result.
+Fig. 5 illustrates how the user and IQUERYS use the
+second opinion smart contract to complete the query pro-
+cedure. We present the contract and the protocol below.
+¬ First a user searches the IQUERY pool (1a) and
+IQUERY𝑛 is selected to provide query service (1b).
+­ The second opinion contract should be signed be-
+tween the user and the selected IQUERY𝑛. The user
+registers a service order 𝑂𝑞𝑢𝑒𝑟 𝑦 and sets the incentive
+parameters 𝑑 and 𝑝 in the smart contract (2a). 𝑑 and
+𝑝 are calculated based on Theorem 2 (see §5.4). If
+IQUERY𝑛 agrees with the incentive parameters and
+signs the contract, IQUERY𝑛 sets the id of the query
+request order 𝑂𝑞𝑢𝑒𝑟 𝑦 in the contract. The content of
+𝑂𝑞𝑢𝑒𝑟 𝑦 will not be recorded in the contract (2b).
+® Next, IQUERY𝑛 chooses to make a high or low effort
+to compute user’s query result (3a), IQUERY𝑛 is later
+placed in the selected IQUERY list (3b).
+¯ Upon receiving the query result from IQUERY𝑛, the
+user pays IQUERY𝑛 the agreed amount 𝑑 via the con-
+tract (4a). Note that the query result is attached with
+IQUERY𝑛’s signature for the message, so IQUERY𝑛
+cannot refuse to acknowledge that this result has
+been sent to the user. Then the user puts the returned
+documents 𝑑𝑜𝑐𝑛 in the query result set, if there exist
+two identical query results, the user goes to step °
+(4b). Otherwise, the user repeats step ¬, i.e., the user
+continues to searching for another query result until
+the user finds two consistent results (4c).
+° In the game theory analysis of the second opinions
+model, an incentive parameter 𝑝 satisfying Theorem
+2 will motivate IQUERYS to deliver honest query
+results to maximize their payoffs (see §5.4). There-
+fore, upon receiving two identical query results from
+distinct IQUERYS (5a) in non-ordered asynchronous
+queries, the user considers the query results correct.
+By using the contract, the user rewards the two
+IQUERYS each 𝑝
+2 for being honest (5b).
+5.3 Countermeasures to Prevent Collusion
+Instead of forbidding or preventing collusion through cryp-
+tography, we destroy the economic foundation of collusion
+[14]. Using financial incentives is a reasonable solution for
+preventing collusion and related works haven been studied
+in economics for many years [34]. We categorize SPs into
+three representative types with various abilities matching
+realistic scenarios and discuss how the second opinion
+mechanism motivates SPs to stay honest and follow the
+protocol in the contract.
+(1) A single rational SP. It cannot identify which IQUERY to
+collude with because the user can randomly choose another
+IQUERY. In order to maximize its payoff, the IQUERY will
+choose to be honest according to the analysis in §5.4.
+(2) A set of colluding rational SPs. These colluders ex-
+change information to see if they have received the same
+query. Once anyone of them receives a request, it can verify
+if other colluding fellows have previously received the same
+request and cheated the user. If other colluding fellows have
+cheated the user, the SP can return a same query result to
+cheat the user.
+We explain why these colluders will still fail to harm
+users’ interest. The prerequisite of a user to select the next
+SP is that the user has completed the first query. Therefore,
+the first SP does not know who the next SP is and has a
+high risk of losing rewards if it behaves dishonestly. More
+specifically, the first colluder will lose rewards, if the user
+chooses a second SP who is not colluding with them. The
+first colluder can only cheat the user, when he is sure the
+user will select a next SP who is colluding with them.
+However, the randomized SP selection approach coupled
+with non-ordered asynchronous querying primitive makes
+it impossible for the first colluder to infer who the user will
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 8
+choose next. Consequently, the first colluder can never be
+sure wether he is able to deceive a user through collusion.
+Moreover, the self-interest hypothesis can easily prove
+the impracticality of SPs colluding together. Assume that a
+SP tries to negotiate result duplication (fake results) with
+other set of SPs. If one of those SPs in the system turns out
+to be honest and reports the dishonest SP to the IQUERY
+system, then the dishonest SP risks losing its reputation
+and incurred rewards. Given the high-risk outcome of
+a dishonest behavior, we believe it is against the self-
+interest of the SP to behave dishonestly. In other words,
+given the workings of the system and the secure protocols
+in place, it is in the self-interest of the SP to behave honestly.
+We can conclude that there is no well-established reward
+mechanism possible for behaving dishonestly, except losing
+reputation and existing financial gains.
+(3) Malicious irrational SPs. They are willing to spend time
+and money to convey questionable results or disrupt the
+system.
+We introduce the reputation mechanism, if a SP is re-
+ported to have repeatedly provided incorrect results, it is
+deleted from the IQUERY pool. As all service orders are
+registered in the blockchain and IQUERY signs the query
+results, users can identify adversaries who deliver malicious
+query services and lose rewards from users. We also offer
+an alternative way to evaluate the credibility of SPs, i.e.,
+sending SPs some test queries for which the results are
+already known. The IQUERY system is able to remove these
+malicious users from the pool.
+5.4 Game Theory Analysis
+In this section, we provide a formal analysis to explain
+why the second opinion model can prevent the collusion.
+We assume that a user requires services from IQUERY, but
+he/she does not know which IQUERY can meet his/er
+requirements. The quality of the service provided by the
+IQUERY following the U(0, 1) uniform distribution. The user
+benefits from the query service 𝑎 only if it matches his query
+demand 𝛼 that follows U(0, 1) uniform distribution. If 𝑎 = 𝛼,
+his/er utility 𝑈𝑢𝑠𝑒𝑟 is 𝑣. Otherwise, the utility is zero [34].
+𝑈𝑢𝑠𝑒𝑟 =
+{
+𝑣, if 𝛼 = 𝑎 where 𝑣 > 0
+0, if 𝛼 ≠ 𝑎
+5.4.1 User Payoff
+We define the user payoff under distinct searching strategies
+as follows. 𝑓 is probability that the user stops after the first
+search and 1 − 𝑓 is the probability of the user searching
+for the second matching results. The probability of a user
+selecting an IQUERY with high effort is 𝑥.
+Definition 2. If the user stops after the first search, the user’s
+payoff is
+𝑈
+(1)
+𝑢𝑠𝑒𝑟 = 𝑥𝑣 − 𝑝 − 𝑑 (2)
+Definition 3. If the user has to search for second matching
+results, the user’s payoff is:
+𝑈
+(2)
+𝑢𝑠𝑒𝑟 = 𝑣 − 𝑝 − 2𝑑
+𝑥
+(3)
+By comparing the payoff 𝑈
+(1)
+𝑢𝑠𝑒𝑟 in Eq. 2 with 𝑈
+(2)
+𝑢𝑠𝑒𝑟 in
+Eq. 3, the user chooses the strategy that bringing higher
+payoff.
+Proof 5.1. We prove the user payoff 𝑈
+(2)
+𝑢𝑠𝑒𝑟 in Definition 3.
+First, we need to prove the search cost of finding two
+matching results. We assume the query result of the n-
+th IQUERY is correct and a random sampled IQUERY
+computes the correct query result with probability 𝑥.
+Therefore, the expected duration of the search for one
+correct query result is 1
+𝑥
+. This means that
+𝑛∑︁
+𝑖=0
+(1 − 𝑥)𝑖 = 1 − (1 − 𝑥)𝑛
+1 − (1 − 𝑥) =
+1
+𝑥
+(4)
+Therefore, the expected duration of the search for two
+correct query results is 2
+𝑥
+and the corresponding expected
+search cost is 2𝑑
+𝑥
+. The payoff 𝑈
+(2)
+𝑢𝑠𝑒𝑟 in Eq. 3 equals the
+utility of a user getting correct results (𝑣) minus the amount
+that the user rewards IQUERYS who make consistent query
+results (𝑝) minus the search cost of finding two matching
+results ( 2𝑑
+𝑥
+).
+5.4.2 IQUERY Payoff
+We define the IQUERY payoff under distinct computation
+strategies as follows. First, let probability 𝐵 denotes the
+IQUERY’s belief conditional on the user accepting the query
+result.
+Definition 4 (IQUERY’s belief). 𝐵 is formalized as:
+𝐵 =
+𝑥
+𝑓 𝑥 + 2(1 − 𝑓 ) (5)
+We use the following notations to calculate 𝐵:
+• 𝑛: the number of query results received before the
+sampling of IQUERY 𝑘 .
+• 𝐻𝑘 : the set of histories such that 𝑘 is sampled.
+• 𝑃(𝑛|𝐻𝑘 ): the probability that a user receives 𝑛 query
+results before sampling IQUERY 𝑘 (conditional on 𝑘
+being sampled) [35].
+• 𝑇 : the random stopping time of the search over the
+set of IQUERYS excluding 𝑘 .
+Proof 5.2. We prove IQUERY belief 𝐵 of Definition 4. We
+compute 𝑃(𝑛 | 𝐻𝑘 ) by decomposing the sampling pro-
+cess over IQUERYS other than k into the disjoint events,
+T = 1, 2, .... This yields,
+𝑃(𝑛 | 𝐻𝑘 ) =
+∑︁
+𝑚≥𝑛+1
+𝑃(𝑛 | 𝑇 = 𝑚, 𝐻𝑘 )𝑃𝑟 (𝑇 = 𝑚 | 𝐻𝑘 ) (6)
+Notice that,
+𝑃(𝑛 | 𝑇 = 𝑚, 𝐻𝑘 ) =
+
+1
+𝑚
+𝑖 𝑓 0 ≤ 𝑛 ≤ 𝑚 − 1
+0 𝑜𝑡ℎ𝑒𝑟𝑤𝑖𝑠𝑒
+(7)
+Furthermore,
+𝑃𝑟 (𝑇 = 𝑚 | 𝐻𝑘 ) =
+𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑚)𝑃𝑟 (𝑇 = 𝑚)∑
+𝑛≥1 𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑛)𝑃𝑟 (𝑇 = 𝑛)
+=
+𝑚 × 𝑃𝑟 (𝑇 = 𝑚)∑
+𝑛≥1 𝑛 × 𝑃𝑟 (𝑇 = 𝑛)
+(8)
+where the last equality uses the fact that
+𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑚)
+𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑛) =
+𝑚
+𝑛
+(9)
+To compute the likelihood ratio of two zero probability
+events we take the limit of shrinking neighbourhoods of
+positive probability. Hence,
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 9
+𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑚)
+𝑃𝑟 (𝐻𝑘 | 𝑇 = 𝑛) = lim
+𝜖→0
+𝑃𝑟 ({𝐻�̃� | �̃� ∈ [𝑘, 𝑘 + 𝜖]} | 𝑇 = 𝑚)
+𝑃𝑟 ({𝐻�̃� | �̃� ∈ [𝑘, 𝑘 + 𝜖]} | 𝑇 = 𝑛)
+= lim
+𝜖→0
+1 − (1 − 𝜖)𝑚
+1 − (1 − 𝜖)𝑛 =
+𝑚
+𝑛
+(10)
+and therefore equation Eq.9 follows. Substituting Eq.8
+and Eq.7 into Eq.6 yields
+𝐵 = 𝑃(0 | 𝐻𝑘 ) =
+∑
+𝑚≥1 𝑃𝑟 (𝑇 = 𝑚)∑
+𝑛≥1 𝑛 × 𝑃𝑟 (𝑇 = 𝑛) =
+1
+𝑓 + (1 − 𝑓 ) 2
+𝑥
+(11)
+where the last equality follows since
+∑
+𝑚≥1 𝑃𝑟 (𝑇 = 𝑚) = 1
+and
+∑
+𝑛≥1 𝑛 × 𝑃𝑟 (𝑇 = 𝑛) = 𝑓 + (1 − 𝑓 ) 2
+𝑥
+.
+Definition 5. With high effort, IQUERY’s payoff is:
+𝑈
+ℎ𝑖𝑔ℎ
+IQUERY
+= 𝑑 + 𝑝 𝑓 𝐵 + (1 − 𝑓 𝐵) 𝑝
+2
+− 𝑐 (12)
+Definition 6. With low effort, IQUERY’s payoff is:
+𝑈𝑙𝑜𝑤
+IQUERY = 𝑑 + 𝑝 𝑓 𝐵 (13)
+By comparing 𝑈
+ℎ𝑖𝑔ℎ
+IQUERY
+in Eq. 12 with 𝑈𝑙𝑜𝑤
+IQUERY
+in Eq. 13,
+the IQUERY chooses the strategy that bringing higher payoff.
+Proof 5.3. In Eq. 12, 𝑓 𝐵 is the probability that the user has
+never sampled before and stops after the first query and
+(1 − 𝑓 𝐵) is the probability that the user searches for a
+matching query results. In the latter case, IQUERY gains a
+reword with probability 1
+2 . This follows because the user
+samples IQUERYS in random order and the quality of the
+service provided by the IQUERY following the U(0, 1)
+uniform distribution according to the assumptions in
+§5.4. On the other hand, if IQUERY does not incur the
+cost c, it will give an incorrect query result. The expected
+profit 𝑈𝑙𝑜𝑤
+IQUERY
+in this case is 𝑑 + 𝑝 𝑓 𝐵 in Eq. 13.
+Equilibrium. The profile (𝑑, 𝑝, 𝑥, 𝑓 ) is a fixed price equilib-
+rium if the user’s search strategy, 𝑓 , is optimal given (𝑑, 𝑝, 𝑥)
+and the IQUERYS’s effort decision 𝑥 ∈ [0, 1] is optimal given
+(𝑑, 𝑝, 𝑥, 𝑓 ) and the belief 𝐵. (𝑑, 𝑝, 𝑥, 𝑓 ) is non-degenerate if
+IQUERYS choose high effort with positive probability, i.e. if
+𝑥 > 0.
+5.4.3 Incentive Parameter Control
+Based on the definitions of payoff functions, we can
+derive theorem 1 and theorem 2 to calculate the conditions
+that need to be satisfied between monetary variables. Users
+control incentive monetary parameters 𝑑 and 𝑝 in the smart
+contract, so that 𝑑 ≤ 𝑑 ≡ 𝑣
+2
+√
+2+3
+(according to Theorem 1) and
+𝑝 > 2𝑐 (according to Theorem 2) are satisfied. We motivate
+the rational user to ask a second opinion and IQUERYS to
+return the correct query results with high effort to maximize
+their payoffs. Therefore, we can minimize the number of
+query SPs while guaranteeing the trustworthiness of the
+query results.
+Theorem 1 (Conditions for a user to search a second
+opinion). In a non-degenerate fixed price equilibrium,
+if 𝑑 ≤ 𝑑 ≡ 𝑣
+2
+√
+2+3
+is satisfied in the smart contract, the user
+weakly prefers to ask a second opinion and search for
+two matching query results where
+𝑈
+(2)
+𝑢𝑠𝑒𝑟 ≥ 𝑈
+(1)
+𝑢𝑠𝑒𝑟 , 𝑖.𝑒.,
+𝑣 − 𝑝 − 2( 𝑑
+𝑥
+) ≥ 𝑥𝑣 − 𝑝 − 𝑑 (14)
+Users can quantify the value of 𝑣 based on custom
+methods, e.g., the analytic hierarchy process (AHP) [36].
+Then users are able to calculate the acceptable 𝑑 to pay to
+IQUERY for computing the query task, and set the monetary
+parameters in the smart contract.
+Proof 5.4. Eq. 14 can be solved for 𝑥 ∈ [0, 1] when 𝑑 ≤ 𝑑 ≡
+𝑣
+2
+√
+2+3
+, that is, when the service fee are not too large. In
+that case, Eq. 14 is satisfied for all 𝑥 ∈ [𝑥(𝑑), 𝑥(𝑑)] where
+𝑥(𝑑) < 1 and 𝑥(𝑑) < 1 are the two roots of the quadratic
+equation implied by Eq. 14 when it holds with equality.
+Eq. 14 implies that the user can only be induced to search
+for a matching query result if 𝑑 ≤ 𝑑 ≡ 𝑣
+2
+√
+2+3
+. Hence, non-
+degenerate equilibria can exist only when 𝑑 ≤ 𝑑.
+Theorem 2 (Conditions for IQUERY to be honest). In a non-
+degenerate fixed price equilibrium, if 𝑝 > 2𝑐 is satisfied
+in the smart contract, IQUERY has a greater incentive to
+make a high effort to return a correct result where
+𝑈
+ℎ𝑖𝑔ℎ
+IQUERY
+> 𝑈𝑙𝑜𝑤
+IQUERY, 𝑖.𝑒.,
+𝑑 + 𝑝 𝑓 𝐵 + (1 − 𝑓 𝐵) 𝑝
+2
+− 𝑐 > 𝑑 + 𝑝 𝑓 𝐵 (15)
+𝑐, IQUERY’s cost for computing the query request, can
+be quantified from history off-chain computation cost. Then
+users are able to set an acceptable 𝑝 in the smart contract
+that is greater than 2𝑐.
+Proof 5.5. We need to prove with any probability 𝑓 , 𝑈ℎ𝑖𝑔ℎ
+IQUERY
+is always greater than 𝑈𝑙𝑜𝑤
+IQUERY
+. If when 𝑓 = 0, (1− 𝑓 𝐵) 𝑝
+2 >
+𝑐 is satisfied, then for any 𝑓 ∈ [0, 1], (1− 𝑓 𝐵) 𝑝
+2 > 𝑐 will be
+satisfied. So we have the monetary variable relationship
+𝑝 > 2𝑐 that must be satisfied.
+5.5 Query Frequency Analysis
+Existing blockchain query layer is able to apply the
+replication-based approach to guarantee the trustworthiness
+of query results. More specifically, users send query requests
+to multiple SPs and cross-check the query results. Hence,
+we analyze how many SPs a user has to query by using
+the replication-based approach, i.e., the query frequency to
+ensure result trustworthiness with a formal proof.
+We make the following assumptions to define the prob-
+ability of getting trustworthy query results.
+• Let 𝑛 be the number of SPs in the network, and 𝐸 is
+the query procedure, i.e., a user sends a query request
+to a single SP. There are only two possible outcomes
+in 𝐸 : 𝐴 and 𝐴, 𝐴 = {SP returns correct results}, 𝐴 =
+{SP returns wrong results}. Then, we have 𝑃(𝐴) =
+𝑝, 𝑃(𝐴) = 1 − 𝑝 = 𝑞 (0 < 𝑝 < 1).
+• If the probability of event 𝐴 occurring in each 𝐸 is
+𝑝, in a Bernoulli process [37], the probability of event
+𝐴 happens 𝑘 times is 𝑃(𝐴 = 𝑘) = 𝐶𝑘
+𝑛 𝑝
+𝑘𝑞𝑛−𝑘 , 𝑘 =
+0, 1, 2, ...𝑛.
+• A user can cross-check query results retrieved from
+different SPs to validate the correctness of query
+results. A user gets verifiable query results only when
+the number of correct results is greater than the
+number of wrong results.
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 10
+The number of correct results when a user selects any
+𝑦 SPs for query, conforms to the Binomial distribution, i.e.,
+𝐴 ∼ 𝐵𝑖𝑛𝑜𝑚𝑖𝑎𝑙 (𝑦, 𝑝). When 𝑦 is large, 𝑥 is not close to 0 or 1,
+then 𝐵𝑖𝑛𝑜𝑚𝑖𝑎𝑙 (𝑦, 𝑝) ≈ 𝑁𝑜𝑟𝑚𝑎𝑙 (𝑦𝑝, 𝑦𝑝(1 − 𝑝)).
+Definition 7. The probability that a user cannot get verifiable
+query results is 𝑃(𝐵𝑖𝑛𝑜𝑚𝑖𝑎𝑙 (𝑦, 𝑝) ≤ 𝑦
+2 ), i.e., the number
+of correct results are less than or equal to 𝑦
+2 :
+𝑃(𝐵𝑖𝑛𝑜𝑚𝑖𝑎𝑙 (𝑦, 𝑝) ≤ 𝑦
+2
+) ≈ 𝑃(𝑁𝑜𝑟𝑚𝑎𝑙 (𝑦𝑝, 𝑦𝑝(1 − 𝑝)) ≤ 𝑦
+2
+)
+= 𝑝𝑛𝑜𝑟𝑚( 𝑦
+2
+, 𝑦𝑝, 𝑦𝑝(1 − 𝑝)) (16)
+TABLE 3
+Minimum Query Frequency with Given 𝑝𝑡𝑟𝑢𝑠𝑡 and 𝑝ℎ𝑜𝑛𝑒𝑠𝑡
+𝑝𝑡𝑟𝑢𝑠𝑡 𝑝ℎ𝑜𝑛𝑒𝑠𝑡 y
+95% 78% 5
+95% 80% 4
+Minimum Query Frequency Calculation. We assume that
+there are enough SPs in the network. If a user initiates a
+query request to an arbitrary SP in the network, 𝑝 equals the
+proportion of honest SPs 𝑝ℎ𝑜𝑛𝑒𝑠𝑡 in the network. A user sets
+a query credibility threshold 𝑝𝑡𝑟𝑢𝑠𝑡 , i.e., the probability that
+the user gets a verifiable query result is greater than or equal
+to 𝑝𝑡𝑟𝑢𝑠𝑡 . Moreover, we have 𝑝𝑡𝑟𝑢𝑠𝑡 = 1 − 𝑃(𝐵𝑖𝑛𝑜𝑚𝑖𝑎𝑙 (𝑦, 𝑝) ≤
+𝑦
+2 ). With given 𝑝ℎ𝑜𝑛𝑒𝑠𝑡 and Eq. 16, we can compute the
+minimum query frequency 𝑦 to achieve 𝑝𝑡𝑟𝑢𝑠𝑡 that satisfies
+user needs.
+Table 3 lists the 𝑦 with corresponding 𝑝𝑡𝑟𝑢𝑠𝑡 and 𝑝ℎ𝑜𝑛𝑒𝑠𝑡 .
+For example, when a user wants to achieve query confidence
+of 95%, and the proportion of honest SPs in the network is
+78%, the user has to query 5 SPs at least. Notably, with the
+help of the second opinion smart contract, a user only needs
+to query two SPs to achieve 100% query credibility.
+6 EVALUATION
+In this section, we provide a set of comprehensive ex-
+periments. Our second opinion mechanism only needs to
+compare two copies of query results to ensure the trustwor-
+thiness (tackle R1), while the query frequency is 2 ∼ 134
+× less than the state-of-the-art systems. Moreover, our pro-
+posed system offers a set of rich query semantics to support
+different types of queries, e.g., conditional, analytical, and
+multi-origin query methods (tackle R2). In terms of these
+query semantics, IQUERY is 2 ×, 7 ×, and 1.5 × faster than
+advanced blockchain and blockchain databases (tackle R3).
+6.1 Experimental Setup
+Cluster Setup. We perform all experiments on a 7 node
+cluster interconnected with 1Gbps networking. Each node
+has an equal configuration with 32 cores (2.40GHz Intel
+Xeon E5 v3 CPU), 256 GB RAM, 2 TB hard drive, and
+Ubuntu 14.04 Trusty operation system. The prototype is
+implemented by Node.js, interacting with Hyperledger Fab-
+ric v1.4 or Geth v1.10.23 (popular Go implementation of
+Ethereum) as the underlying blockchain technology, and
+CouchDB 2.3.1 is used to store off-chain data.
+Datasets. The datasets consist of four types of transactions
+as shown in Table 2 of §3.2, which is simulated by Caliper
+TABLE 4
+Query Operation Benchmark
+𝑞1 〈[$𝑒𝑞 (𝑜𝑟𝑔𝑎𝑛𝑖𝑧𝑎𝑡𝑖𝑜𝑛 :?) , 𝑑𝑏𝑖𝑛𝑖𝑡𝑈𝑠𝑒𝑟 〉
+𝑞2 〈[𝑏𝑠𝑡𝑎𝑟𝑡 , 𝑏𝑒𝑛𝑑 ], $𝑒𝑞 (𝑃𝑟𝑜𝑑𝑢𝑐𝑡𝑇 𝑦𝑝𝑒 : 𝑐𝑙𝑜𝑡ℎ𝑒𝑠) , 𝑑𝑏𝑖𝑛𝑖𝑡𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦 〉
+𝑞3 〈$𝑖𝑛(𝑝𝑟𝑖𝑐𝑒 : [𝑛𝑢𝑚𝑠 , 𝑛𝑢𝑚𝑒 ]) , 𝑑𝑏𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇𝑜𝑘𝑒𝑛 〉
+𝑞4 〈$𝑒𝑞 (𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝑖𝑑 :?) , 𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦 〉
+𝑞5 𝐺𝑒𝑡𝑇 𝑜𝑡𝑎𝑙 ($𝑒𝑞 (𝑈𝑠𝑒𝑟𝑖𝑑 :?) , 𝑑𝑏𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇𝑜𝑘𝑒𝑛)
+𝑞6 𝐴𝑛𝑎𝑛𝑙𝑦𝑧𝑒𝑈𝑛𝑖𝑞𝑢𝑒𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 (𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦)
+𝑞7 〈IQUERY𝑛 , 𝑞〉, 𝑛 = 1, 2, 3...
+[38]. The size of each record is 300 Byte, and an exam-
+ple record is in the form of {commodityID: #A1 pizza,
+Txid:121𝑒264𝑏𝑖𝑡 , timestamp: t, price:30, ...}. We use the same
+configurations as the SEBDB experiment [8]. Each block con-
+tains 200 transactions. We use SHA-256 for VO generation.
+Workloads. The workloads include seven queries listed in
+Table 4. 𝑞1 tracks all 𝑡𝑥𝑖𝑛𝑖𝑡𝑈𝑠𝑒𝑟 from the indexed 𝑑𝑏𝑖𝑛𝑖𝑡𝑈𝑠𝑒𝑟 ,
+where the user identities belong to a certain organiza-
+tion. 𝑞2 tracks all 𝑡𝑥𝑖𝑛𝑖𝑡𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 in a time window, i.e.,
+[𝑏𝑠𝑡𝑎𝑟𝑡 , 𝑏𝑒𝑛𝑑], where the product type is clothes. 𝑞3 tracks
+all 𝑡𝑥𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛 where the recharge token is within an
+amount window, i.e., [𝑛𝑢𝑚𝑠 , 𝑛𝑢𝑚𝑒]. 𝑞4 tracks the complete
+information of a consumption payment which contains
+𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡𝑦𝑖𝑑 . It selects from 𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦
+which joins 𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛 and commodity details.
+𝑞5 and 𝑞6 are analytical query operations. 𝑞5 analyzes the
+total user recharge of 𝑈𝑠𝑒𝑟𝑖𝑑 . 𝑞6 tracks unique commodities
+in all consumption payment transactions. 𝑞7 delivers 𝑞 to
+multiple origin SPs (identified by IQUERY𝑛) to evaluate the
+performance of multi-origin query operations. Note that 𝑞
+is a user-defined rich semantic query.
+Metrics. Latency is measured as the average response time
+per query operation. We evaluate the multi-origin query
+with the following metrics: (i) VO construction cost in terms
+of IQUERY server CPU time, (ii) result verification cost in
+terms of user CPU time, and (iii) size of the VO.
+6.2 IQUERY Efficiency and Trustworthiness Evaluation
+In this subsection, we first demonstrate efficient implemen-
+tation of our proposed system by performing 𝑞1 in Fabric,
+Ethereum, SEBDB, and IQUERY in a single node. Next,
+we turn on the second opinion method to show off the
+advantage of IQUERY that ensures the trustworthiness of
+query results.
+Efficiency evaluation in single node. We first raise the block
+number from 500 to 2500 and fix the returned result size to
+10,000. Fig. 6 shows that the proposed system outperforms
+the state-of-the-art systems in terms of latency. It is because
+IQUERY applies a record-level B-tree, a more efficient in-
+dex for retrieving blockchain data than the block-level B-
+tree used by SEBDB and the Merkle Patricia tree used by
+Ethereum. Moreover, Fabric utilizes the smart contract APIs
+to query the world state database where the indexes are not
+optimized.
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 11
+100
+101
+102
+103
+104
+500 1000 1500 2000 2500
+The Number of Blocks
+R
+es
+po
+ns
+e 
+T
+im
+e(
+m
+s)
+iQuery
+SEBDB
+Fabric
+Ethereum
+Fig. 6. Varying Block Number in
+Conditional Query.
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+100
+101
+102
+103
+104
+105
+2k 10k 50k 250k 1250k
+Result Size
+R
+es
+po
+ns
+e 
+Ti
+m
+e(
+m
+s)
+iQuery
+SEBDB
+Fabric
+Ethereum
+Fig. 7. Varying Result Size in Con-
+ditional Query.
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+F
+ab
+ri
+c 
+T
+im
+e 
+O
+ut
+100
+101
+102
+103
+104
+105
+106
+2k 10k 50k 250k 1250k
+Result Size
+R
+es
+po
+ns
+e 
+T
+im
+e(
+m
+s)
+iQuery
+SEBDB(98,78)
+SEBDB(95,80)
+Fabric(98,78)
+Fabric(95,80)
+Ethereum(98,78)
+Ethereum(95,80)
+Fig. 8. Impact of the Second Opin-
+ion Smart Contract
+100
+101
+102
+103
+TW1 TW2 TW3 TW4 TW5
+Time Window
+R
+es
+po
+ns
+e 
+Ti
+m
+e(
+m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 9. Varying Time Window.
+100
+101
+102
+103
+500 1000 1500 2000 2500
+Number of Blocks
+R
+es
+po
+ns
+e 
+Ti
+m
+e(
+m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 10. Vary Range Data Size
+100
+101
+102
+103
+1k 2k 4k 6k 8k 10k
+Result Size
+R
+es
+po
+ns
+e 
+La
+te
+nc
+y(
+m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 11. Vary Range Result Size
+100
+101
+102
+103
+500 1000 1500 2000 2500
+Number of Blocks
+Re
+sp
+on
+se
+ L
+at
+en
+cy
+(m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 12. Vary Join Data Size
+100
+101
+102
+103
+1k 2k 3k 4k 5k
+Result Size
+R
+es
+po
+ns
+e 
+La
+te
+nc
+y(
+m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 13. Vary Join Result Size
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+Fa
+br
+ic
+ T
+im
+e 
+O
+ut
+100
+101
+102
+103
+104
+105
+2k 10k 50k 250k 1250k
+Result Size
+R
+es
+po
+ns
+e 
+Ti
+m
+e(
+m
+s)
+iQuery
+SEBDB
+Fabric
+Ethereum
+Fig. 14. Vary Record Data
+Size in 𝑞5
+100
+101
+102
+103
+104
+1k 2k 3k 4k 5k
+Result Size
+R
+es
+po
+ns
+e 
+La
+te
+nc
+y(
+m
+s)
+iQuery SEBDB Fabric Ethereum
+Fig. 15. Vary Record Data
+Size in 𝑞6
+0
+5
+10
+15
+20
+25
+500 1000 1500 2000 2500
+The Number of Blocks
+V
+O
+ S
+iz
+e
+(M
+B
+)
+iQuery
+SEBDB−Range
+SEBDB−Tracking
+Fig. 16. VO Size
+0
+50
+100
+150
+500 1000 1500 2000 2500
+The Number of Blocks
+S
+er
+ve
+r T
+im
+e(
+m
+s)
+iQuery
+SEBDB−Range
+SEBDB−Tracking
+Fig. 17. Running Time at
+Server Side
+100
+101
+102
+103
+104
+105
+500 1000 1500 2000 2500
+The Number of Blocks
+C
+lie
+nt
+ T
+im
+e(
+µs
+)
+iQuery
+SEBDB−Range
+SEBDB−Tracking
+Fig. 18. Running Time at
+Client Side
+Secondly, we fix the block number to set the number of
+transactions in the blockchain database and adjust the result
+size from 2,000 to 1,250,000. Fig. 7 shows IQUERY achieves
+the smallest latency. Due to the disk IO and network trans-
+mission, the response time for all methods increases as the
+result size increases. Note that, Fabric runs out of memory
+when the result size is 1,250,000.
+The efficiency of achieving trustworthiness. Our second
+opinion mechanism only needs to compare two copies of
+query results to ensure the trustworthiness which is 2.5 or
+2 × less than SEBDB, Fabric and Ethereum with different
+trustworthiness configurations. The fewer copies of query
+results, the fewer resulting transactions will be queried.
+Consequently, IQUERY reduces the query latency signifi-
+cantly.
+To define trustworthiness, we denote the query config-
+urations in the form of C/P, where C is the confidence of
+query results, and P is the percentage of honest SPs in the
+blockchain query layer. We intend to compare the query
+efficiency of three systems under different trustworthiness
+configurations. Fig. 8 shows that the latency of IQUERY is
+7 ∼ 270 × less than other three systems for executing 𝑞1
+when the result size rises. Moreover, with the help of the
+second opinion smart contract, IQUERY guarantees verifia-
+bility and significantly improves the efficiency of the query
+system.
+By employing the second opinion smart contract, a
+user only needs to query two origins to ensure that ratio-
+nal IQUERY will return correct results. SEBDB, Fabric and
+Ethereum support query ledger data from local databases,
+e.g., the state and history databases. According to the anal-
+ysis in Table 3 of §5.5, when the confidence is 98%, and the
+percentage of honest SPs in the blockchain query layer is
+78%, a user needs to query four origin SPs in SEBDB(98,78).
+When C is 95%, and P is 80%, a user needs to query five
+origin SPs in SEBDB(95,80). Consequently, with fixed sin-
+gle query result size, SEBDB/Fabric/Ethereum(98,78) and
+SEBDB/Fabric/Ethereum(95,80) need to return four × and
+five × the amount of data a single 𝑞1 request requires,
+respectively.
+6.3 Evaluation of IQUERY Flexibility
+In this subsection, we evaluate the rich query APIs offered
+by IQUERY to demonstrate its flexibility while guaranteeing
+its efficiency.
+Range query. 𝑞2 is a temporal query, which is required to
+provide a pair of time window (𝑇𝑊) parameters (𝑠𝑡𝑎𝑟𝑡, 𝑒𝑛𝑑).
+Let 𝑠𝑡𝑎𝑟𝑡 = 0, and change 𝑒𝑛𝑑 block number to 1000/2𝑖−1
+for 𝑇𝑊𝑖 . We set blockchain to contain 10,000 𝑡𝑥𝑖𝑛𝑖𝑡𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦
+and there exist 1,000 resulting transactions. Fig. 9 shows that
+IQUERY outperforms the other three systems for executing
+𝑞2.
+Fig. 10 and 11 show that IQUERY achieves the best per-
+formance, while Fabric has the highest latency for executing
+𝑞3. In Fig. 10, the number of resulting transactions is fixed
+to 1,000. The resulting transactions are the 𝑡𝑥𝑟𝑒𝑐ℎ𝑎𝑟𝑔𝑒𝑇 𝑜𝑘𝑒𝑛
+whose price attribute falls into the price window. In Fig. 11,
+the number of resulting transactions is changed from 1,000
+to 10,000. The latency of IQUERY, SEBDB and Ethereum
+remains stable. It is because IQUERY applies the layered
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 12
+index in CouchDB, while SEBDB and Ethereum employ a
+customized layered index in the contract layer.
+Join query. Fig. 12 and 13 demonstrate that IQUERY
+achieves the best performance, compared with two other
+systems for performing join query 𝑞4. Fig. 12 shows that the
+latency of IQUERY and SEBDB remains the same when we
+increase block number (blockchain database size) and fix the
+result size to 10,000. It is because IQUERY applies a joined
+table 𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 , whereas SEBDB employs a
+layered index.
+Fig. 12 shows that Fabric has the most significant la-
+tency. Because in Fabric and Ethereum queries, we need
+to add user details, price, and commodity information
+fields for 𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛 in the smart contract. It
+significantly increases the read and write time of smart
+contracts. Furthermore, in order to implement 𝑞4 opera-
+tions, SEBDB needs to query 𝑡𝑥𝑐𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛 table
+and commodity information table with a layered index for
+the join operation. The runtime join operations introduce
+an additional operation cost. IQUERY applies a joined table
+𝑑𝑏𝐶𝑜𝑛𝑠𝑢𝑚𝑝𝑡𝑖𝑜𝑛𝐽𝑜𝑖𝑛𝐶𝑜𝑚𝑚𝑜𝑑𝑖𝑡 𝑦 built in the block information
+extracting stage in advance, thus reducing query latency.
+Fig. 13 shows that IQUERY maintains its performance ad-
+vantages when the result size rises from 1,000 to 5,000.
+Analytical query. The analytical query is a unique feature
+offered by IQUERY, which allows users to reconstruct meta
+records and analyze blockchain data (see §4.2). We extend
+Fabric, Ethereum and SEBDB by first querying blockchain
+data and then analyzing data on the client side. Fig. 14
+illustrates that the latency of IQUERY is 102 ∼ 105 × less
+than other three systems for executing 𝑞5 with the record
+size from 2,000 to 1,250,000. The record size is the amount
+of blockchain transaction records that need to be analyzed.
+IQUERY maximizes the parallel processing for designing the
+analytical query to achieve outstanding performance. Note
+that, Fabric is unable to respond to the query requests when
+the record size is 1,250,000. Fig. 15 shows that IQUERY’s
+latency is 25 ∼ 7 × smaller than SEBDB, 315 ∼ 85 × less than
+Fabric, and 46 ∼ 13 × less than Ethereum when performing
+𝑞6 with the record size from 1,000 to 5,000.
+6.4 Evaluation of the Multi-Origin Query
+The multi-origin query enables users to efficiently verify the
+correctness of query results from distinct IQUERY. Because
+Fabric and Ethereum do not implement the VO mechanism,
+in this subsection, we benchmark multi-origin query 𝑞7 in
+IQUERY and SEBDB. As mentioned in §4.3, the multi-origin
+query is an authenticated query method that can increase
+the trustworthiness of any query semantics. Note that it is
+not query semantics but resulting transactions that affects
+the performance of the multi-origin query. On the other
+hand, authenticated range query and authenticated tracking
+query have different performances in SEBDB. Consequently,
+we denote SEBDB-Tracking and SEBDB-Range as the per-
+formance results of authenticated tracking query 𝑞1 and
+authenticated range query 𝑞2 in SEBDB. Besides, we only
+use iQuery to denote the performance of authenticated 𝑞1
+and 𝑞2 in IQUERY.
+VO size. The resulting transactions are set as 10,000. Fig. 16
+shows that the VO size of IQUERY is always smaller than
+the other two methods of SEBDB. The smaller the VO size,
+the smaller the network bandwidth will be consumed in
+large-scale application query scenarios. SEBDB adds sibling
+nodes to VO, thus increasing VO size. Fig. 16 illustrates that
+the VO size of IQUERY stays constant, and the VO size of
+SEBDB increases when the block size increases. Because the
+VO size of SEBDB depends on the number of blocks that
+contain query results [8] and the VO size of IQUERY only
+depends on the size of resulting transactions.
+VO construction cost. We compare the VO construction cost
+in terms of CPU time on the server side. Fig. 17 shows
+that the VO construction cost of IQUERY is always smaller
+than the other methods because SEBDB applies Merkle B-
+tree (MB-tree) to generate VO and IQUERY employs Merkle
+Bucket Tree (MBT). With the same number of indexed nodes,
+the height of the MBT is smaller, thus the VO construction
+cost is smaller.
+Result verification cost. We compare the result verification
+cost in terms of user CPU time on the client side. Fig. 18
+shows that the result verification cost of IQUERY is 103×
+less than SEBDB-Tracking and SEBDB-Range. Because the
+multi-origin query method in IQUERY builds a MBT based
+on query results, the client only needs to check the root hash
+to verify the correctness of query results. On the other hand,
+the client needs to reconstruct every MB-tree root, where the
+MB-tree contains query results in SEBDB.
+7 CONCLUSION AND FUTURE WORK
+We propose IQUERY, a novel blockchain analytics system
+which is scalable and decentralized. A user pays the SP
+for every query request and applies the replication-based
+approach to guarantee the trustworthiness of query results.
+However, some SPs may collude and deliver fake results
+to save costs and maximize their benefits. Therefore, we
+propose a query protocol based on game theory that can
+destroy collusion’s economic foundation.
+In real-world scenarios, a trusted third party is usually in
+charge of enforcing protocols. Fortunately, blockchain pro-
+vides a trusted execution environment, and smart contracts
+guarantee the protocol execution according to predefined
+rules. Consequently, we design the second opinion smart
+contract, incentivizing SPs to deliver honest query services
+and minimizing the user’s monetary cost. Moreover, the
+trustworthiness, flexibility and effectiveness of our system
+have been proved in a real blockchain system. Extensive ex-
+periments demonstrate that the performance of our system
+significantly surpasses state-of-the-art systems.
+For future work, we plan to build a decentralized reputa-
+tion mechanism for IQUERY. We may further propose a rep-
+utation blockchain, a side chain recording the query orders
+between IQUERY and users in the blockchain query layer.
+The consensus protocol in reputation blockchain utilizes
+reputation rank as the measurement of IQUERY ’s trust and
+the probability of a leader-elected consensus process. Users
+tend to select high reputation IQUERYS for query services,
+thus increasing the revenue of these IQUERYS.
+ACKNOWLEDGMENTS
+This paper is financially supported by the National Key
+R&D Program of China (2021YFB2700500, 2021YFB2700501)
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 13
+and Key R&D Program of Zhejiang Province (2022C01086).
+We thank all of the anonymous reviewers who spent their
+own time reviewing and giving suggestions.
+REFERENCES
+[1] Z. Liu, P. Qian, X. Wang, Y. Zhuang, L. Qiu, and X. Wang, “Com-
+bining graph neural networks with expert knowledge for smart
+contract vulnerability detection,” IEEE Transactions on Knowledge
+and Data Engineering (TKDE), pp. 1–1, 2021.
+[2] C. Xu, C. Zhang, and J. Xu, “vchain: Enabling verifiable boolean
+range queries over blockchain databases,” in Proceedings of the 2019
+International Conference on Management of Data (SIGMOD 2019),
+2019, pp. 141–158.
+[3] M. Zhaofeng, W. Lingyun, W. Xiaochang, W. Zhen, and Z. Weizhe,
+“Blockchain-enabled decentralized trust management and secure
+usage control of iot big data,” IEEE Internet of Things Journal, vol. 7,
+no. 5, pp. 4000–4015, 2019.
+[4] L. Lu, J. Chen, Z. Tian, Q. He, B. Huang, Y. Xiang, and Z. Liu,
+“Educoin: a secure and efficient payment solution for mooc envi-
+ronment,” in Proceedings of the 2nd IEEE International Conference on
+Blockchain (Blockchain 2019). IEEE, 2019, pp. 490–495.
+[5] E. Androulaki, A. Barger, V. Bortnikov, C. Cachin, K. Christidis,
+A. De Caro, D. Enyeart, C. Ferris, G. Laventman, Y. Manevich
+et al., “Hyperledger fabric: a distributed operating system for
+permissioned blockchains,” in Proceedings of the 13th European
+Conference on Computer Systems Conference (EuroSys 2018). ACM,
+2018, pp. 1–15.
+[6] P. Ruan, G. Chen, T. T. A. Dinh, Q. Lin, B. C. Ooi, and M. Zhang,
+“Fine-grained, secure and efficient data provenance on blockchain
+systems,” vol. 12, no. 9. VLDB Endowment, 2019, pp. 975–988.
+[7] S. Nathan, C. Govindarajan, A. Saraf, M. Sethi, and P. Jayachan-
+dran, “Blockchain meets database: design and implementation
+of a blockchain relational database,” vol. 12, no. 11. VLDB
+Endowment, 2019, pp. 1539–1552.
+[8] Y. Zhu, Z. Zhang, C. Jin, A. Zhou, and Y. Yan, “Sebdb: Semantics
+empowered blockchain database,” in Proceedings of the 35th Inter-
+national Conference on Data Engineering (ICDE 2019). IEEE, 2019,
+pp. 1820–1831.
+[9] T. T. A. Dinh, R. Liu, M. Zhang, G. Chen, B. C. Ooi, and J. Wang,
+“Untangling blockchain: A data processing view of blockchain
+systems,” IEEE Transactions on Knowledge and Data Engineering,
+vol. 30, no. 7, pp. 1366–1385, 2018.
+[10] P. Thakkar, S. Nathan, and B. Viswanathan, “Performance bench-
+marking and optimizing hyperledger fabric blockchain platform,”
+in Proceedings of the 26th International Symposium on Modeling,
+Analysis, and Simulation of Computer and Telecommunication Systems
+(MASCOTS 2018). IEEE, 2018, pp. 264–276.
+[11] C. Cai, L. Xu, A. Zhou, and C. Wang, “Toward a secure, rich, and
+fair query service for light clients on public blockchains,” IEEE
+Transactions on Dependable and Secure Computing (TDSC), 2021.
+[12] J. Chen, Z. Zhan, K. He, R. Du, D. Wang, and F. Liu, “Xauth:
+Efficient privacy-preserving cross-domain authentication,” IEEE
+Transactions on Dependable and Secure Computing (TDSC), 2021.
+[13] L. Yin, J. Xu, and Q. Tang, “Sidechains with fast cross-chain
+transfers,” IEEE Transactions on Dependable and Secure Computing
+(TDSC), 2021.
+[14] C. Dong, Y. Wang, A. Aldweesh, P. McCorry, and A. van Moorsel,
+“Betrayal, distrust, and rationality: Smart counter-collusion con-
+tracts for verifiable cloud computing,” in Proceedings of the 24th
+ACM Conference on Computer and Communications Security (CCS
+2017), 2017, pp. 211–227.
+[15] Y. Guo, J. Tong, and C. Feng, “A measurement study of bitcoin
+lightning network,” in Proceedings of the 2nd IEEE International
+Conference on Blockchain (Blockchain 2019). IEEE, 2019, pp. 202–
+211.
+[16] G. Wood et al., “Ethereum: A secure decentralised generalised
+transaction ledger,” Ethereum project yellow paper, vol. 151, no. 2014,
+pp. 1–32, 2014.
+[17] “Fisco-bcos,” https://github.com/FISCO-BCOS, 2021.
+[18] Y. Peng, M. Du, F. Li, R. Cheng, and D. Song, “Falcondb:
+Blockchain-based collaborative database,” in Proceedings of the 2020
+International Conference on Management of Data (SIGMOD 2020),
+2020, pp. 637–652.
+[19] “Etherscan: The ethereum block explorer.” https://etherscan.io/,
+2022.
+[20] S. Wu, L. Wu, Y. Zhou, R. Li, Z. Wang, X. Luo, C. Wang, and
+K. Ren, “Time-travel investigation: Toward building a scalable
+attack detection framework on ethereum,” ACM Transactions on
+Software Engineering and Methodology (TOSEM), vol. 31, no. 3, pp.
+1–33, 2022.
+[21] H. Kalodner, M. Möser, K. Lee, S. Goldfeder, M. Plattner, A. Cha-
+tor, and A. Narayanan, “Blocksci: Design and applications of a
+blockchain analysis platform,” in Proceedings of the 29th USENIX
+Security Symposium ( USENIX Security 2020), 2020, pp. 2721–2738.
+[22] Y. Li, K. Zheng, Y. Yan, Q. Liu, and X. Zhou, “Etherql: a query
+layer for blockchain system,” in Proceedings of the 22nd International
+Conference on Database Systems for Advanced Applications (DASFAA
+2017). Springer, 2017, pp. 556–567.
+[23] C. Zhang, C. Xu, J. Xu, Y. Tang, and B. Choi, “Gemˆ2-tree: A gas-
+efficient structure for authenticated range queries in blockchain,”
+in Proceedings of the 35th international conference on data engineering
+(ICDE 2019). IEEE, 2019, pp. 842–853.
+[24] H. Wu, Z. Peng, S. Guo, Y. Yang, and B. Xiao, “Vql: efficient
+and verifiable cloud query services for blockchain systems,” IEEE
+Transactions on Parallel and Distributed Systems (TPDS), vol. 33,
+no. 6, pp. 1393–1406, 2021.
+[25] A. Küpçü, “Incentivized outsourced computation resistant to ma-
+licious contractors,” IEEE Transactions on Dependable and Secure
+Computing (TDSC), vol. 14, no. 6, pp. 633–649, 2015.
+[26] E. Fernandes, A. Rahmati, K. Eykholt, and A. Prakash, “Internet of
+things security research: A rehash of old ideas or new intellectual
+challenges?” IEEE Security & Privacy, vol. 15, no. 4, pp. 79–84, 2017.
+[27] “Hyperledger fabric sdk for node.js,” https://hyperledger.github.
+io/fabric-sdk-node/, 2021.
+[28] R. Fagin, P. G. Kolaitis, R. J. Miller, and L. Popa, “Data exchange:
+semantics and query answering,” Theoretical Computer Science, vol.
+336, no. 1, pp. 89–124, 2005.
+[29] A. Arasu, S. Babu, and J. Widom, “The cql continuous query
+language: semantic foundations and query execution,” The VLDB
+Journal, vol. 15, no. 2, pp. 121–142, 2006.
+[30] M. Zhang, Z. Xie, C. Yue, and Z. Zhong, “Spitz: a verifiable
+database system,” Proceedings of the 46th International Conference on
+Very Large Data Bases (VLDB 2020), vol. 13, no. 12, pp. 3449–3460,
+2020.
+[31] “Read-write set semantics,” https://hyperledger-fabric.
+readthedocs.io/en/latest/readwrite.html, 2021.
+[32] “Introduction to views,” https://docs.couchdb.org/en/latest/
+ddocs/views/intro.html, 2021.
+[33] C. Yue, Z. Xie, M. Zhang, G. Chen, B. C. Ooi, S. Wang, and
+X. Xiao, “Analysis of indexing structures for immutable data,”
+in Proceedings of the 2020 International Conference on Management
+of Data (SIGMOD 2020), 2020.
+[34] W. Pesendorfer and A. Wolinsky, “Second opinions and price
+competition: Inefficiency in the market for expert advice,” The
+Review of Economic Studies, vol. 70, no. 2, pp. 417–437, 2003.
+[35] W. Mimra, A. Rasch, and C. Waibel, “Second opinions in markets
+for expert services: Experimental evidence,” Journal of Economic
+Behavior & Organization, vol. 131, pp. 106–125, 2016.
+[36] T. L. Saaty, “What is the analytic hierarchy process?” in Mathemat-
+ical models for decision support. Springer, 1988, pp. 109–121.
+[37] R. J. Larsen and M. L. Marx, Introduction to Mathematical Statistics
+and Its Applications: Pearson New International Edition PDF eBook.
+Pearson Higher Ed, 2013.
+[38] “Hyperledger caliper,” https://github.com/hyperledger/
+caliper/, 2020.
+Lingling Lu is currently pursuing the Ph.D. de-
+gree with the College of Computer Science and
+Technology , Zhejiang University, Hangzhou,
+China. She engages in blockchain security and
+optimization research work and finished two
+blockchain application projects. Her research in-
+terests include blockchain, database manage-
+ments and big data processing.
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+https://github.com/FISCO-BCOS
+https://etherscan.io/
+https://hyperledger.github.io/fabric-sdk-node/
+https://hyperledger.github.io/fabric-sdk-node/
+https://hyperledger-fabric.readthedocs.io/en/latest/readwrite.html
+https://hyperledger-fabric.readthedocs.io/en/latest/readwrite.html
+https://docs.couchdb.org/en/latest/ddocs/views/intro.html
+https://docs.couchdb.org/en/latest/ddocs/views/intro.html
+https://github.com/hyperledger/caliper/
+https://github.com/hyperledger/caliper/
+IEEE TRANSACTIONS ON DEPENDABLE AND SECURE COMPUTING 14
+Zhenyu Wen (Member, IEEE) received the
+M.Sc. and Ph.D. degrees in computer science
+from Newcastle University, Newcastle Upon
+Tyne, U.K., in 2011 and 2016, respectively. He
+is currently a Professor with the Institute of Cy-
+berspace Security and college of Information
+Engineering, Zhejiang University of Technology,
+China. His current research interests include IoT,
+crowd sources, AI system, and cloud computing.
+For his contributions to the area of scalable data
+management for the internet-of-things, he was
+awarded the the IEEE TCSC Award for Excellence in Scalable Comput-
+ing (Early Career Researchers) in 2020.
+Ye Yuan received his BS, MS and PhD degrees
+in Computer Science from Northeastern Univer-
+sity, China in 2004, 2007 and 2011, respectively.
+He is now a Professor at the College of Informa-
+tion Science and Engineering at Beijing Institute
+of Technology. His research interests include
+graph databases, probabilistic databases, data
+privacy-preserving and cloud computing.
+Binru Dai is currently pursuing the Ph.D. degree
+with School of Economics, Zhejiang University.
+Her research interests include game theory and
+price competition.
+Peng Qian respectively received his B.S. and
+M.S. degrees from Yangtze University and Zhe-
+jiang Gongshang University, in 2018 and 2021.
+He is currently pursuing his Ph.D. degree with
+the College of Computer Science and Technol-
+ogy, Zhejiang University. His research interests
+include blockchain security and deep learning.
+Changting Lin received the Ph.D’s degree in
+computer science from the Zhejiang University
+in 2018. His is currently a post-doctoral of Big
+data statistics method and application at Zhe-
+jiang Gongshang University, China. His research
+interests include IoT, Blockchain and SDN.
+Qinming He (Member, IEEE) received the BS,
+MS, and PhD degrees in computer science from
+Zhejiang University, Hangzhou, P. R. China, in
+1985, 1988, and 2000, respectively. He is cur-
+rently a professor with the College of Com-
+puter Science & Technology, Zhejiang University.
+His research interests include data mining and
+blockchain system security.
+Zhenguang Liu is currently a professor of Zhe-
+jiang University. He had been a research fellow
+in National University of Singapore, and A*STAR
+(Agency for Science, Technology and Research,
+Singapore) for three years. He respectively re-
+ceived his Ph.D. and B.E. degrees from Zhejiang
+University and Shandong University, China, in
+2010 and 2015.
+His research interests include blockchain se-
+curity and multimedia data analysis. Various
+parts of his work have been published in first-
+tier venues including CVPR, TKDE, TIP, AAAI, ACM MM, INFOCOM,
+IJCAI. Dr. Liu has served as technical program committee member for
+conferences such as ACM MM, ICME, and MMM, session chair of ICGIP,
+local chair of KSEM, and reviewer for IEEE Transactions on visualization
+and computer graphics, IEEE Transactions on Dependable and Secure
+Computing, ACM MM, ACM Transactions on Multimedia Computing
+Communications and Applications, etc.
+Jianhai Chen (Member, IEEE) received the
+MS and PhD degrees in computer science
+and technology from Zhejiang University (ZJU),
+Hangzhou, China. He is currently an associate
+professor of the College of Computer Science
+and Technology, ZJU. He is also the director
+of ZJU Super Computing Team, and the direc-
+tor of ZJU Intelligent Computing Innovation and
+Entrepreneurship Laboratory (ICE-lab). His re-
+search interests include blockchain system se-
+curity, cloud computing scheduling algorithms
+and game theory, super computing application optimization, and data
+mining. He is a member of the CCF and ACM.
+Rajiv Ranjan (Senior Member, IEEE) is a Full
+professor in Computing Science at Newcas-
+tle University, United Kingdom. Before mov-
+ing to Newcastle University, he was Julius Fel-
+low (2013-2015), Senior Research Scientist and
+Project Leader in the Digital Productivity and
+Services Flagship of Commonwealth Scientific
+and Industrial Research Organization (CSIRO
+C Australian Government’s Premier Research
+Agency). Prior to that he was a Senior Research
+Associate (Lecturer level B) in the School of
+Computer Science and Engineering, University of New South Wales
+(UNSW). Dr. Ranjan has a PhD (2009) from the department of Computer
+Science and Software Engineering, the University of Melbourne.
+This article has been accepted for publication in IEEE Transactions on Dependable and Secure Computing. This is the author's version which has not been fully edited and 
+content may change prior to final publication. Citation information: DOI 10.1109/TDSC.2022.3228908
+© 2022 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See https://www.ieee.org/publications/rights/index.html for more information.
+Authorized licensed use limited to: CITY UNIV OF HONG KONG. Downloaded on April 15,2023 at 08:52:01 UTC from IEEE Xplore.  Restrictions apply. 
+	Introduction
+	Related Work
+	Blockchain Data Query
+	Game Theory Models in Trustworthy Queries
+	Design and Architecture of iQuery
+	System Overview
+	Write Transactions to black Blockchain
+	Query Service Provider
+	Off-Chain Database Maintainer
+	Query Methods with Rich Semantics
+	Conditional Query Method
+	Analytical Query Method
+	Multi-Origin Query Method
+	The Second Opinion Smart Contract
+	Threat Model
+	Protocol of Using the Contract for Queries
+	Countermeasures to Prevent Collusion
+	Game Theory Analysis
+	User Payoff
+	iQuery Payoff
+	Incentive Parameter Control
+	Query Frequency Analysis
+	Evaluation
+	Experimental Setup
+	iQuery Efficiency and Trustworthiness Evaluation
+	Evaluation of iQuery Flexibility
+	Evaluation of the Multi-Origin Query
+	Conclusion and Future Work
+	References
+	Biographies
+	Lingling Lu
+	Zhenyu Wen
+	Ye Yuan
+	Binru Dai
+	Peng Qian
+	Changting Lin
+	Qinming He
+	Zhenguang Liu
+	Jianhai Chen
+	Rajiv Ranjan

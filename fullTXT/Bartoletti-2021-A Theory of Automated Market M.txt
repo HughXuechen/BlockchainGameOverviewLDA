@@ -1,0 +1,1155 @@
+A Theory of Automated Market Makers in DeFi
+A Theory of Automated Market Makers
+in DeFi
+Massimo Bartoletti1 , James Hsin-yu Chiang2(B) ,
+and Alberto Lluch-Lafuente2
+1 Università degli Studi di Cagliari, Cagliari, Italy
+bart@unica.it
+2 DTU Compute, Technical University of Denmark, Copenhagen, Denmark
+{jchi,albl}@dtu.dk
+Abstract. Automated market makers (AMMs) are one of the most
+prominent decentralized finance (DeFi) applications. They allow users
+to exchange units of different types of crypto-assets, without the need to
+find a counter-party. There are several implementations and models for
+AMMs, featuring a variety of sophisticated economic mechanisms. We
+present a theory of AMMs. The core of our theory is an abstract opera-
+tional model of the interactions between users and AMMs, which can be
+concretised by instantiating the economic mechanisms. We exploit our
+theory to formally prove a set of fundamental properties of AMMs, char-
+acterizing both structural and economic aspects. We do this by abstract-
+ing from the actual economic mechanisms used in implementations and
+identifying sufficient conditions which ensure the relevant properties.
+Notably, we devise a general solution to the arbitrage problem, the main
+game-theoretic foundation behind the economic mechanisms of AMMs.
+1 Introduction
+Decentralized finance (DeFi) is emerging as an alternative to the traditional
+finance, boosted by blockchain-based crypto-tokens and smart contracts. One of
+the main DeFi applications are Automated Market Makers (AMMs), which allow
+users to exchange crypto-tokens of different types without the intermediation of
+third parties. As of April 2021, the two AMM platforms leading by user activity,
+Uniswap [14] and Curve Finance [5], alone hold $8.1B and $6.2B worth of tokens,
+and process $1.5B and $210M worth of transactions daily [4,12].
+AMMs are inherently hard to design, implement and understand, since they
+involve sophisticated economic incentive mechanisms. Although they generally
+only expose a handful of callable functions, interactions with AMMs are sensitive
+to transaction ordering [21,23,28,31]: thus, actors with the power to influence
+the order of transactions in the blockchain may be incentivized to do so for
+profit or to harm specific users. Thus, there exists a need for foundational work
+to devise formal models of AMMs which allow the study of their fundamental
+properties, transaction concurrency and the effect of economic incentives.
+c© IFIP International Federation for Information Processing 2021
+Published by Springer Nature Switzerland AG 2021
+F. Damiani and O. Dardha (Eds.): COORDINATION 2021, LNCS 12717, pp. 168–187, 2021.
+https://doi.org/10.1007/978-3-030-78142-2_11
+http://crossmark.crossref.org/dialog/?doi=10.1007/978-3-030-78142-2_11&domain=pdf
+http://orcid.org/0000-0003-3796-9774
+http://orcid.org/0000-0002-5126-9494
+http://orcid.org/0000-0001-7405-0818
+https://doi.org/10.1007/978-3-030-78142-2_11
+A Theory of Automated Market Makers in DeFi 169
+Current descriptions of AMMs are either economic models [17–19,24], which
+focus on the efficacy of incentive design, or the actual implementations. While
+economic models are useful to understand the macroscopic financial aspects of
+AMMs, they do not precisely describe the interactions between AMMs and their
+users. Still, understanding these interactions is crucial to determine possible devi-
+ations from the expected behaviour. Implementations, instead, reflect the exact
+behaviour of AMMs, but at a level of detail that hampers high-level understand-
+ing and reasoning. Moreover, the rich variety of implementations, proposals and
+models for AMMs, each featuring different sophisticated economic mechanisms,
+makes it difficult to establish comparisons between AMM designs or to provide
+a clear contour for the space of possible “well behaving” designs.
+Contributions. In this paper we address these challenges by developing a the-
+ory of AMMs. The core of our theory is a formal model of AMMs (Sect. 2), based
+on a thorough inspection of leading AMM implementations like Uniswap [13],
+Curve [16], and Balancer [3], as well as existing models from the literature [1,31].
+Our model precisely describes the interactions between users and AMMs, and
+their main economic features. An original aspect of our model is that it is para-
+metric with respect to the key economic mechanism—the swap invariant—that
+algorithmically determines exchange rates between tokens. This makes our model
+general enough to encompass the mainstream implementations and models of
+AMMs. With respect to economic models, our theory considers implementation
+details that are crucial to guarantee (efficient) computability in practice. Our
+model features an executable semantics, which can support implementations and
+analysis tools. As a matter of fact, an open-source Ocaml implementation of our
+executable semantics is provided as a companion of this paper.1
+Building upon our model, we prove a set of properties characterizing both
+structural (Sect. 3) and economic (Sect. 4) aspects of AMMs. With respect to
+previous works, which focus on specific economic mechanisms, all our results are
+parametric with respect to swap invariants. We identify indeed, for each property,
+a set of conditions on swap invariants that are sufficient for the property to
+hold. Our results include fundamental structural properties such as net worth
+preservation (“value cannot be created/destroyed”), liquidity (“assets cannot be
+frozen within an AMM”), and transaction concurrency (“two transactions can
+be executed in any order”), as well as fundamental economic properties such as
+incentive-consistency, which ensures an incentive feedback loop between deposits
+and swaps of tokens. Most notably, we generalize the formulation and the solution
+to the so-called arbitrage problem, the main game-theoretic foundation behind
+the economic aspects of AMMs. We show that users are incentivized to perform
+actions that keep the swap rates aligned with the exchange rates given by price
+oracles. Namely, if an AMM offers a better swap rate than the oracles’ exchange
+rate, rational users will perform swaps to narrow the gap. Further, we show that,
+under certain conditions, deposits and swaps incentivize each other.
+Overall, our theory encompasses and generalizes the main functional and eco-
+nomic aspects of the mainstream AMM implementations, providing solid grounds
+1 https://github.com/blockchain-unica/defi-workbench.
+https://github.com/blockchain-unica/defi-workbench
+170 M. Bartoletti et al.
+for the design of future AMMs. Due to space constraints, we provide the proofs
+of our statements in a separate technical report [26].
+2 A Formal Model of Automated Market Makers
+We introduce a formal, operational model of AMMs, focussing on the common
+features implemented by the main AMM platforms. We discuss in Sect. 6 the
+differences between these platforms and our model.
+2.1 AMM States
+Basics. We assume a set of users A, ranged over by A,A′ , . . ., and a set of
+token types T, ranged over by τ, τ ′, . . .. We denote with T0 ⊆ T a specific
+subset of token types that we call initial (they include, e.g., native blockchain
+tokens). The rest of the token types in T represent minted tokens, denoted as
+pairs (τ, τ ′) of distinct token types, and which represent shares in an AMM. We
+use v, v′, r, r′ to range over nonnegative real numbers (R+
+0 ), and we write r : τ to
+denote r units of token type τ. We denote with dom f the domain of a partial
+map f . We model the wallet of a user A as a term A[σ], where the partial
+map σ ∈ T ⇀ R+
+0 represents A’s token holdings. We model an AMM as a pair
+of the form (r0 : τ0, r1 : τ1), representing the fact that the AMM is holding,
+respectively, r0 and r1 units of token types τ0 and τ1.
+States. We formalise the interaction between users and AMMs as a labelled
+transition system (LTS). Its labels T ,T′ , . . . represent blockchain transactions,
+while the states Γ, Γ ′, . . . are compositions of wallets and AMMs:
+A1[σ1] | · · · | An[σn] | (r1 : τ1, r
+′
+1 : τ ′
+1) | · · · | (rk : τk, r′
+k : τ ′
+k)
+where all Ai are distinct, and for all i �= j: τi �= τ ′
+i (i.e., the token types in an
+AMM are distinct), and (τi = τj ⇒ τ ′
+i �= τ ′
+j) ∧ (τi = τ ′
+j ⇒ τ ′
+i �= τj) (i.e., distinct
+AMMs cannot hold exactly the same token types). Two AMMs can indeed have
+a common token type τ, as in (r1 : τ1, r : τ), (r′ : τ, r′
+2 : τ ′
+2), thus enabling
+indirect trades between token pairs not directly provided by any AMM. A state
+Γ is initial when it only contains wallets with initial tokens. We treat states as
+sets of terms (wallets/AMMs): hence, Γ and Γ ′ are equivalent when they contain
+the same terms; for a term Q, we write Q ∈ Γ when Γ = Q | Γ ′, for some Γ ′.
+Example 1. Figure 1 shows an execution trace in our model, that we will explain
+in detail later in Example 5. We write Γ
+T−→ Γ ′ for a state transition from Γ to
+Γ ′, triggered by a transaction T. The first two states are initial, while the others
+contain an AMM for a token pair (τ0, τ1). �	
+A Theory of Automated Market Makers in DeFi 171
+A[70 : τ0, 80 : τ1] | B[30 : τ0]
+A:xfer(B,10:τ1)−−−−−−−−−→ A[70 : τ0, 70 : τ1] | B[30 : τ0, 10 : τ1] (1)
+A:dep(70:τ0,70:τ1)−−−−−−−−−−−→ A[70 : (τ0, τ1)] | B[· · ·] | (70 : τ0, 70 : τ1) (2)
+B:swapL(30:τ0,20:τ1)−−−−−−−−−−−−−→ A[· · ·] | B[0 : τ0, 31 : τ1] | (100 : τ0, 49 : τ1) (3)
+B:swapR(29:τ0,21:τ1)−−−−−−−−−−−−−→ A[· · ·] | B[30 : τ0, 10 : τ1] | (70 : τ0, 70 : τ1) (4)
+B:rdm(30:(τ0,τ1))−−−−−−−−−−−→ A[30 : τ0, 30 : τ1, 40 : (τ0, τ1)] | B[· · ·] | (40 : τ0, 40 : τ1) (5)
+B:swapL(30:τ0,16:τ1)−−−−−−−−−−−−−→ A[· · ·] | B[0 : τ0, 27 : τ1] | (70 : τ0, 23 : τ1) (6)
+A:rdm(30:(τ0,τ1))−−−−−−−−−−−→ A[82 : τ0, 47 : τ1, 10 : (τ0, τ1)] | B[· · ·] | (18 : τ0, 6 : τ1) (7)
+Fig. 1. Interactions between two users and an AMM.
+Token Supply. We define the supply of a token type τ in a state Γ as the sum
+of the balances of τ in all the wallets and the AMMs occurring in Γ. Formally:
+splyτ(A[σ]) =
+{
+σ(τ) if τ ∈ dom σ
+0 otherwise
+splyτ(r0 : τ0, r1 : τ1) =
+{
+ri if τ = τi
+0 otherwise
+splyτ(Γ | Γ ′) = splyτ(Γ) + splyτ(Γ ′)
+Example 2. Consider the first state in Fig. 1, Γ1 = A[70 : τ0, 80 : τ1] | B[30 : τ0].
+We have that splyτ0(Γ1) = 70 + 30 = 100, while splyτ1(Γ1) = 80. Observe
+that the supply of both token types remains constant in Fig. 1; we will show
+in Lemma 2 that the supply of initial token types is always preserved. �	
+Token Prices and Net Worth. Assume that initial tokens are priced by a
+global oracle P0 ∈ T0 → R+
+0 . We then define the price Pτ(Γ) of a token τ ∈ T
+(either initial or minted) in a state Γ inductively as follows:
+Pτ(Γ) = P0(τ) if τ ∈ T0
+P(τ0,τ1)(Γ) =
+r0 · Pτ0(Γ) + r1 · Pτ1(Γ)
+sply(τ0,τ1)(Γ)
+if (r0 : τ0, r1 : τ1) ∈ Γ
+(8)
+The main idea is that initial tokens are priced using directly the global oracle
+while minted tokens are priced under the assumption that they can be redeemed.
+Their price, hence, is obtained by (recursively) calculating the price of the tokens
+that can be obtained by redeeming them (i.e. the proportions of the reserves r0
+and r1 given the current supply). This intuition will be further formalized later
+in Lemma 6.
+Example 3. Let Γ7 = A[82 : τ0, 47 : τ1, 10 : (τ0, τ1)] | · · · be the final state
+in Fig. 1. We have that sply(τ0,τ1)(Γ7) = 10. Assume that the prices of initial
+172 M. Bartoletti et al.
+tokens are P0(τ0) = 5 and P0(τ1) = 9. The price of the minted token (τ0, τ1) is
+hence:
+P(τ0,τ1)(Γ7) =
+1
+10
+(
+18 · Pτ0(Γ7) + 6 · Pτ1(Γ7)
+)
+=
+18
+10
+· 5 +
+6
+10
+· 9 = 14.4 �	
+We now define a key concept to understand the incentives for users to par-
+ticipate in AMMs, namely the net worth of a user A in a state Γ:
+WA(Γ) =
+{∑
+τ∈domσ σ(τ) · Pτ(Γ) if A[σ] ∈ Γ
+0 otherwise
+(9)
+The global net worth W (Γ) of a state Γ is the sum of the net worth in users’
+wallets. The token units held in AMMs are not accounted for by W (Γ), because
+their value is already recorded by minted tokens held in users’ wallets. Indeed,
+the equality sply(τ0,τ1)(Γ) ·P(τ0,τ1)(Γ) = r0 ·Pτ0(Γ)+ r1 ·Pτ1(Γ) between the net
+value of a minted token and the value of the AMM is a direct consequence of
+the definition of price in (8).
+As we shall see later, one of the main goals of users is to maximize their net
+worth. This can be achieved through different interactions with the AMM (e.g.,
+by investing tokens or trading units of differently priced token types).
+Example 4. Recall from Fig. 1 the state Γ1 = A[70 : τ0, 80 : τ1] | B[30 : τ0], where
+τ0 and τ1 are initial tokens. Assume again that the prices are P0(τ0) = 5 and
+P0(τ1) = 9. The users’ net worth in Γ1 are then:
+WA(Γ1) = 70 · P0(τ0) + 80 · P0(τ1) = 1070 WB(Γ1) = 30 · P0(τ0) = 150
+In Γ7 = A[82 : τ0, 47 : τ1, 10 : (τ0, τ1)] | B[0 : τ0, 27 : τ1] | (18 : τ0, 6 : τ1) we have:
+WA(Γ7) = 82 · Pτ0(Γ7) + 47 · Pτ1(Γ7) + 10 · P(τ0,τ1)(Γ7) = 977
+WB(Γ7) = 27 · Pτ1(Γ7) = 243
+Note that the net worth of A has decreased w.r.t. the initial state, while the net
+worth of B has increased. One may think that B has been more successful than
+A, but this depends on the users’ goals. Note, e.g., that A holds 10 units of the
+minted token (τ0, τ1), whose price may increase in the future. �	
+2.2 AMM Semantics
+We now formally describe the interactions of the AMM that give rise to state
+transitions. State transitions are triggered by the transactions in Table 1. We
+formalise below their behaviour, but we give before an overview of our running
+example from Fig. 1.
+A Theory of Automated Market Makers in DeFi 173
+Table 1. AMM transactions.
+A : xfer(B, v : τ) A transfers v : τ to B
+A : dep(v0 : τ0, v1 : τ1) A deposits v0 : τ0 and v1 : τ1 to an AMM (r0 : τ0, r1 : τ1),
+receiving in return some units of the minted token (τ0, τ1)
+A : swapL(v0 : τ0, v1 : τ1) A tranfers v0 : τ0 to an AMM (r0 : τ0, r1 : τ1), receiving in
+return at least v1 units of τ1
+A : swapR(v0 : τ0, v1 : τ1) A tranfers v1 : τ1 to an AMM (r0 : τ0, r1 : τ1), receiving in
+return at least v0 units of τ0
+A : rdm(v : τ) A redeems v units of minted token τ = (τ0, τ1) from an AMM
+(r0 : τ0, r1 : τ1), receiving in return some units of τ0 and τ1
+Example 5. Figure 1 actually displays a sequence of transitions in the LTS of
+our model. To keep the example simple, we have used there the constant product
+swap invariant, which requires swap transactions to preserve the product between
+the amounts of the two tokens in the AMM; further, we have assumed no fees.
+In step (1), A transfers 10 : τ1 from her wallet to B’s. In step (2), A creates
+a new AMM, depositing 70 : τ0 and 70 : τ1; in return, she receives 70 units of
+the minted token (τ0, τ1). In step (3), B swaps 30 of his units of τ0 for at least
+20 units of τ1. The actual amount of units of τ1 received by B is 21: indeed,
+(70 + 30) · (70 − 21) = 70 · 70, hence 21 satisfies the constant product swap
+invariant. In step (4), B reverses his prior action by swapping 21 of his units of
+τ1 for at least 29 units of τ0. Here, the actual amount of units of τ1 received by
+B is 30, which also satisfies the constant product swap invariant. In step (5), B
+redeems 30 units of the minted token (τ0, τ1), accordingly reducing the funds in
+the AMM. Note that the received tokens exhibit the same 1-to-1 ratio as in the
+initial deposit at step (2). In step (6), B swaps 30 of his units of τ0 for at least
+16 units of τ1. Unlike in the previous swap at step (3), now the actual amount
+of τ1 received by B is 17. Note that the implied swap rate between received τ1
+units and sent τ0 units has deteriorated w.r.t. step (3), even if the pair (τ0, τ1)
+had the same 1-to-1 ratio of funds. This is caused by the reduction in funds
+resulting from A’s redeem action: thus, the swap rate is sensitive to both the
+ratio of funds in the pair as well as their absolute balances, a key property of
+the incentive mechanisms, as we shall see later in Sect. 4. Finally, in step (7)
+A performs another redeem of 30 units of the minted token (τ0, τ1), thereby
+extracting 52 units of τ0 and 17 units of τ1 from the AMM. Note that the ratio
+of redeemed tokens is no longer 1-to-1 as in the previous redeem action (5), as
+the prior left swap has changed the ratio between the funds of τ0 and τ1 in the
+AMM. �	
+We now formalise the transition rules. We use the standard notation σ{v/x} to
+update a partial map σ at point x: namely, σ{v/x}(x) = v, while σ{v/x}(y) = σ(y)
+for y �= x. Given a partial map σ ∈ T ⇀ R+
+0 , a token type τ ∈ T and a partial
+operation ◦ ∈ R+
+0 × R+
+0 ⇀ R+
+0 , we define the partial map σ ◦ v : τ as follows:
+174 M. Bartoletti et al.
+σ ◦ v : τ =
+{
+σ{σ(τ) ◦ v/τ} if τ ∈ dom σ and σ(τ) ◦ v ∈ R+
+0
+σ{v/τ} if τ �∈ dom σ
+Token Transfer. A user A can transfer some of her tokens to another user B,
+provided that there are enough units of the token in A’s wallet. Formally:
+σA(τ) ≥ v
+A[σA ] | B[σB ] | Γ
+A:xfer(B,v:τ)−−−−−−−−→ A[σA − v : τ] | B[σB + v : τ] | Γ
+[Xfer]
+A consequence of this rule is that tokens (both initial and minted) are fungible,
+i.e. individual units of the same token type are interchangeable. In particular,
+amounts of tokens of the same type can be split into smaller parts, and two
+amounts of tokens of the same type can be joined.
+Deposit. Any user can create an AMM for a token pair (τ0, τ1) provided that
+such an AMM is not already present in the state. This is achieved by the trans-
+action A : dep(v0 : τ0, v1 : τ1), through which A transfers v0 : τ0 and v1 : τ1 to
+the new AMM. In return for the deposit, A receives a certain positive amount
+of units of a new token type (τ0, τ1), which is minted by the AMM. The exact
+amount of units received is irrelevant. In our model we choose v0 but any other
+choice would be valid. We formalise this behaviour by the rule:
+σ(τi) ≥ vi > 0 (i ∈ {0, 1}) τ0 �= τ1 ( : τ0, : τ1), ( : τ1, : τ0) �∈ Γ
+A[σ] | Γ
+A:dep(v0:τ0,v1:τ1)−−−−−−−−−−−→
+A[σ − v0 : τ0 − v1 : τ1 + v0 : (τ0, τ1)] | (v0 : τ0, v1 : τ1) | Γ
+[Dep0]
+Once an AMM is created, any user can deposit tokens into it, as long as doing
+so preserves the ratio of the token holdings in the AMM. When a user deposits
+v0 : τ0 and v1 : τ1 to an existing AMM, it receives in return an amount of minted
+tokens of type (τ0, τ1). This amount is the ratio between the deposited amount
+v0 and the redeem rate of (τ0, τ1) in the current state Γ, i.e. the ratio between
+the amount r0 of τ0 stored in the AMM, and the total supply sply(τ0,τ1)(Γ) of
+the minted token in the state.
+σ(τi) ≥ vi > 0 (i ∈ {0, 1}) r1v0 = r0v1 v = v0
+r0
+· sply(τ0,τ1)
+(Γ)
+Γ = A[σ] | (r0 : τ0, r1 : τ1) | Γ ′ A:dep(v0:τ0,v1:τ1)−−−−−−−−−−−→
+A[σ − v0 : τ0 − v1 : τ1 + v : (τ0, τ1)] | (r0 + v0 : τ0, r1 + v1 : τ1) | Γ ′
+[Dep]
+Note that the premise r1v0 = r0v1 ensures that the ratio between the holdings
+of τ0 and τ1 in the AMM is preserved by the dep transaction, i.e.:
+r1 + v1
+r0 + v0
+=
+r1
+r0
+As we shall see in Sect. 4, users are incentivized to invest tokens into AMMs
+by the fact that trading operations (i.e., swaps) are subject to a fee mechanism
+that makes the redeem rate increase over time.
+A Theory of Automated Market Makers in DeFi 175
+Swap. As shown in step (3) and on of Example 5, users can increase their net
+worth by swapping tokens. Any user A can swap units of τ0 in her wallet for units
+of τ1 in an AMM (r0 : τ0, r1 : τ1) by firing a transaction A : swapL(v0 : τ0, v1 : τ1).
+Here, v0 is the amount of τ0 transferred from A’s wallet to the AMM, while v1
+is a lower bound on the amount of τ1 that A will receive in return. The actual
+amount v is determined by a swap invariant I ∈ R+
+0 × R+
+0 → R+
+0 , that must
+hold between the amounts of τ0 and τ1 held in the AMM before and after the
+swap. To determine v, the AMM requires a fraction 0 < φ ≤ 1 of v0; the rest is
+considered as a fee (the parameter φ is the fee rate). Formally:
+σ(τ0) ≥ v0 > 0 I(r0 + φ v0, r1 − v) = I(r0, r1) 0 < v1 ≤ v ≤ r1
+A[σ] | (r0 : τ0, r1 : τ1) | Γ
+A:swapL(v0:τ0,v1:τ1)−−−−−−−−−−−−−→
+A[σ − v0 : τ0 + v : τ1] | (r0 + v0 : τ0, r1 − v : τ1) | Γ
+[SwapL]
+The effect of the fee is that the redeem rate of minted tokens increases;
+intuitively, the AMM retains a portion of the swapped amounts, but the overall
+reserve is still distributed among all minted tokens, thereby ensuring liquidity
+(as we shall formally establish liquidity later on in Lemma4).
+Although actual AMM implementations use a variety of different swap invari-
+ants, with the common aim to incentivize users to perform swaps, all these invari-
+ants share a few common design choices. A crucial one is that there exists exactly
+one v which satisfies the equation in the premise of [SwapL]; further, swapping 0
+units of τ0 results in 0 units of τ1. Formally, for all r0, r1 > 0:
+∀v ∈ R+
+0 : ∃!v′ ∈ R+
+0 : I(r0 + v, r1 − v′) = I(r0, r1) (10)
+Hereafter, we assume that I always respects this condition. A common swap
+invariant, implemented e.g. by Uniswap [13] and Mooniswap [7] (and also used
+in Example 5), is the constant product invariant, which requires that the product
+of the amounts of τ0 and τ1 in the AMM remains constant, i.e. I(r0, r1) = r0 ·r1.
+The rule [SwapR] allows for swaps in the other direction:
+σ(τ1) ≥ v1 > 0 I(r0 − v, r1 + φ v1) = I(r0, r1) 0 < v0 ≤ v ≤ r0
+A[σ] | (r0 : τ0, r1 : τ1) | Γ
+A:swapR(v0:τ0,v1:τ1)−−−−−−−−−−−−−→
+A[σ + v : τ0 − v1 : τ1] | (r0 − v : τ0, r1 + v1 : τ1) | Γ
+[SwapR]
+where we assume that I enjoys the “right” version of the condition (10).
+It is worth explaining why the swap transactions specify lower bounds for the
+amount of return tokens, instead of an exact amount. In practice, when a user
+emits a transaction, she cannot predict the exact state in which the transaction
+will be actually committed. This makes it unfeasible to guess the exact amount
+that will preserve the swap invariant: hence, users can only specify a lower bound
+that they are willing to accept.
+Redeem. Any user can redeem units of a minted token (τ0, τ1), obtaining in
+return units of the underlying tokens τ0 and τ1. The redeemable amounts are
+176 M. Bartoletti et al.
+determined by the redeem rate: each unit of (τ0, τ1) can be redeemed for equal
+fractions of τ0 and τ1 remaining in the AMM:
+σ(τ0, τ1) ≥ v > 0 v0 = v r0
+sply(τ0,τ1)(Γ)
+v1 = v r1
+sply(τ0,τ1)(Γ)
+Γ = A[σ] | (r0 : τ0, r1 : τ1) | Γ ′ A:rdm(v:(τ0,τ1))−−−−−−−−−−→
+A[σ + v0 : τ0 + v1 : τ1 − v : (τ0, τ1)] | (r0 − v0 : τ0, r1 − v1 : τ1) | Γ ′
+[Rdm]
+Example 6. Figure 2 shows the evolution of the AMM token holdings resulting
+from the trace in Fig. 1, presented with Example 5. Recall that we have assumed
+a constant product swap invariant x · y = k, and no swap fees (φ = 1). We refer
+to a state in Fig. 1 by the action number preceding it: the AMM (70 : τ0, 70 : τ1)
+in state (2) is shown in Fig. 2. Subsequent left (3) and right (4) swaps result in
+a traversal along k = 70 · 70 from (70 : τ0, 70 : τ1) to (100 : τ0, 49 : τ1), and
+back as the swap invariant must hold for swap actions. The redeem action (5)
+reduces the holdings of both tokens by the same factor to reach (40 : τ0, 40 : τ1).
+A left swap (6) traverses k′ = 40 · 40 to reach (70 : τ0, 23 : τ1) in state (6), which
+is then followed by another redeem (7) action, reducing both token holdings
+proportionally to (18 : τ0, 6 : τ1).
+(40:τ
+0
+, 40:τ
+1
+)
+(18:τ
+0
+, 6:τ
+1
+)
+(70:τ
+0
+, 70:τ
+1
+)
+(100:τ
+0
+, 49:τ
+1
+)
+(70:τ
+0
+, 23:τ
+1
+)
+τ
+0
+τ
+1
+x·y = k'
+x·y = k''
+x·y = k
+Fig. 2. Evolution of balances of AMM (τ0, τ1) along the trace in Fig. 1.
+3 Structural Properties of AMMs
+We now establish some structural properties of AMMs, which do not depend on
+the design of the economic mechanisms, i.e. on the choice of the swap invariant.
+We denote with −→∗ the reflexive and transitive closure of −→. Given a finite
+sequence of transactions λ = T1 · · ·Tk, we write Γ
+λ−→ Γ ′ when Γ
+T1−→ · · · Tk−−→ Γ ′.
+We say that a state Γ is reachable if Γ0 −→∗ Γ for some initial Γ0. We denote
+with type(T) the type of T (i.e., xfer, dep, . . .), with wal(T) the set of wallets
+A Theory of Automated Market Makers in DeFi 177
+affected by T (e.g., wal(A : xfer(B, v : τ)) = {A,B}), and with tok(T) the set of
+token types affected by T (e.g., tok(A : swapL(v0 : τ0, v1 : τ1)) = {τ0, τ1}).
+First, we establish that the AMMs’ LTS is deterministic. Note that, in swap
+rules, an unconstrained swap invariant I could admit different solutions to the
+equation in the premise: determinism is ensured by condition (10), which we
+assume to be true for all swap invariants.
+Lemma 1 (Determinism). If Γ
+T−→ Γ ′ and Γ
+T−→ Γ ′′, then Γ ′ = Γ ′′.
+We can lift the statement to sequences of transactions by using a simple
+inductive argument. The same applies to other single-step results in this section.
+Lemma 2 ensures that the supply of each initial token type τ is preserved
+by transitions (of any type). Note that preservation does not hold for minted
+tokens, as they can be created (by rule [Dep]) and destroyed (by rule [Rdm]).
+Lemma 2. For all τ ∈ T0, if Γ −→ Γ ′ then splyτ(Γ) = splyτ(Γ ′).
+Lemma 3 ensures that the global net worth is preserved by transactions,
+whereas the user’s net worth is preserved only by redeems/deposits.
+Lemma 3 (Preservation of net worth). Let Γ
+T−→ Γ ′. Then, W (Γ) =
+W (Γ ′). Further, if type(T) ∈ {dep, rdm} or A �∈ wal(T), then WA(Γ) = WA(Γ ′).
+Lemma 4 ensures that funds cannot be frozen in an AMM, i.e. that users can
+always redeem arbitrary amounts of the tokens deposited in an AMM.
+Lemma 4 (Liquidity). Let Γ be a reachable state such that (r0 : τ0, r1 : τ1) ∈
+Γ with r0 + r1 > 0. Then: (a) sply(τ0,τ1)(Γ) > 0; (b) for all r′
+0 ≤ r0, there exists
+r′
+1 ≤ r1 such that Γ −→∗ (r′
+0 : τ0, r
+′
+1 : τ1) | · · · ; (c) for all r′
+1 ≤ r1, there exists
+r′
+0 ≤ r0 such that Γ −→∗ (r′
+0 : τ0, r
+′
+1 : τ1) | · · · .
+We now study the concurrency of transactions. Two finite sequences of trans-
+actions λ0 and λ1 are observationally equivalent, in denoted λ0 ∼ λ1, when, for
+all states Γ, if Γ
+λ0−→ Γ0 and Γ
+λ1−→ Γ1 then Γ0 = Γ1. We say that two distinct
+transactions T,T′ are concurrent (denoted, T#T′) if TT′ ∼ T′T. Note that
+this does not mean that T and T′ cannot disable each other as demanded by
+stricter notions of concurrency. Lemma 5 provides sufficient conditions for two
+transactions to be concurrent: intuitively, two non-swap transactions are always
+concurrent, while swap transactions are concurrent with xfer transactions, and
+with any transactions which do not affect the same token types.
+Lemma 5. Two distinct transactions T0, T1 are concurrent if, for i ∈ {0, 1},
+type(Ti) ∈ {swapL, swapR} implies tok(Ti)∩ tok(T1−i) = ∅ or type(T1−i) = xfer.
+As we shall see later in Sect. 4, it is actually desirable, and crucial for the
+economic mechanism of AMMs, that swap transactions interfere with other trans-
+actions that trade the same token type.
+178 M. Bartoletti et al.
+The theory of Mazurkiewicz’s trace languages [27] allows us to lift Lemma 5
+to sequences of transactions. Let R be a symmetric and irreflexive relation on
+the set X of all transactions. The Mazurkiewicz equivalence ∼R is the least con-
+gruence in the free monoid X∗ such that: ∀T,T′ ∈ X: T RT′ =⇒ TT′ ∼R T′T.
+Theorem 1 states that the Mazurkiewicz equivalence constructed on the concur-
+rency relation # is an observational equivalence.
+Theorem 1 (Concurrent transactions can be reordered). ∼# ⊆ ∼.
+A direct consequence of Theorem 1 is that we can transform a finite sequence
+of transactions into an observationally equivalent one by repeatedly exchanging
+adjacent concurrent transactions—provided that both sequences are executable
+in the LTS. For example, sequences of A : rdm( ) transactions can be freely
+reordered, resulting in the same, unique state. This is exploited in the follow-
+ing lemma, which supports the inductive definition of the price of minted tokens
+in (8): indeed, computing the net worth of a user A under that price definition
+corresponds to making A first redeem all her minted tokens, and then summing
+the price of the resulting initial tokens.
+Lemma 6. For all states Γ and users A, let rdmA(Γ) be the unique state reached
+from Γ by performing only A : rdm( ) actions, such that A’s wallet in rdmA(Γ),
+only contains initial tokens. Then:
+WA(Γ) =
+∑
+τ∈domσ σ(τ) · P0(τ) if A[σ] ∈ rdmA(Γ)
+Example 7. Recall from Example 4 that WA(Γ7) = 977. Assume that A performs
+a further transaction to redeem all 10 units of (τ0, τ1) from her wallet. The
+resulting state is Γ8 = A[100 : τ0, 53 : τ1] | · · · . We compute A’s net worth in that
+state, using the oracle token prices: WA(Γ8) = 100 · P(τ0)(Γ7) + 53 · P(τ1)(Γ7) =
+100 · 5 + 53 · 9 = 977, as correctly predicted by Lemma 6. �	
+4 Properties of AMM Incentives
+We now study the incentive mechanisms of AMMs. We start in Sect. 4.1 by
+introducing a few notions of exchange rate, which are pivotal to understanding
+these mechanisms. In Sect. 4.2 we devise general conditions on swap invariants,
+overall named incentive-consistency, which guarantee that AMMs enjoy relevant
+economic properties. In Sect. 4.3 we study solutions to the arbitrage problem,
+which is the key to incentivize users to perform swap operations towards an
+ideal state where the AMM’s exchange rates align with the exchange rates set
+by price oracles. Finally, in Sect. 4.4 we study the incentives to swap and deposit
+larger amounts.
+4.1 Exchange Rates
+The exchange rate between two token types is the number of units of one token
+needed to buy one unit of the other token at the current price. We define Left
+and Right versions of this notion, that reflect the direction of the exchange:
+A Theory of Automated Market Makers in DeFi 179
+XLΓ(τ0, τ1) = Pτ0(Γ)/Pτ1(Γ) XRΓ(τ0, τ1) = Pτ1(Γ)/Pτ0(Γ) (11)
+The swap rate between τ0 and τ1 upon a payment of vi : τi (for i ∈ {0, 1})
+is the ratio between v and vi, where v is the received amount of τ1−i resulting
+from a swap action on an AMM (r0 : τ0, r1 : τ1). We first introduce an auxiliary
+notion, parameterized over the balances r0 and r1, instead of the token types:
+XLswap
+φ (v0, r0, r1) = v/v0 if I(r0, r1) = I(r0 + φv0, r1 − v)
+XRswap
+φ (v1, r0, r1) = v/v1 if I(r0, r1) = I(r0 − v, r1 + φv1)
+(12)
+The swap rate is parameterized over the fee rate φ: the case where φ = 1 repre-
+sents an ideal scenario with no fees: in this case, we write just XLswap(v0, r0, r1).
+We define the swap rate in a state Γ such that (r0 : τ0, r1 : τ1) ∈ Γ as follows:
+XLswap
+Γ,φ (v0, τ0, τ1) = XLswap
+φ (v0, r0, r1) XRswap
+Γ,φ (v1, τ0, τ1) = XRswap
+φ (v1, r0, r1)
+We also define the redeem rate . The left version is:
+XLrdm
+Γ (τ0, τ1) = r0/sply(τ0,τ1)(Γ) if (r0 : τ0, r1 : τ1) ∈ Γ (13)
+4.2 General Properties of Swap Invariants
+We now introduce a set of properties of swap invariants, called cumulatively
+incentive-consistency , which overall incentivize users to interact with AMMs
+by performing swap and deposit actions.
+Swap-Rate Continuity. This property requires that, for all r0, r1 > 0:
+lim
+ε→0
+XLswap(ε, r0, r1) = 1/ lim
+ε→0
+XRswap(ε, r0, r1) ∈ R+ (14)
+Figure 3 (left) illustrates this property, displaying the points (x, y) which
+satisfy the constant product invariant x · y = k. The left swap rate limit for
+the constant product invariant and φ = 1 is limε→0 XLswap(ε, r0, r1) = r1/r0,
+while for the right swap we have limε→0 XRswap(ε, r0, r1) = r0/r1. Coinciding
+left swap limit and right swap limit inverse are illustrated as the slope of the
+product constant curve at a selected point in Fig. 3 (left). The constant product
+invariant satisfies (14), i.e. it is swap-rate continuous.
+Demand-Sensitivity. A swap invariant is demand-sensitive if the swap rate
+strictly decreases with demand. Formally, for all r0, r1, r
+′
+0, r
+′
+1 > 0:
+I(r0, r1) = I(r′
+0, r
+′
+1) ∧ r′
+0 > r0 =⇒ lim
+ε→0
+XLswap
+φ (ε, r0, r1) > lim
+ε→0
+XLswap
+φ (ε, r′
+0, r
+′
+1)
+(15)
+We implicitly require that (15) and the subsequent properties stated for the
+left version of an exchange rate also hold for the right version.
+180 M. Bartoletti et al.
+x·y = ky
+x
+y
+x
+x·y = k
+(r
+0
+, r
+1
+)
+(r
+0
+', r
+1
+')
+(r
+0
+, r
+1
+)
+(r
+0
+', r
+1
+')
+(c·r
+0
+, c·r
+1
+)
+(r
+0
+, r
+1
+)
+(r
+0
+'/c, r
+1
+'/c)
+x·y = k'
+y
+x
+x·y = k
+Fig. 3. The constant product invariant I(x, y) = x · y is swap-rate-consistent (left),
+demand-sensitive (center), non-depletable, funds-consistent (right) and swap-rate con-
+sistent (right).
+Figure 3 (center) depicts two points (r0, r1), (r′
+0, r
+′
+1) on the constant product
+curve, which satisfy x · y = k for identical k. For the constant product invariant,
+the left swap limit can be expressed as limε→0 XLswap(ε, r0, r1) = φ · r1/r0. For
+the given k and points in Fig. 3 (center):
+lim
+ε→0
+XLswap
+φ (ε, r0, r1) = φ · k/r20 lim
+ε→0
+XLswap
+φ (ε, r′
+0, r
+′
+1) = φ · k/r′
+0
+2
+Thus for r′
+0 > r0, limε→0 XL
+swap
+φ (ε, r0, r1) > limε→0 XL
+swap
+φ (ε, r′
+0, r
+′
+1): the constant
+product invariant is demand-sensitive.
+Non-depletion. This property ensures that the balance of tokens within an
+AMM cannot be zeroed via swaps. Formally, I is non-depletable when, for all
+r0, r1 > 0 and r′
+0, r
+′
+1 ≥ 0:
+I(r0, r1) = I(r′
+0, r
+′
+1) =⇒ r′
+0, r
+′
+1 �= 0 (16)
+Note that the constant product invariant trivially satisfies this property.
+Funds-Consistency. Deposits to an AMM ensure higher swap rates for a given
+input amount v, whereas redeems will reduce the swap rates for v. This behaviour
+is formalized later on in Theorem4, but is a consequence of the funds-consistency
+property of the swap invariant. Formally, we require that for all r0, r1, r
+′
+0, r
+′
+1 > 0:
+I(r0, r1) �= I(r′
+0, r
+′
+1) ⇐⇒
+∃!c ∈ R+ \ {1} : I(c · r′
+0, c · r′
+1) = I(r0, r1) ∧ I( r0
+c , r1
+c ) = I(r′
+0, r
+′
+1)
+(17)
+Figure 3 (right) illustrates funds-consistency for the constant product invariant.
+Here, r0 · r1 = k �= k′ = r′
+0 · r′
+1. We observe that there exists a unique c > 0
+in (c · r0) · (c · r1) = r′
+0 · r′
+1 = k′: namely, c =
+√
+(r′
+0 · r′
+1)/(r0 · r1). Conversely,
+(r′
+0/c) · (r′
+1/c) = r0 · r1, which holds for the same value of c.
+Swap-Rate-Consistency. The design of AMMs aims to ensure that redeems
+and deposits do not interfere with the alignment of the swap rate towards the
+A Theory of Automated Market Makers in DeFi 181
+exchange rate. Since both deposits and redeems preserve the balance ratio of a
+token pair, we require swap rate limits for all balances of a given ratio to be
+constant. For all r0, r1, c > 0:
+lim
+ε→0
+XLswap
+φ (ε, r0, r1) = lim
+ε→0
+XLswap
+φ (ε, c · r0, c · r1) (18)
+Figure 3 (right) illustrates equal swap rate limits for given r0, r1 and c · r0, c · r1.
+Here, limε→0 XLswap(ε, r0, r1) = φ · r1/r0 = φ · (c · r1)/(c · r0) for c > 0.
+Finally, the following lemma establishes that the constant product swap
+invariant (the one used e.g. by Uniswap and Mooniswap) is indeed incentive-
+consistent. We conjecture that the same is true for the swap invariants imple-
+mented by the other mainstream AMM platforms.
+Lemma 7. The constant product swap invariant is incentive-consistent.
+4.3 The Arbitrage Game
+We now study the incentive mechanisms of AMMs from a game-theoretic per-
+spective. Indeed, AMMs can be seen as multi-player games where users collabo-
+rate or compete to achieve possibly conflicting goals. In such games the allowed
+moves of users are the interactions with other users and with AMMs, while their
+goal is typically to increase their net worth.
+The arbitrage problem is an interesting example of an AMM game since
+it is directly linked to the incentive of swaps in a way that makes AMMs track
+exchange rates. The arbitrage problem has been formalized for specific swap
+invariants, namely the weighted and constant product swap invariant [17,19]. We
+generalize here the arbitrage problem to arbitrary swap invariants. We provide
+sufficient conditions for the existence of solutions, and we link the solutions to
+the expected relation between AMMs and exchange rates.
+We model the arbitrage problem as a single-player, single-round game. The
+initial game state is Γ0 = A[σ] | (r1 : τ0, r1 : τ1), where A is the only player.
+The moves of A are all the possible transactions fired by A; we also consider
+doing nothing as a possible move. The goal of A is to maximize her net worth,
+i.e. to maximize WA(Γ)−WA(Γ0), where Γ is the state resulting from executing
+the selected move. A solution to the game is a move that satisfies the goal, i.e.
+one of the optimal moves. We further assume that A holds no minted tokens
+containing (τ0, τ1) as a subterm (i.e., (τ0, τ1) itself, ((τ0, τ1), τ2), etc.). In this
+way, any change in A’s net worth only depends on the exchange rate between τ0
+and τ1, and on the transfer of value resulting from A’s move.
+Before presenting the solution to the game we examine the potential candi-
+dates for the solution. First, note that transfers are not valid solutions, as they
+can only decrease A’s net worth. A second observation is that doing nothing,
+depositing or redeeming do not alter A’s net worth (cf. Lemma 3). Hence, if one
+of such moves is a solution, so are the other two. The only moves that may affect
+A’s net worth are swaps. For a swap to be a solution to the game, it must, first
+of all, result in a positive change of A’s net worth. This happens when the swap
+182 M. Bartoletti et al.
+rate is greater than the exchange rate. Theorem2 presents the solution to the
+game. Note that if swapL(v0 : τ0, v1 : τ1) is a solution, then for all v′
+1 ≤ v1, also
+swapL(v0 : τ0, v
+′
+1 : τ1) is a solution. Without loss of generality, our statement
+singles our the solution with the greatest v1 (similarly for the right swap).
+Theorem 2. Let I be demand-sensitive and non-depletable, and let the initial
+state of the game be Γ0 = A[σ] | (r0 : τ0, r1 : τ1), with r0, r1 > 0. Let σ(τ0), σ(τ1)
+be large enough to enable any needed swap. Then, the solution to the game is:
+– A : swapL(v0 : τ0, v1 : τ1) if Γ0
+A:swapL(v0:τ0,v1:τ1)−−−−−−−−−−−−−→ Γ, and:
+(1) lim
+ε→0
+XLswap
+Γ0,φ(ε, τ0, τ1) > XLΓ0(τ0, τ1)
+(2) lim
+ε→0
+XLswap
+φ (ε, r0 + φ · v0, r1 − v1) = XLΓ(τ0, τ1) where ∃! δ:
+I(r0, r1) = I(r0 + φ · v0, r1 − v1) = I(r0 + φ · (v0 + ε), r1 − (v1 + δ))
+– A : swapR(v0 : τ0, v1 : τ1) if Γ0
+A:swapR(v0:τ0,v1:τ1)−−−−−−−−−−−−−→ Γ, and:
+(1) lim
+ε→0
+XRswap
+Γ0,φ(ε, τ0, τ1) > XRΓ0(τ0, τ1)
+(2) lim
+ε→0
+XRswap
+φ (ε, r0 − v0, r1 + φ · v1) = XRΓ(τ0, τ1) where ∃! δ:
+I(r0, r1) = I(r0 − v0, r1 + φ · v1) = I(r0 − (v0 + δ), r1 + φ · (v1 + ε))
+– do nothing (or do any deposit or redeem), otherwise.
+Intuitively, condition (1) requires that the swap rate for infinitesimal amounts is
+greater than the exchange rate in the initial state; (2) requires that in the state
+Γ reached by performing the move of the solution, the swap rate for infinitesimal
+amounts tends to the exchange rate—thus achieving one of the main desiderata
+on AMMs. Note that Γ is an equilibrium: no move from there can improve A’s
+net worth, i.e. doing nothing is a solution for the arbitrage problem in Γ.
+Note that for the swapL/swapR solutions, the swapped amounts are unique:
+this is a consequence on the assumption (10). An implicit desideratum on these
+solutions is that, given a specific instance of the swap invariant, they are effi-
+ciently computable: this is the case, e.g., for the constant product invariant [17].
+For φ = 1 we can observe by inspection of (14) that the do-nothing solution
+for Theorem 2 only holds for:
+lim
+ε→0
+XLswap
+Γ0
+(ε, τ0, τ1) = 1/ lim
+ε→0
+XRswap
+Γ0
+(ε, τ0, τ1) = XLΓ0(τ0, τ1) (19)
+Thus, the solution to the game results in the AMM tracking global exchange
+rates precisely: any infinitesimal deviation of the global exchange rate implies a
+swap action in the arbitrage game.
+The assumption that the players’ wallets are sufficiently large is common
+in formulations of the arbitrage problem. We note that any rational agent is
+incentivized to perform such a swap: the optimal solution to the arbitrage game
+A Theory of Automated Market Makers in DeFi 183
+can thus be approximated by multiple users exchanging smaller swap amounts.
+Furthermore, the availability of flash-loans [29,30] can provide up-front funds,
+and thus significantly reduce the balance requirements for arbitrage swaps.
+Finally, we prove that a AMM deposits and redeems do not affect the solution
+type of the arbitrage game. If the arbitrage solution prior to a deposit or redeem
+is swapL, swapR or nothing, the arbitrage solution in the subsequent state should
+remain of the same type.
+Theorem 3. Let I be incentive-consistent. Let (r0 : τ0, r1 : τ1) ∈ Γ with r0, r1 >
+0. If Γ
+T−→ Γ ′, type(T) ∈ {dep, rdm}, then the arbitrage solutions in Γ and Γ ′
+will have the same type or both be nothing.
+In other words, the design of AMMs aims to ensure that deposits and redeems
+do not interfere with the alignment of the swap rate towards the exchange rate.
+Example 8. Consider the arbitrage game with player B and initial state Γ7 =
+B[0 : τ0, 27 : τ1] | (18 : τ0, 6 : τ1) | · · · resulting after the last step in Fig. 1.
+Assuming the constant product invariant and no fees (i.e., φ = 1), we have that:
+lim
+ε→0
+XLswap
+Γ7
+(ε, τ0, τ1) = r1/r0 = 6/18 < 5/9 = XLΓ7(τ0, τ1)
+lim
+ε→0
+XRswap
+Γ7
+(ε, τ0, τ1) = r0/r1 = 18/6 > 9/5 = XRΓ7(τ0, τ1)
+Hence, by Theorem 2 it follows that the optimal move is swapR(v0 : τ0, v1 : τ1),
+for suitable v0 and v1. To find these values, we must solve for v0 and v1 the
+equations in item (2) of Theorem2, i.e.:
+lim
+ε→0
+XRswap
+φ (ε, r0 − v, r1 + v1) = XRΓ(τ0, τ1) I(r0, r1) = I(r0 − v0, r1 + v1)
+Solving these equations gives:
+v1 =
+√
+5
+9
+· r0r1 − r1 ≈ 1.74 v0 =
+r0v1
+r1 + v1
+≈ 4
+By performing swapR(v0 : τ0, v1 : τ1) with these values from Γ7, we obtain:
+Γ = B[4 : τ0, 25.26 : τ1] | (14 : τ0, 7.74 : τ1) | · · ·
+This action maximizes B’s net worth: indeed, we have WB(Γ7) = 243 and
+WB(Γ) = 247.6; any other action will result in a lower net worth for B. �	
+4.4 Incentivizing Deposits and Swaps
+Theorem 2 ensures that incentive-consistent AMMs incentivize swaps to align to
+exchange rates. We now show that, under certain conditions, deposits and swaps
+incentivize each other. The intuition is that larger amounts of tokens in an AMM
+provide better swap rates, therefore attracting users interested in swaps. These
+swaps, in turn, result in increased redeem rates, making the AMM attractive for
+184 M. Bartoletti et al.
+further deposits. Note that this behaviour relies on an underlying assumption
+of our model, i.e. that exchange rates are stable: oracle prices are fixed. In the
+wild, exchange rates can vary over time, possibly making the net worth of users
+holding minted AMM tokens decrease: this phenomenon is commonly referred
+to as impermanent loss [9].
+The following theorem shows that deposits increase swap rates, hence incen-
+tivizing swaps, whilst redeems have the opposite effect.
+Theorem 4. Let I be incentive-consistent. Let Γ = (r0 : τ0, r1 : τ1) | · · · , with
+r0, r1 > 0, and let Γ
+A:�−−→ Γ ′. Then, for all v ∈ R+:
+XLswap
+Γ,φ (v, τ0, τ1) ◦ XLswap
+Γ ′,φ(v, τ0, τ1)
+XRswap
+Γ,φ (v, τ0, τ1) ◦ XRswap
+Γ ′,φ(v, τ0, τ1)
+where ◦ =
+{
+< if 
+ = dep( : τ0, : τ1)
+> if 
+ = rdm( : (τ0, τ1))
+We now show that, under certain conditions, swaps incentivize deposits. Intu-
+itively, swaps contribute to higher redeem rates, which increase the net wealth
+of the holders of minted AMM tokens:
+Theorem 5. Let I be incentive-consistent. Let Γ = (r0 : τ0, r1 : τ1) | · · · and
+Γ −→∗ Γ ′, where Γ ′ = (r′
+0 : τ0, r
+′
+1 : τ1) | · · · . If r1/r0 = r′
+1/r′
+0 then:
+XLrdm
+Γ (τ0, τ1) ≤ XLrdm
+Γ ′ (τ0, τ1) XRrdm
+Γ (τ0, τ1) ≤ XRrdm
+Γ ′ (τ0, τ1)
+Recall that a user who deposits into an AMM (r0 : τ0, r1 : τ1) in state Γ
+receives in return an amount of minted tokens. A consequence of Theorem5 is
+that these minted tokens can be redeemed with a higher redeem rate in any
+subsequent state Γ ′ which preserves the funds ratio r1/r0. Note that swaps
+are the only actions that may affect the redeem rate along the run Γ −→∗ Γ ′.
+Therefore, performing swaps that eventually re-align the funds ratio to r1/r0
+incentivizes deposits.
+The condition of constant funds ratio in Theorem5 is practically relevant.
+For instance, for stable exchange rates, such as in the case of exchanges between
+stable coins [6], the arbitrage game ensures stable fund ratios: users are hence
+incentivized to provide funds, as the redeem rate is likely to increase over time.
+5 Related Work
+To the best of our knowledge, our work is the first to study AMMs abstracting
+from the swap invariant. All works in literature consider concrete swap invari-
+ants; most of them focus on the constant product, popularized by Uniswap [13].
+The arbitrage problem for constant-product swap invariants has been formalized
+in [17,19], which show that the solution can be efficiently computed, and sug-
+gest that constant product AMMs accurately tend towards exchange rates. Our
+work generalizes such results. Furthermore, as we have shown in Sect. 4.3 (19),
+the fee-rate φ determines how much AMMs deviate from global exchange rates:
+higher fees, however, also result in reduced swap amounts in arbitrage actions,
+A Theory of Automated Market Makers in DeFi 185
+negatively affecting fee accrual. In [24], the optimal fee-rate that maximizes the
+fee accrual for the depositing user is analytically derived.
+A executable model of Uniswap [13] has been specified in [1] to analyze integer
+rounding errors in the Uniswap implementation.
+A few alternatives to the constant product invariant have been proposed.
+Curve features a peculiar invariant [22] optimized for large swap volumes between
+stable coins, where the swap rate can support large amounts with small sensitiv-
+ity. To efficiently compute swap invariant, implementations perform numerical
+approximations [15]. Should these approximations fail to converge, these imple-
+mentations still guarantee that the AMM remains liquid. We conjecture that
+the invariants in [3,22] are incentive-consistent. The work [25] proposes a con-
+stant product invariant that is adjusted dynamically based on the oracle price
+feed, thus reducing the need for arbitrage transactions, but at the cost of lower
+fee accrual. AMMs with virtual balances have been proposed [2] and imple-
+mented [7,8]. In these AMMs, the swap rate depends on past actions, besides
+the current funds balances in the AMM. This, similarly to [25], aims to minimize
+the need for arbitrage transactions to ensure the local AMM swap rate tends
+towards the exchange rates.
+Some implementations [3] generalise AMM pairs to n-tokens, allowing users
+to swap any non-intersecting sets of token types. For example, the constant-
+product invariant becomes I(r0, . . . , rn) = rw0
+0 · . . . · rwn
+n where
+∑n
+i=0 wi = 1.
+6 Conclusions
+We have proposed a theory of AMMs, featuring a model of their behaviour and
+a formally proven set of fundamental properties, characterizing both structural
+and economic aspects. Our theory is parametric w.r.t. platform-specific features
+(e.g., swap invariants), and it abstracts from implementation-specific features,
+and from the features that are orthogonal to the core functionality of AMMs
+(e.g., governance).
+There are some differences between our model and the existing AMM plat-
+forms. Uniswap implements flash-loans as part of the swap actions: namely, the
+user can optionally borrow available pair funds [10] whilst returning these within
+the same atomic group of actions. Further, Uniswap implements an exchange rate
+oracle, allowing smart contracts to interpret (averages of) recent swap rates as
+exchange rates [11]. Balancer [3] extends token pairs to token tuples: a user can
+swap any two non-coinciding sets of supported tokens, such that the swap invari-
+ant is maintained. In all AMM implementations, token balances are represented
+as integers: consequently, they are subject to rounding errors [1]. AMM plat-
+forms frequently implement a governance logic, which allow “governance token”
+holders to coordinate changes to AMM fee-rates or swap invariant parameters.
+AMM platforms like Uniswap [13] and Curve [22] have overtaken centralized
+cryptocurrency markets in size and usage. On the one hand, a better under-
+standing of AMM design in cases where AMMs host the majority of the token’s
+global swap volume is critical [18]. It would be interesting to investigate how our
+186 M. Bartoletti et al.
+theory can be used to formally explain such behaviours. On the other hand, the
+growth of AMMs is making them more attractive for malicious users. Current
+research efforts [21,23,28,31] are devoted to understanding vulnerabilities and
+attacks, which we plan to investigate formally, exploiting our theory.
+This paper, together with our work on formalizing another DeFi archetype
+called lending pool [20], is the first step towards a general theory of DeFi. We
+believe that a general theory encompassing interactions between different DeFi
+archetypes is crucial to be able to reason about their structural, economic and
+security aspects, as typical DeFi applications operate within a wider ecosystem,
+composed by a set of collaborating or competing agents, which interact through
+possibly separate execution environments.
+Acknowledgements. Massimo Bartoletti is partially supported by Conv. Fondazione
+di Sardegna & Atenei Sardi project F74I19000900007 ADAM. James Hsin-yu Chiang
+is supported by the PhD School of DTU Compute. Alberto Lluch Lafuente is partially
+supported by the EU H2020-SU-ICT-03-2018 Project No. 830929 CyberSec4Europe
+(cybersec4europe.eu).
+References
+1. Formal specification of constant product market maker model & implemen-
+tation (2018). https://github.com/runtimeverification/verified-smart-contracts/
+blob/uniswap/uniswap/x-y-k.pdf
+2. Improving frontrunning resistance of x*y=k market makers (2018). https://
+ethresear.ch/t/improving-front-running-resistance-of-x-y-k-market-makers/1281
+3. Balancer whitepaper (2019). https://balancer.finance/whitepaper/
+4. Curve statistics (2020). https://www.curve.fi/dailystats
+5. Curve (2020). https://www.curve.fi
+6. Makerdao (2020). https://makerdao.com
+7. Mooniswap implementation (2020). https://github.com/1inch-exchange/
+mooniswap/blob/02dccfab2ddbb8a409400288cb13441763370350/contracts/
+Mooniswap.sol
+8. Mooniswap whitepaper (2020). https://mooniswap.exchange/docs/
+MooniswapWhitePaper-v1.0.pdf
+9. Uniswap Documentation: Understanding Returns (2020). https://uniswap.org/
+docs/v2/advanced-topics/understanding-returns/
+10. Uniswap flash loan implementation (2020). https://github.com/Uniswap/
+uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/
+UniswapV2Pair.sol#L172
+11. Uniswap oracle template (2020). https://github.com/Uniswap/uniswap-
+v2-periphery/blob/dda62473e2da448bc9cb8f4514dadda4aeede5f4/contracts/
+examples/ExampleOracleSimple.sol
+12. Uniswap statistics (2020). https://info.uniswap.org
+13. Uniswap token pair implementation (2020). https://github.com/Uniswap/
+uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/
+UniswapV2Pair.sol
+14. Uniswap (2020). https://www.uniswap.org
+https://www.cybersec4europe.eu
+https://github.com/runtimeverification/verified-smart-contracts/blob/uniswap/uniswap/x-y-k.pdf
+https://github.com/runtimeverification/verified-smart-contracts/blob/uniswap/uniswap/x-y-k.pdf
+https://ethresear.ch/t/improving-front-running-resistance-of-x-y-k-market-makers/1281
+https://ethresear.ch/t/improving-front-running-resistance-of-x-y-k-market-makers/1281
+https://balancer.finance/whitepaper/
+https://www.curve.fi/dailystats
+https://www.curve.fi
+https://makerdao.com
+https://github.com/1inch-exchange/mooniswap/blob/02dccfab2ddbb8a409400288cb13441763370350/contracts/Mooniswap.sol
+https://github.com/1inch-exchange/mooniswap/blob/02dccfab2ddbb8a409400288cb13441763370350/contracts/Mooniswap.sol
+https://github.com/1inch-exchange/mooniswap/blob/02dccfab2ddbb8a409400288cb13441763370350/contracts/Mooniswap.sol
+https://mooniswap.exchange/docs/MooniswapWhitePaper-v1.0.pdf
+https://mooniswap.exchange/docs/MooniswapWhitePaper-v1.0.pdf
+https://uniswap.org/docs/v2/advanced-topics/understanding-returns/
+https://uniswap.org/docs/v2/advanced-topics/understanding-returns/
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol#L172
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol#L172
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol#L172
+https://github.com/Uniswap/uniswap-v2-periphery/blob/dda62473e2da448bc9cb8f4514dadda4aeede5f4/contracts/examples/ExampleOracleSimple.sol
+https://github.com/Uniswap/uniswap-v2-periphery/blob/dda62473e2da448bc9cb8f4514dadda4aeede5f4/contracts/examples/ExampleOracleSimple.sol
+https://github.com/Uniswap/uniswap-v2-periphery/blob/dda62473e2da448bc9cb8f4514dadda4aeede5f4/contracts/examples/ExampleOracleSimple.sol
+https://info.uniswap.org
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol
+https://github.com/Uniswap/uniswap-v2-core/blob/4dd59067c76dea4a0e8e4bfdda41877a6b16dedc/contracts/UniswapV2Pair.sol
+https://www.uniswap.org
+A Theory of Automated Market Makers in DeFi 187
+15. Curve computation of invariant constant (2021). https://github.com/curvefi/
+curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/
+pool-templates/base/SwapTemplateBase.vy#L206
+16. Curve token pair implementation (2021). https://github.com/curvefi/curve-
+contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-
+templates/base/SwapTemplateBase.vy
+17. Angeris, G., Chitra, T.: Improved price oracles: constant function market mak-
+ers. In: ACM Conference on Advances in Financial Technologies (AFT), pp.
+80–91. ACM (2020). https://doi.org/10.1145/3419614.3423251. https://arxiv.org/
+abs/2003.10001
+18. Angeris, G., Evans, A., Chitra, T.: When does the tail wag the dog? Curvature
+and market making. arXiv preprint arXiv:2012.08040 (2020)
+19. Angeris, G., Kao, H.T., Chiang, R., Noyes, C., Chitra, T.: An analysis of Uniswap
+markets. Cryptoeconomic Syst. J. (2019). https://ssrn.com/abstract=3602203
+20. Bartoletti, M., Chiang, J.H., Lluch-Lafuente, A.: SoK: lending pools in decentral-
+ized finance. In: Workshop on Trusted Smart Contracts. LNCS. Springer (2021, to
+appear)
+21. Daian, P., et al.: Flash boys 2.0: frontrunning in decentralized exchanges, miner
+extractable value, and consensus instability. In: IEEE Symposium on Security and
+Privacy, pp. 910–927. IEEE (2020). https://doi.org/10.1109/SP40000.2020.00040
+22. Egorov, M.: Stableswap - efficient mechanism for stablecoin (2019). https://www.
+curve.fi/stableswap-paper.pdf
+23. Eskandari, S., Moosavi, S., Clark, J.: SoK: transparent dishonesty: front-running
+attacks on blockchain. In: Bracciali, A., Clark, J., Pintore, F., Rønne, P.B., Sala, M.
+(eds.) FC 2019. LNCS, vol. 11599, pp. 170–189. Springer, Cham (2020). https://
+doi.org/10.1007/978-3-030-43725-1 13
+24. Evans, A., Angeris, G., Chitra, T.: Optimal fees for geometric mean market makers
+(2021). https://web.stanford.edu/∼guillean/papers/g3m-optimal-fee.pdf
+25. Krishnamachari, B., Feng, Q., Grippo, E.: Dynamic curves for decentralized
+autonomous cryptocurrency exchanges. arXiv preprint arXiv:2101.02778 (2021)
+26. Bartoletti, M., Chiang, J.H., Lluch-Lafuente, A.: A theory of Automated Market
+Makers in DeFi. arXiv preprint arXiv:2102.11350 (2021)
+27. Mazurkiewicz, A.: Basic notions of trace theory. In: de Bakker, J.W., de Roever,
+W.-P., Rozenberg, G. (eds.) REX 1988. LNCS, vol. 354, pp. 285–363. Springer,
+Heidelberg (1989). https://doi.org/10.1007/BFb0013025
+28. Qin, K., Zhou, L., Gervais, A.: Quantifying blockchain extractable value: how dark
+is the forest? (2021). https://arxiv.org/abs/2101.05511
+29. Qin, K., Zhou, L., Livshits, B., Gervais, A.: Attacking the DeFi ecosystem with
+flash loans for fun and profit. In: Financial Cryptography (2021, to appear).
+https://arxiv.org/abs/2003.03810
+30. Wang, D., et al.: Towards understanding flash loan and its applications in DeFi
+ecosystem. arXiv preprint arXiv:2010.12252 (2020)
+31. Zhou, L., Qin, K., Torres, C.F., Le, D.V., Gervais, A.: High-frequency trading on
+decentralized on-chain exchanges. arXiv preprint arXiv:2009.14021 (2020)
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy#L206
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy#L206
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy#L206
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy
+https://github.com/curvefi/curve-contract/blob/a1b5a797790d3f5ef12b0e358892a0ce47c12f85/contracts/pool-templates/base/SwapTemplateBase.vy
+https://doi.org/10.1145/3419614.3423251
+https://arxiv.org/abs/2003.10001
+https://arxiv.org/abs/2003.10001
+http://arxiv.org/abs/2012.08040
+https://ssrn.com/abstract=3602203
+https://doi.org/10.1109/SP40000.2020.00040
+https://www.curve.fi/stableswap-paper.pdf
+https://www.curve.fi/stableswap-paper.pdf
+https://doi.org/10.1007/978-3-030-43725-1_13
+https://doi.org/10.1007/978-3-030-43725-1_13
+https://web.stanford.edu/~guillean/papers/g3m-optimal-fee.pdf
+http://arxiv.org/abs/2101.02778
+http://arxiv.org/abs/2102.11350
+https://doi.org/10.1007/BFb0013025
+https://arxiv.org/abs/2101.05511
+https://arxiv.org/abs/2003.03810
+http://arxiv.org/abs/2010.12252
+http://arxiv.org/abs/2009.14021
+	A Theory of Automated Market Makers in DeFi
+	1 Introduction
+	2 A Formal Model of Automated Market Makers
+	2.1 AMM States
+	2.2 AMM Semantics
+	3 Structural Properties of AMMs
+	4 Properties of AMM Incentives
+	4.1 Exchange Rates
+	4.2 General Properties of Swap Invariants
+	4.3 The Arbitrage Game
+	4.4 Incentivizing Deposits and Swaps
+	5 Related Work
+	6 Conclusions
+	References
